@@ -246,18 +246,14 @@
                 {
                   "name": "ADMIN_TOKEN",
                   "value": "[parameters('AdminAPIKEY')]"
-                },
-                {
-                  "name": "SIGNUPS_ALLOWED",
-                  "value": "[false]"
-                },
+                },                
                 {
                   "name": "SIGNUPS_DOMAINS_WHITELIST",
                   "value": "[bsse.de,sebastian-petri.de]"
                 },
                 {
                   "name": "SIGNUPS_VERIFY",
-                  "value": "[true]"
+                  "value": "[$true]"
                 },
                 {
                   "name": "DATABASE_URL",
