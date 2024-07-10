@@ -192,6 +192,18 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
               name:'DATABASE_URL'
               value:'postgresql://vwadmin:${dbPassword}@${vwDBi.properties.fullyQualifiedDomainName}/${vwDB.name}'
             }
+            {
+              name:'SIGNUPS_ALLOWED'
+              value:'false'
+            }
+            {
+              name:'SIGNUPS_DOMAINS_WHITELIST'
+              value:'[bsse.de,sebastian-petri.de]'
+            }
+            {
+              name:'SIGNUPS_VERIFY'
+              value:'true'
+            }
           ]
         }
       ]

@@ -256,7 +256,7 @@
                   "value": "[bsse.de,sebastian-petri.de]"
                 },
                 {
-                  "name": "SIGNUPS_VERIFY=true",
+                  "name": "SIGNUPS_VERIFY",
                   "value": "[true]"
                 },
                 {
