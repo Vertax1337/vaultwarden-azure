@@ -75,7 +75,15 @@
     },
     "SignupsVerify": {
       "type": "string"      
-    }
+    },
+    "SignupsAllowed": {
+      "type": "string",
+      "defaultValue": "true", 
+      "allowedValues": [
+        "true",
+        "false"
+      ],     
+    }    
   },
   "variables": {
     "logWorkspaceName": "[format('vw-logwks{0}', uniqueString(resourceGroup().id))]",
@@ -260,6 +268,10 @@
                 {
                   "name": "SIGNUPS_VERIFY",
                   "value": "[parameters('SignupsVerify')]"
+                },
+                {
+                  "name": "SIGNUPS_ALLOWED",
+                  "value": "[parameters('SignupsAllowed')]"
                 },
                 {
                   "name": "DATABASE_URL",

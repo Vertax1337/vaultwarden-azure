@@ -43,6 +43,7 @@ param memorySize string = '0.5'
 
 param DomainWhitelist string = 'sebastian-petri.de'
 param SignupsVerify string = 'true'
+param SignupsAllowed string = 'true'
 
 @secure()
 param dbPassword string
@@ -202,6 +203,10 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
             {
               name:'SIGNUPS_VERIFY'
               value: SignupsVerify
+            }
+            {
+              name:'SIGNUPS_ALLOWED'
+              value: SignupsAllowed
             }
           ]
         }
