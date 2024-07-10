@@ -42,7 +42,7 @@ param cpuCore string = '0.25'
 param memorySize string = '0.5'
 
 param DomainWhitelist string = 'sebastian-petri.de'
-param SignupsVerify bool = true
+param SignupsVerify string = 'true'
 
 @secure()
 param dbPassword string
