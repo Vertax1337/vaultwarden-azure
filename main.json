@@ -82,7 +82,10 @@
       "allowedValues": [
         "true",
         "false"
-      ]     
+      ],
+      "metadata": {
+        "description": "Allow Signups"
+      }     
     }    
   },
   "variables": {
