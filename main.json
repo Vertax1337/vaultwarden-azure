@@ -78,14 +78,7 @@
     },
     "SignupsAllowed": {
       "type": "string",
-      "defaultValue": "true", 
-      "allowedValues": [
-        "true",
-        "false"
-      ],
-      "metadata": {
-        "description": "Allow Signups"
-      }     
+      "defaultValue": "true"   
     }    
   },
   "variables": {
