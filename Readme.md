@@ -1,6 +1,6 @@
 # Creates a Vaultwarden Container App within Azurefile external storage
 
-[![Deploy To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%Vertax1337%2Fvaultwarden-azure%2Fmain%2Fmain.json)
+[![Deploy To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmain%2Fmain.json)
 
 This template provides a way to deploy a **Vaultwarden** in a **Azure Container App** with external **file share** and **database** storage that can be used to backup restore data easly.
 
@@ -11,7 +11,7 @@ This template provides a way to deploy a **Vaultwarden** in a **Azure Container 
 - AdminAPI Key - it will be generated automaticly or you can specify your own one. It will be used to access /admin page
 - Choose memory and cpu sizing - I recommend to start with 0.25 cpu and 0.5 Memory 
     The total CPU and memory allocations requested for all the containers in a container app must add up to one of the following combinations.
-    | CPU | Memory |
+    | CPU | Memory |y
     | --- | ---    |
     | 0.25 | 0.5Gi |
     | 0.5 | 1.0Gi |

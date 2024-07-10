@@ -257,7 +257,7 @@
                 },
                 {
                   "name": "SIGNUPS_VERIFY=true",
-                  "value": "true"
+                  "value": "[true]"
                 },
                 {
                   "name": "DATABASE_URL",
