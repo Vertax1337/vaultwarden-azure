@@ -77,8 +77,7 @@
       "type": "string"      
     },
     "SignupsAllowed": {
-      "type": "string",
-      "defaultValue": "true"   
+      "type": "string"      
     }    
   },
   "variables": {
