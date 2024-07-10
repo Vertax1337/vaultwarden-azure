@@ -69,6 +69,12 @@
     },
     "dbPassword": {
       "type": "securestring"
+    },
+    "DomainWhitelist": {
+      "type": "string"      
+    },
+    "SignupsVerify": {
+      "type": "string"      
     }
   },
   "variables": {
