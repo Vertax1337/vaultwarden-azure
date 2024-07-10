@@ -44,6 +44,7 @@ param memorySize string = '0.5'
 param DomainWhitelist string = 'sebastian-petri.de'
 param SignupsVerify string = 'true'
 param SignupsAllowed string = 'true'
+param Appname string = 'Company-Vault by Vault-Tec'
 
 @secure()
 param dbPassword string
@@ -174,7 +175,7 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
     template:{
       containers:[
         {
-          name: 'vaultwarden'
+          name: Appname
           image: 'docker.io/vaultwarden/server:latest'
           resources:{
             cpu: json(cpuCore)

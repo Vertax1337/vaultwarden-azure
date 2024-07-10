@@ -70,8 +70,15 @@
     "dbPassword": {
       "type": "securestring"
     },
+    "Appname": {
+      "type": "string"
+    },
     "DomainWhitelist": {
-      "type": "string"      
+      "type": "string",
+      "defaultValue": "contoso.com",
+      "metadata": {
+        "description": "Only Allow Custom-Domains"
+      }            
     },
     "SignupsVerify": {
       "type": "string",
@@ -85,7 +92,15 @@
       }      
     },
     "SignupsAllowed": {
-      "type": "string"      
+      "type": "string",
+      "defaultValue": "true",
+      "allowedValues": [
+        "true",
+        "false"
+      ],
+      "metadata": {
+        "description": "Allow Self-Service Signup"
+      }            
     }    
   },
   "variables": {
