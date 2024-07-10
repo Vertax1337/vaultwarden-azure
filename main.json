@@ -249,11 +249,11 @@
                 },                
                 {
                   "name": "SIGNUPS_DOMAINS_WHITELIST",
-                  "value": "[bsse.de,sebastian-petri.de]"
+                  "value": "[parameters('DomainWhitelist')]"
                 },
                 {
                   "name": "SIGNUPS_VERIFY",
-                  "value": "[$true]"
+                  "value": "[parameters('SignupsVerify')]"
                 },
                 {
                   "name": "DATABASE_URL",
