@@ -41,6 +41,9 @@ param cpuCore string = '0.25'
 ])
 param memorySize string = '0.5'
 
+param DomainWhitelist string = 'sebastian-petri.de'
+param SignupsVerify bool = true
+
 @secure()
 param dbPassword string
 
@@ -194,11 +197,11 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
             }            
             {
               name:'SIGNUPS_DOMAINS_WHITELIST'
-              value:'[bsse.de,sebastian-petri.de]'
+              value: DomainWhitelist
             }
             {
               name:'SIGNUPS_VERIFY'
-              value:'true'
+              value: SignupsVerify
             }
           ]
         }
