@@ -74,7 +74,15 @@
       "type": "string"      
     },
     "SignupsVerify": {
-      "type": "string"      
+      "type": "string",
+      "defaultValue": "true",
+      "allowedValues": [
+        "true",
+        "false"
+      ],
+      "metadata": {
+        "description": "Force Signup Verification"
+      }      
     },
     "SignupsAllowed": {
       "type": "string"      
