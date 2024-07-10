@@ -262,7 +262,7 @@
         "template": {
           "containers": [
             {
-              "name": "vaultwarden",
+              "name": "[parameters('Appname')]",
               "image": "docker.io/vaultwarden/server:latest",
               "resources": {
                 "cpu": "[json(parameters('cpuCore'))]",
