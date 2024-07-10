@@ -82,7 +82,7 @@
       "allowedValues": [
         "true",
         "false"
-      ],     
+      ]     
     }    
   },
   "variables": {
