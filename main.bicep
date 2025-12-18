@@ -48,7 +48,7 @@ var logWorkspaceName  = 'vw-logwks${uniqueString(resourceGroup().id)}'
 var storageAccountName  = 'vwstorage${uniqueString(resourceGroup().id)}'
 var location = resourceGroup().location
 
-resource storageaccount 'Microsoft.Storage/storageAccounts@2021-02-01' = {
+resource storageaccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   name: storageAccountName
   location: location
   kind: 'StorageV2'
