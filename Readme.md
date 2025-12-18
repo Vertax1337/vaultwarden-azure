@@ -1,37 +1,154 @@
-# Creates a Vaultwarden Container App within Azurefile external storage
+# Creates a Vaultwarden Container App with Azure File & PostgreSQL Storage
 
-[![Deploy To Azure](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmaster%2Fmain.json)
-[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2Fadamhnat%2Fvaultwarden-azure%2Fmaster%2Fmain.json)
+[![Deploy to Azure (ARM JSON)](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true)](
+https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmaster%2Fmain.json
+)
 
-This template provides a way to deploy a **Vaultwarden** in a **Azure Container App** with external **file share** and **database** storage that can be used to backup restore data easly.
+[![Deploy to Azure (Bicep)](https://aka.ms/deploytoazurebutton)](
+https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmaster%2Fmain.bicep
+)
 
-## Deploy:
-1. Click above button and select 
-- Resource Group - all resources will be created in that group, you can choose also to create new one
-- Storage Account Type - in case that you you like to be more resistant for failure you may choose Standard_GRS or any other storage with redundancy.
-- AdminAPI Key - it will be generated automaticly or you can specify your own one. It will be used to access /admin page
-- Choose memory and cpu sizing - I recommend to start with 0.25 cpu and 0.5 Memory 
-    The total CPU and memory allocations requested for all the containers in a container app must add up to one of the following combinations.
-    | CPU | Memory |
-    | --- | ---    |
-    | 0.25 | 0.5Gi |
-    | 0.5 | 1.0Gi |
-    | 0.75 | 1.5Gi |
-    | 1.0 | 2.0Gi |
-    | 1.25 | 2.5Gi |
-    | 1.5 | 3.0Gi |
-    | 1.75 | 3.5Gi |
-    | 2.0 | 4.0Gi |
-    ---
-- **Deploy**
-  - provide databaseAdmin passowrd
+[![Visualize](https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/visualizebutton.svg?sanitize=true)](
+http://armviz.io/#/?load=https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmaster%2Fmain.json
+)
 
-2. Resource vaultwarden Microsoft.App/containerApps failed - if in some case you will notice failed message, just click **redeploy** and reenter same data as before - it may happen when Azure provision resources and link to storage isn't created at time.
+---
 
-## Updating to new version:
-in Azure Portal:
-- Open Resource Group -> vaultwarden -> Revision management -> **Create revision** -> type name/suffix -> check vaultwarden in Container image section -> **create**
-  This will update your vaultwarden container app into most recent version, keeping data in place, in no downtime.
+## Overview
 
-## Get Admin key:
-- Resource Group -> vaultwarden -> Containers -> Environment Variables -> double click on ADMIN_TOKEN **value**
+This template deploys **Vaultwarden** as an **Azure Container App (Consumption)** with:
+
+- Persistent **Azure File Share** storage (`/data`)
+- **PostgreSQL Flexible Server** backend
+- Built-in **SMTP support** (Microsoft 365 compatible)
+- Designed for **KMU / small enterprise production usage**
+- Cost-efficient (no App Service Plan, no Front Door / WAF required)
+
+The deployment supports **backup & restore** scenarios and **safe container updates** without data loss.
+
+---
+
+## Deployment
+
+### 1. Click **Deploy to Azure**
+You can choose between:
+- **ARM JSON** (portal-friendly, classic)
+- **Bicep** (recommended for technical users & CI/CD)
+
+### 2. Fill in the parameters
+
+- **Resource Group**  
+  All resources will be created inside this group.
+
+- **Storage Account Type**  
+  Default: `Standard_LRS`  
+  For higher resilience you may choose `Standard_GRS`, `ZRS`, etc.
+
+- **Admin API Key**
+  - Generated automatically if not provided
+  - Used to access the `/admin` interface
+  - **Minimum length: 20 characters**
+
+- **CPU / Memory sizing**  
+  Recommended starting point:
+  - `0.25 CPU`
+  - `0.5 GiB RAM`
+
+  Valid combinations:
+
+  | CPU  | Memory |
+  |-----:|-------:|
+  | 0.25 | 0.5 Gi |
+  | 0.5  | 1.0 Gi |
+  | 0.75 | 1.5 Gi |
+  | 1.0  | 2.0 Gi |
+  | 1.25 | 2.5 Gi |
+  | 1.5  | 3.0 Gi |
+  | 1.75 | 3.5 Gi |
+  | 2.0  | 4.0 Gi |
+
+- **Database admin password**
+
+  ⚠️ **IMPORTANT – Password restrictions**
+
+  The PostgreSQL password is embedded into a connection URL (`DATABASE_URL`).  
+  To avoid URL parsing issues, **use only the following characters**:
+
+  ```
+  a–z A–Z 0–9
+  ```
+
+  ❌ Avoid characters like:
+  ```
+  @ : / ? # % & +
+  ```
+
+---
+
+### 3. Deploy
+
+Click **Deploy**.
+
+> ⚠️ **Known Azure timing issue**  
+> In rare cases the Container App may fail on first deployment because the Azure File share is not yet linked.
+>
+> **Fix:** Click **Redeploy** and reuse the same parameters.  
+> No data will be lost.
+
+---
+
+## Post-Deployment Steps (Required for Production)
+
+1. **Configure Custom Domain**
+   - Add the required CNAME / TXT records shown in the Azure Portal
+
+2. **Enable Managed Certificate**
+   - Azure issues the TLS certificate after DNS verification
+
+3. **Disable HTTP**
+   - Set parameter `allowInsecureHttp = false`
+   - Enforces HTTPS-only access
+
+---
+
+## Updating Vaultwarden
+
+By default the container image uses `:latest`, allowing easy updates.
+
+1. Azure Portal → Resource Group → **vaultwarden**
+2. **Revisions**
+3. **Create revision**
+4. Keep image set to `latest`
+5. Create revision
+
+✔ No downtime  
+✔ Persistent data remains intact  
+✔ Database migrations are handled automatically
+
+> If required, you can pin a specific image version via the `vaultwardenImage` parameter.
+
+---
+
+## Get Admin Token
+
+1. Azure Portal → Resource Group → **vaultwarden**
+2. Container App → **Configuration**
+3. Environment Variables
+4. Copy the value of `ADMIN_TOKEN`
+
+Admin UI:
+```
+https://<your-domain>/admin
+```
+
+---
+
+## Notes
+
+- SMTP is **mandatory** for:
+  - Password reset
+  - Signup verification
+  - Security notifications
+- Microsoft 365 SMTP (`smtp.office365.com`) is fully supported
+- Secrets are stored as **Container App Secrets**
+- Azure Container Apps (Consumption) keeps costs low while remaining production-ready
