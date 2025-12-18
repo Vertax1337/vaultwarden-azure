@@ -83,13 +83,19 @@ resource storageAccount 'Microsoft.Storage/storageAccounts@2023-05-01' = {
   }
 }
 
-resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
+resource fileService 'Microsoft.Storage/storageAccounts/fileServices@2023-05-01' = {
   parent: storageAccount
-  name: 'default/${fileShareName}'
+  name: 'default'
+}
+
+resource fileShare 'Microsoft.Storage/storageAccounts/fileServices/shares@2023-05-01' = {
+  parent: fileService
+  name: fileShareName
   properties: {
     accessTier: 'Hot'
   }
 }
+
 
 resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-03-01-preview' = {
   name: postgresServerName
@@ -108,10 +114,7 @@ resource postgresServer 'Microsoft.DBforPostgreSQL/flexibleServers@2023-03-01-pr
     authConfig: {
       passwordAuth: 'Enabled'
       activeDirectoryAuth: 'Disabled'
-    }
-    network: {
-      publicNetworkAccess: 'Enabled'
-    }
+    }    
     backup: {
       backupRetentionDays: 7
     }
