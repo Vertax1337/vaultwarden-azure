@@ -1,13 +1,12 @@
-@description('Storage Account type')
+@description('Storage Account SKU for Azure Files. IMPORTANT: This template creates an Azure File Share. Use Standard_* SKUs for StorageV2 to avoid "File is not supported for the account".')
 @allowed([
-  'Premium_LRS'
-  'Premium_ZRS'
-  'Standard_GRS'
-  'Standard_GZRS'
   'Standard_LRS'
-  'Standard_RAGRS'
-  'Standard_RAGZRS'
   'Standard_ZRS'
+  'Standard_GRS'
+  'Standard_RAGRS'
+  'Standard_GZRS'
+  'Standard_RAGZRS'
+  // Premium_* intentionally NOT allowed in this template because it can break Azure Files with StorageV2.
 ])
 param storageAccountSKU string = 'Standard_LRS'
 
@@ -16,8 +15,7 @@ param storageAccountSKU string = 'Standard_LRS'
 @secure()
 param AdminAPIKEY string = base64(newGuid())
 
-@description('Number of CPU cores the container can use.
-Can be with a maximum of two decimals.')
+@description('Number of CPU cores the container can use. Can be with a maximum of two decimals.')
 @allowed([
   '0.25'
   '0.5'
@@ -30,8 +28,7 @@ Can be with a maximum of two decimals.')
 ])
 param cpuCore string = '0.25'
 
-@description('Amount of memory (in gibibytes, GiB) allocated to the container up to 4GiB. Can be with a maximum of two decimals.
-Ratio with CPU cores must be equal to 2.')
+@description('Amount of memory (in GiB) allocated to the container up to 4GiB. Ratio with CPU cores must be equal to 2.')
 @allowed([
   '0.5'
   '1'
@@ -43,16 +40,24 @@ Ratio with CPU cores must be equal to 2.')
 ])
 param memorySize string = '0.5'
 
-@description('Public URL of your Vaultwarden instance (used for email links, attachments, etc.)')
+@description('Allow insecure HTTP (bootstrap). Set to false after custom domain + cert are configured.')
+param allowInsecureHttp bool = true
+
+@description('Public URL of your Vaultwarden instance (used for email links, attachments, etc.). Example: https://vault.example.tld')
 param domain string
 
-@description('SMTP host')
+@description('SMTP host (Microsoft 365 default: smtp.office365.com)')
 param smtpHost string = 'smtp.office365.com'
 
-@description('SMTP port')
+@description('SMTP port (Microsoft 365 default: 587)')
 param smtpPort string = '587'
 
 @description('SMTP security (starttls / force_tls / off)')
+@allowed([
+  'starttls'
+  'force_tls'
+  'off'
+])
 param smtpSecurity string = 'starttls'
 
 @description('SMTP FROM address (e.g. vaultwarden@domain.tld)')
@@ -77,36 +82,63 @@ param signupsDomainsWhitelist string = ''
 @description('Show premium features in UI (Bitwarden-compatible clients)')
 param showPremium bool = true
 
+@description('Allow Azure services to access PostgreSQL via firewall rule 0.0.0.0. This is required for public networking without a fixed outbound IP.')
+param allowAzureServicesToPostgres bool = true
+
+@description('Optional: allowlist a specific public IP range for PostgreSQL. Leave empty to skip.')
+param postgresFirewallStartIp string = ''
+
+@description('Optional: allowlist a specific public IP range for PostgreSQL. Leave empty to skip.')
+param postgresFirewallEndIp string = ''
+
+@description('PostgreSQL admin password. IMPORTANT: Avoid URL-breaking characters like @ : / ? & % # if you use DATABASE_URL in the classic user:pass@host form (no URL-encoding in Bicep).')
 @secure()
 param dbPassword string
 
-var logWorkspaceName  = 'vw-logwks${uniqueString(resourceGroup().id)}'
-var storageAccountName  = 'vwstorage${uniqueString(resourceGroup().id)}'
+// Names
 var location = resourceGroup().location
+var logWorkspaceName = 'vw-logwks${uniqueString(resourceGroup().id)}'
+var storageAccountName = 'vwstorage${uniqueString(resourceGroup().id)}'
+var envName = 'appenv-vaultwarden${uniqueString(resourceGroup().id)}'
+var pgServerName = 'vwdbi-${uniqueString(resourceGroup().id)}'
 
-resource storageaccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
+// IMPORTANT: Use a real DB name (simple, stable) - do NOT use resource name as database name.
+var pgDbName = 'vaultwarden'
+
+// --------------------
+// Storage Account + Azure Files
+// --------------------
+resource storageaccount 'Microsoft.Storage/storageAccounts@2025-06-01' = {
   name: storageAccountName
   location: location
   kind: 'StorageV2'
   sku: {
     name: storageAccountSKU
   }
-  properties:{
+  properties: {
     accessTier: 'Hot'
     allowSharedKeyAccess: true
     allowBlobPublicAccess: false
+    supportsHttpsTrafficOnly: true
+    minimumTlsVersion: 'TLS1_2'
   }
-  resource fileshare 'fileServices@2022-09-01'={
+
+  // Azure Files
+  resource fileservice 'fileServices@2025-06-01' = {
     name: 'default'
-    resource vwardendata 'shares@2022-09-01'={
+
+    resource vwardendata 'shares@2025-06-01' = {
       name: 'vw-data'
-      properties:{
+      properties: {
         accessTier: 'Hot'
       }
     }
   }
 }
 
+// --------------------
+// Log Analytics
+// --------------------
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2020-10-01' = {
   name: logWorkspaceName
   location: location
@@ -118,82 +150,127 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2020-10
   }
 }
 
-resource containerAppEnv 'Microsoft.App/managedEnvironments@2022-06-01-preview'= {
-  name: 'appenv-vaultwarden${uniqueString(resourceGroup().id)}'
+// --------------------
+// Container Apps Environment
+// --------------------
+resource containerAppEnv 'Microsoft.App/managedEnvironments@2025-07-01' = {
+  name: envName
   location: location
-  sku:{
+  sku: {
     name: 'Consumption'
   }
-  properties:{
-    appLogsConfiguration:{
+  properties: {
+    appLogsConfiguration: {
       destination: 'log-analytics'
-      logAnalyticsConfiguration:{
+      logAnalyticsConfiguration: {
         customerId: logAnalyticsWorkspace.properties.customerId
         sharedKey: logAnalyticsWorkspace.listKeys().primarySharedKey
       }
     }
   }
-  resource storegeLink 'storages@2022-06-01-preview'={
-    name:'vw-data-link'
-    properties:{
-      azureFile:{
-        accessMode: 'ReadWrite'
-        accountKey: storageaccount.listKeys().keys[0].value
-        shareName: 'vw-data'
-        accountName: storageaccount.name
-      }
+}
+
+// Link Azure File Share to Container Apps environment
+resource storageLink 'Microsoft.App/managedEnvironments/storages@2025-07-01' = {
+  name: 'vw-data-link'
+  parent: containerAppEnv
+  properties: {
+    azureFile: {
+      accessMode: 'ReadWrite'
+      accountName: storageaccount.name
+      shareName: 'vw-data'
+      accountKey: storageaccount.listKeys().keys[0].value
     }
   }
 }
 
-resource vwDBi 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01'={
-  location:location
-  name:'vwdbi-${uniqueString(resourceGroup().id)}'
-  sku:{
+// --------------------
+// PostgreSQL Flexible Server
+// --------------------
+resource vwDBi 'Microsoft.DBforPostgreSQL/flexibleServers@2025-08-01' = {
+  name: pgServerName
+  location: location
+  sku: {
     name: 'Standard_B1ms'
     tier: 'Burstable'
   }
-  properties:{
-    administratorLogin:'vwadmin'
-    administratorLoginPassword:dbPassword
-    storage:{
-      storageSizeGB:32
-    }
+  properties: {
+    administratorLogin: 'vwadmin'
+    administratorLoginPassword: dbPassword
     version: '14'
-    authConfig:{
-      passwordAuth:'Enabled'
-      activeDirectoryAuth:'Disabled'
+    storage: {
+      storageSizeGB: 32
     }
-  }
-  resource dbfw 'firewallRules'={
-    name:'dbFW'
-    properties:{
-      endIpAddress: '0.0.0.0'
-      startIpAddress: '0.0.0.0'
+    authConfig: {
+      passwordAuth: 'Enabled'
+      activeDirectoryAuth: 'Disabled'
     }
   }
 }
 
-resource vwDB 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01'={
-  name:'vwdb-${uniqueString(resourceGroup().id)}'
-  parent:vwDBi
-  properties:{
+// Firewall: Allow Azure services (0.0.0.0) if desired
+resource postgresAllowAzure 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2025-08-01' = if (allowAzureServicesToPostgres) {
+  name: 'AllowAzureServices'
+  parent: vwDBi
+  properties: {
+    startIpAddress: '0.0.0.0'
+    endIpAddress: '0.0.0.0'
+  }
+}
+
+// Firewall: optional custom range
+resource postgresAllowCustomRange 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2025-08-01' = if (!empty(postgresFirewallStartIp) && !empty(postgresFirewallEndIp)) {
+  name: 'AllowCustomRange'
+  parent: vwDBi
+  properties: {
+    startIpAddress: postgresFirewallStartIp
+    endIpAddress: postgresFirewallEndIp
+  }
+}
+
+// Create DB
+resource vwDB 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2025-08-01' = {
+  name: pgDbName
+  parent: vwDBi
+  properties: {
     charset: 'UTF8'
     collation: 'en_US.utf8'
   }
 }
 
-resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
+// Correct DATABASE_URL (port + sslmode required for Azure Postgres)
+var databaseUrl = 'postgresql://vwadmin:${dbPassword}@${vwDBi.properties.fullyQualifiedDomainName}:5432/${pgDbName}?sslmode=require'
+
+// --------------------
+// Container App (Vaultwarden)
+// --------------------
+resource vwardenApp 'Microsoft.App/containerApps@2025-07-01' = {
   name: 'vaultwarden'
   location: location
-  properties:{
+  properties: {
     environmentId: containerAppEnv.id
-    configuration:{
-      ingress:{
+    configuration: {
+      // Store sensitive values as Container App secrets
+      secrets: [
+        {
+          name: 'admin-token'
+          value: AdminAPIKEY
+        }
+        {
+          name: 'database-url'
+          valuesit
+          value: databaseUrl
+        }
+        {
+          name: 'smtp-password'
+          value: smtpPassword
+        }
+      ]
+      ingress: {
         external: true
         targetPort: 80
-        allowInsecure: true
-        traffic:[
+        allowInsecure: allowInsecureHttp
+        traffic: [
           {
             latestRevision: true
             weight: 100
@@ -201,38 +278,39 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
         ]
       }
     }
-    template:{
-      containers:[
+    template: {
+      containers: [
         {
           name: 'vaultwarden'
           image: 'docker.io/vaultwarden/server:latest'
-          resources:{
+          resources: {
             cpu: json(cpuCore)
             memory: '${memorySize}Gi'
           }
-          volumeMounts:[
+          volumeMounts: [
             {
               volumeName: 'vwdatashare'
               mountPath: '/data'
             }
           ]
           env: [
+            // Secrets
             {
               name: 'ADMIN_TOKEN'
-              value: AdminAPIKEY
+              secretRef: 'admin-token'
             }
             {
               name: 'DATABASE_URL'
-              value: 'postgresql://vwadmin:${dbPassword}@${vwDBi.properties.fullyQualifiedDomainName}/${vwDB.name}'
+              secretRef: 'database-url'
             }
 
-            // Public URL for correct links in emails and attachments
+            // Public URL
             {
               name: 'DOMAIN'
               value: domain
             }
 
-            // SMTP (required for password reset, signup verification, security emails)
+            // SMTP
             {
               name: 'SMTP_HOST'
               value: smtpHost
@@ -255,17 +333,17 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
             }
             {
               name: 'SMTP_PASSWORD'
-              value: smtpPassword
+              secretRef: 'smtp-password'
             }
 
-            // Signup/UI controls
+            // Signup/UI controls (bools as "true"/"false")
             {
               name: 'SIGNUPS_ALLOWED'
-              value: string(signupsAllowed)
+              value: toLower(string(signupsAllowed))
             }
             {
               name: 'SIGNUPS_VERIFY'
-              value: string(signupsVerify)
+              value: toLower(string(signupsVerify))
             }
             {
               name: 'SIGNUPS_DOMAINS_WHITELIST'
@@ -273,22 +351,25 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
             }
             {
               name: 'SHOW_PREMIUM'
-              value: string(showPremium)
+              value: toLower(string(showPremium))
             }
           ]
         }
       ]
-      volumes:[
+      volumes: [
         {
-          name:'vwdatashare'
-          storageName: 'vw-data-link'
+          name: 'vwdatashare'
+          storageName: storageLink.name
           storageType: 'AzureFile'
         }
       ]
-      scale:{
+      scale: {
         minReplicas: 1
         maxReplicas: 4
       }
     }
   }
 }
+
+output containerAppFqdn string = vwardenApp.properties.configuration.ingress.fqdn
+output postgresFqdn string = vwDBi.properties.fullyQualifiedDomainName
