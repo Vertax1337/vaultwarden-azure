@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "11010187471728761829"
+      "templateHash": "550571589129251328"
     }
   },
   "parameters": {
@@ -23,17 +23,17 @@
         "description": "Name of the Vaultwarden Container App"
       }
     },
-    "domain": {
+    "domainUrl": {
       "type": "string",
       "metadata": {
-        "description": "Public URL of your Vaultwarden instance (used for email links etc.). Example: https://vault.example.tld"
+        "description": "Public URL of your Vaultwarden instance. MUST include https:// (example: https://sub.domain.tld)"
       }
     },
     "vaultwardenImage": {
       "type": "string",
-      "defaultValue": "vaultwarden/server:latest",
+      "defaultValue": "vaultwarden/server:1.33.2",
       "metadata": {
-        "description": "Container image to use for Vaultwarden"
+        "description": "Container image to use for Vaultwarden (pin a version for reproducible deployments)"
       }
     },
     "cpuCores": {
@@ -52,9 +52,35 @@
     },
     "allowInsecureHttp": {
       "type": "bool",
-      "defaultValue": true,
+      "defaultValue": false,
       "metadata": {
-        "description": "Allow insecure HTTP traffic (disable for production)"
+        "description": "Allow insecure HTTP traffic (recommended: false for production)"
+      }
+    },
+    "smtpHost": {
+      "type": "string",
+      "defaultValue": "smtp.office365.com",
+      "metadata": {
+        "description": "SMTP host (M365 default: smtp.office365.com)"
+      }
+    },
+    "smtpPort": {
+      "type": "string",
+      "defaultValue": "587",
+      "metadata": {
+        "description": "SMTP port (M365 default: 587)"
+      }
+    },
+    "smtpSecurity": {
+      "type": "string",
+      "defaultValue": "starttls",
+      "allowedValues": [
+        "starttls",
+        "force_tls",
+        "off"
+      ],
+      "metadata": {
+        "description": "SMTP security (starttls / force_tls / off)"
       }
     },
     "smtpFrom": {
@@ -66,7 +92,7 @@
     "smtpUsername": {
       "type": "string",
       "metadata": {
-        "description": "SMTP username"
+        "description": "SMTP username (often same as smtpFrom)"
       }
     },
     "smtpPassword": {
@@ -85,7 +111,7 @@
     "dbPassword": {
       "type": "securestring",
       "metadata": {
-        "description": "PostgreSQL admin password (avoid URL-breaking characters)"
+        "description": "PostgreSQL admin password (will be stored in Key Vault for later retrieval)"
       }
     },
     "postgresSkuName": {
@@ -100,6 +126,13 @@
       "defaultValue": 32,
       "metadata": {
         "description": "PostgreSQL storage size in GB"
+      }
+    },
+    "allowAzureServicesToPostgres": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Allow Azure services to access PostgreSQL (0.0.0.0 firewall rule). Recommended: false."
       }
     },
     "storageAccountSku": {
@@ -123,9 +156,15 @@
     "fileShareName": "vaultwarden",
     "postgresServerName": "[toLower(format('{0}-pg-{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
     "postgresDbName": "vaultwarden",
+    "postgresFqdn": "[format('{0}.postgres.database.azure.com', variables('postgresServerName'))]",
+    "postgresPort": "5432",
     "logAnalyticsName": "[format('{0}-law', parameters('appName'))]",
     "containerEnvName": "[format('{0}-env', parameters('appName'))]",
-    "databaseUrl": "[format('postgresql://{0}:{1}@{2}.postgres.database.azure.com:5432/{3}?sslmode=require', parameters('dbAdminUser'), parameters('dbPassword'), variables('postgresServerName'), variables('postgresDbName'))]"
+    "keyVaultName": "[toLower(format('vwkv{0}', uniqueString(resourceGroup().id)))]",
+    "kvSecretAdminTokenName": "vw-admin-token",
+    "kvSecretDbPasswordName": "vw-db-password",
+    "roleKeyVaultSecretsOfficer": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]",
+    "roleKeyVaultSecretsUser": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
   },
   "resources": [
     {
@@ -148,7 +187,8 @@
       "kind": "StorageV2",
       "properties": {
         "allowBlobPublicAccess": false,
-        "minimumTlsVersion": "TLS1_2"
+        "minimumTlsVersion": "TLS1_2",
+        "supportsHttpsTrafficOnly": true
       }
     },
     {
@@ -168,6 +208,113 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.Storage/storageAccounts/fileServices', variables('storageAccountName'), 'default')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2023-07-01",
+      "name": "[variables('keyVaultName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "tenantId": "[subscription().tenantId]",
+        "sku": {
+          "family": "A",
+          "name": "standard"
+        },
+        "enableRbacAuthorization": true,
+        "enabledForDeployment": false,
+        "enabledForTemplateDeployment": true,
+        "enabledForDiskEncryption": false,
+        "publicNetworkAccess": "Enabled",
+        "softDeleteRetentionInDays": 90,
+        "enablePurgeProtection": true
+      }
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-id', parameters('appName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+      "apiVersion": "2023-01-31",
+      "name": "[format('{0}-kv-writer-id', parameters('appName'))]",
+      "location": "[parameters('location')]"
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), variables('roleKeyVaultSecretsOfficer'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('roleKeyVaultSecretsOfficer')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName')))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Authorization/roleAssignments",
+      "apiVersion": "2022-04-01",
+      "scope": "[format('Microsoft.KeyVault/vaults/{0}', variables('keyVaultName'))]",
+      "name": "[guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName'))), variables('roleKeyVaultSecretsUser'))]",
+      "properties": {
+        "roleDefinitionId": "[variables('roleKeyVaultSecretsUser')]",
+        "principalId": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName'))), '2023-01-31').principalId]",
+        "principalType": "ServicePrincipal"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]",
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deploymentScripts",
+      "apiVersion": "2023-08-01",
+      "name": "[format('{0}-ensure-kv-secrets', parameters('appName'))]",
+      "location": "[parameters('location')]",
+      "kind": "AzureCLI",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))))]": {}
+        }
+      },
+      "properties": {
+        "azCliVersion": "2.60.0",
+        "timeout": "PT30M",
+        "retentionInterval": "P1D",
+        "cleanupPreference": "OnSuccess",
+        "environmentVariables": [
+          {
+            "name": "KEYVAULT_NAME",
+            "value": "[variables('keyVaultName')]"
+          },
+          {
+            "name": "ADMIN_TOKEN_SECRET",
+            "value": "[variables('kvSecretAdminTokenName')]"
+          },
+          {
+            "name": "DB_PASSWORD_SECRET",
+            "value": "[variables('kvSecretDbPasswordName')]"
+          }
+        ],
+        "secureEnvironmentVariables": [
+          {
+            "name": "DB_PASSWORD_VALUE",
+            "secureValue": "[parameters('dbPassword')]"
+          }
+        ],
+        "scriptContent": "set -euo pipefail\n\necho \"Ensuring Key Vault secrets exist in $KEYVAULT_NAME ...\"\n\n# ADMIN_TOKEN: generate if missing\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"ADMIN_TOKEN secret already exists.\"\nelse\n  echo \"Creating ADMIN_TOKEN secret...\"\n  ADMIN_TOKEN=$(python3 - << 'PY'\nimport secrets, base64\nprint(base64.urlsafe_b64encode(secrets.token_bytes(48)).decode('utf-8').rstrip('='))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --value \"$ADMIN_TOKEN\" 1>/dev/null\n  echo \"ADMIN_TOKEN secret created.\"\nfi\n\n# DB password: store if missing\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"DB password secret already exists.\"\nelse\n  echo \"Creating DB password secret...\"\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --value \"$DB_PASSWORD_VALUE\" 1>/dev/null\n  echo \"DB password secret created.\"\nfi\n\necho \"Done.\"\n"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), variables('roleKeyVaultSecretsOfficer')))]",
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName')))]"
       ]
     },
     {
@@ -196,6 +343,7 @@
       }
     },
     {
+      "condition": "[parameters('allowAzureServicesToPostgres')]",
       "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
       "apiVersion": "2023-03-01-preview",
       "name": "[format('{0}/{1}', variables('postgresServerName'), 'AllowAzure')]",
@@ -255,6 +403,12 @@
       "apiVersion": "2024-03-01",
       "name": "[parameters('appName')]",
       "location": "[parameters('location')]",
+      "identity": {
+        "type": "UserAssigned",
+        "userAssignedIdentities": {
+          "[format('{0}', resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName'))))]": {}
+        }
+      },
       "properties": {
         "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
         "configuration": {
@@ -265,8 +419,14 @@
           },
           "secrets": [
             {
-              "name": "db-url",
-              "value": "[variables('databaseUrl')]"
+              "name": "admin-token",
+              "keyVaultUrl": "[format('https://{0}.{1}/secrets/{2}', variables('keyVaultName'), environment().suffixes.keyvaultDns, variables('kvSecretAdminTokenName'))]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+            },
+            {
+              "name": "db-password",
+              "keyVaultUrl": "[format('https://{0}.{1}/secrets/{2}', variables('keyVaultName'), environment().suffixes.keyvaultDns, variables('kvSecretDbPasswordName'))]",
+              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
             },
             {
               "name": "smtp-password",
@@ -285,12 +445,48 @@
               },
               "env": [
                 {
-                  "name": "DATABASE_URL",
-                  "secretRef": "db-url"
+                  "name": "ADMIN_TOKEN",
+                  "secretRef": "admin-token"
+                },
+                {
+                  "name": "DATABASE_HOST",
+                  "value": "[variables('postgresFqdn')]"
+                },
+                {
+                  "name": "DATABASE_PORT",
+                  "value": "[variables('postgresPort')]"
+                },
+                {
+                  "name": "DATABASE_NAME",
+                  "value": "[variables('postgresDbName')]"
+                },
+                {
+                  "name": "DATABASE_USERNAME",
+                  "value": "[parameters('dbAdminUser')]"
+                },
+                {
+                  "name": "DATABASE_PASSWORD",
+                  "secretRef": "db-password"
+                },
+                {
+                  "name": "DATABASE_SSLMODE",
+                  "value": "require"
                 },
                 {
                   "name": "DOMAIN",
-                  "value": "[parameters('domain')]"
+                  "value": "[parameters('domainUrl')]"
+                },
+                {
+                  "name": "SMTP_HOST",
+                  "value": "[parameters('smtpHost')]"
+                },
+                {
+                  "name": "SMTP_PORT",
+                  "value": "[parameters('smtpPort')]"
+                },
+                {
+                  "name": "SMTP_SECURITY",
+                  "value": "[parameters('smtpSecurity')]"
                 },
                 {
                   "name": "SMTP_FROM",
@@ -327,10 +523,23 @@
         }
       },
       "dependsOn": [
+        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]",
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
         "[resourceId('Microsoft.App/managedEnvironments/storages', variables('containerEnvName'), 'vaultwarden-storage')]",
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]"
+        "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName')))]",
+        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName'))), variables('roleKeyVaultSecretsUser')))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('postgresServerName'), variables('postgresDbName'))]"
       ]
     }
-  ]
+  ],
+  "outputs": {
+    "containerAppFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.App/containerApps', parameters('appName')), '2024-03-01').configuration.ingress.fqdn]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "value": "[variables('keyVaultName')]"
+    }
+  }
 }
