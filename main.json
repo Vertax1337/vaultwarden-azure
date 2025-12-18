@@ -48,7 +48,7 @@
         "2"
       ],
       "metadata": {
-        "description": "Number of CPU cores the container can use. Can be with a maximum of two decimals."
+        "description": "Number of CPU cores the container can use.\nCan be with a maximum of two decimals."
       }
     },
     "memorySize": {
@@ -64,11 +64,84 @@
         "4"
       ],
       "metadata": {
-        "description": "Amount of memory (in gibibytes, GiB) allocated to the container up to 4GiB. Can be with a maximum of two decimals. Ratio with CPU cores must be equal to 2."
+        "description": "Amount of memory (in gibibytes, GiB) allocated to the container up to 4GiB. Can be with a maximum of two decimals.\nRatio with CPU cores must be equal to 2."
       }
     },
     "dbPassword": {
       "type": "securestring"
+    },
+    "domain": {
+      "type": "string",
+      "metadata": {
+        "description": "Public URL of your Vaultwarden instance (used for email links, attachments, etc.)"
+      }
+    },
+    "smtpHost": {
+      "type": "string",
+      "defaultValue": "smtp.office365.com",
+      "metadata": {
+        "description": "SMTP host"
+      }
+    },
+    "smtpPort": {
+      "type": "string",
+      "defaultValue": "587",
+      "metadata": {
+        "description": "SMTP port"
+      }
+    },
+    "smtpSecurity": {
+      "type": "string",
+      "defaultValue": "starttls",
+      "metadata": {
+        "description": "SMTP security (starttls / force_tls / off)"
+      }
+    },
+    "smtpFrom": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP FROM address (e.g. vaultwarden@domain.tld)"
+      }
+    },
+    "smtpUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP username (often same as smtpFrom)"
+      }
+    },
+    "smtpPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "SMTP password"
+      }
+    },
+    "signupsAllowed": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Allow new signups (recommended: false for production)"
+      }
+    },
+    "signupsVerify": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Require email verification for signups"
+      }
+    },
+    "signupsDomainsWhitelist": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Comma-separated domain whitelist for signups (empty = no restriction)"
+      }
+    },
+    "showPremium": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Show premium features in UI (Bitwarden-compatible clients)"
+      }
     }
   },
   "variables": {
@@ -250,6 +323,50 @@
                 {
                   "name": "DATABASE_URL",
                   "value": "[format('postgresql://vwadmin:{0}@{1}/{2}', parameters('dbPassword'), reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('vwdbi-{0}', uniqueString(resourceGroup().id))), '2022-12-01').fullyQualifiedDomainName, format('vwdb-{0}', uniqueString(resourceGroup().id)))]"
+                },
+                {
+                  "name": "DOMAIN",
+                  "value": "[parameters('domain')]"
+                },
+                {
+                  "name": "SMTP_HOST",
+                  "value": "[parameters('smtpHost')]"
+                },
+                {
+                  "name": "SMTP_PORT",
+                  "value": "[parameters('smtpPort')]"
+                },
+                {
+                  "name": "SMTP_SECURITY",
+                  "value": "[parameters('smtpSecurity')]"
+                },
+                {
+                  "name": "SMTP_FROM",
+                  "value": "[parameters('smtpFrom')]"
+                },
+                {
+                  "name": "SMTP_USERNAME",
+                  "value": "[parameters('smtpUsername')]"
+                },
+                {
+                  "name": "SMTP_PASSWORD",
+                  "value": "[parameters('smtpPassword')]"
+                },
+                {
+                  "name": "SIGNUPS_ALLOWED",
+                  "value": "[string(parameters('signupsAllowed'))]"
+                },
+                {
+                  "name": "SIGNUPS_VERIFY",
+                  "value": "[string(parameters('signupsVerify'))]"
+                },
+                {
+                  "name": "SIGNUPS_DOMAINS_WHITELIST",
+                  "value": "[parameters('signupsDomainsWhitelist')]"
+                },
+                {
+                  "name": "SHOW_PREMIUM",
+                  "value": "[string(parameters('showPremium'))]"
                 }
               ]
             }
