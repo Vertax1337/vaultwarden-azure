@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "550571589129251328"
+      "templateHash": "5690648528040617136"
     }
   },
   "parameters": {
@@ -301,9 +301,7 @@
           {
             "name": "DB_PASSWORD_SECRET",
             "value": "[variables('kvSecretDbPasswordName')]"
-          }
-        ],
-        "secureEnvironmentVariables": [
+          },
           {
             "name": "DB_PASSWORD_VALUE",
             "secureValue": "[parameters('dbPassword')]"
