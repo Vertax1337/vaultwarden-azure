@@ -58,7 +58,7 @@ resource storageaccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
   properties:{
     accessTier: 'Hot'
     allowSharedKeyAccess: true
-    allowBlobPublicAccess: true
+    allowBlobPublicAccess: false
   }
   resource fileshare 'fileServices@2022-09-01'={
     name: 'default'
