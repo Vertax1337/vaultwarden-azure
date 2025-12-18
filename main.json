@@ -1,8 +1,108 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
   "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.39.26.7824",
+      "templateHash": "11010187471728761829"
+    }
+  },
   "parameters": {
-    "storageAccountSKU": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources"
+      }
+    },
+    "appName": {
+      "type": "string",
+      "defaultValue": "vaultwarden",
+      "metadata": {
+        "description": "Name of the Vaultwarden Container App"
+      }
+    },
+    "domain": {
+      "type": "string",
+      "metadata": {
+        "description": "Public URL of your Vaultwarden instance (used for email links etc.). Example: https://vault.example.tld"
+      }
+    },
+    "vaultwardenImage": {
+      "type": "string",
+      "defaultValue": "vaultwarden/server:latest",
+      "metadata": {
+        "description": "Container image to use for Vaultwarden"
+      }
+    },
+    "cpuCores": {
+      "type": "string",
+      "defaultValue": "0.25",
+      "metadata": {
+        "description": "CPU cores for the container"
+      }
+    },
+    "memorySize": {
+      "type": "string",
+      "defaultValue": "0.5",
+      "metadata": {
+        "description": "Memory in GiB for the container (CPU:RAM ratio must be 1:2)"
+      }
+    },
+    "allowInsecureHttp": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Allow insecure HTTP traffic (disable for production)"
+      }
+    },
+    "smtpFrom": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP FROM address (e.g. vaultwarden@domain.tld)"
+      }
+    },
+    "smtpUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP username"
+      }
+    },
+    "smtpPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "SMTP password"
+      }
+    },
+    "dbAdminUser": {
+      "type": "string",
+      "defaultValue": "vaultwarden",
+      "metadata": {
+        "description": "PostgreSQL admin username"
+      }
+    },
+    "dbPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "PostgreSQL admin password (avoid URL-breaking characters)"
+      }
+    },
+    "postgresSkuName": {
+      "type": "string",
+      "defaultValue": "Standard_B1ms",
+      "metadata": {
+        "description": "PostgreSQL SKU name"
+      }
+    },
+    "postgresStorageGB": {
+      "type": "int",
+      "defaultValue": 32,
+      "metadata": {
+        "description": "PostgreSQL storage size in GB"
+      }
+    },
+    "storageAccountSku": {
       "type": "string",
       "defaultValue": "Standard_LRS",
       "allowedValues": [
@@ -14,293 +114,165 @@
         "Standard_RAGZRS"
       ],
       "metadata": {
-        "description": "Storage Account SKU for Azure Files (Standard_* only)."
+        "description": "Storage account SKU for Azure Files"
       }
-    },
-    "vaultwardenImage": {
-      "type": "string",
-      "defaultValue": "docker.io/vaultwarden/server:1.33.2",
-      "metadata": {
-        "description": "Vaultwarden container image (pinned version recommended)."
-      }
-    },
-    "AdminAPIKEY": {
-      "type": "securestring",
-      "defaultValue": "[base64(newGuid())]",
-      "minLength": 20
-    },
-    "containerSku": {
-      "type": "string",
-      "defaultValue": "0.25/0.5",
-      "allowedValues": [
-        "0.25/0.5",
-        "0.5/1",
-        "0.75/1.5",
-        "1/2",
-        "1.25/2.5",
-        "1.5/3",
-        "1.75/3.5",
-        "2/4"
-      ],
-      "metadata": {
-        "description": "Container size preset in format <cpu>/<memoryGiB> enforcing valid pairs."
-      }
-    },
-    "allowInsecureHttp": {
-      "type": "bool",
-      "defaultValue": false
-    },
-    "domain": {
-      "type": "string"
-    },
-    "smtpHost": {
-      "type": "string",
-      "defaultValue": "smtp.office365.com"
-    },
-    "smtpPort": {
-      "type": "string",
-      "defaultValue": "587"
-    },
-    "smtpSecurity": {
-      "type": "string",
-      "defaultValue": "starttls",
-      "allowedValues": [
-        "starttls",
-        "force_tls",
-        "off"
-      ]
-    },
-    "smtpFrom": {
-      "type": "string"
-    },
-    "smtpUsername": {
-      "type": "string"
-    },
-    "smtpPassword": {
-      "type": "securestring"
-    },
-    "signupsAllowed": {
-      "type": "bool",
-      "defaultValue": false
-    },
-    "signupsVerify": {
-      "type": "bool",
-      "defaultValue": true
-    },
-    "signupsDomainsWhitelist": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "showPremium": {
-      "type": "bool",
-      "defaultValue": true
-    },
-    "allowAzureServicesToPostgres": {
-      "type": "bool",
-      "defaultValue": false
-    },
-    "postgresFirewallStartIp": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "postgresFirewallEndIp": {
-      "type": "string",
-      "defaultValue": ""
-    },
-    "dbPassword": {
-      "type": "securestring"
     }
   },
   "variables": {
-    "location": "[resourceGroup().location]",
-    "logWorkspaceName": "[concat('vw-logwks', uniqueString(resourceGroup().id))]",
-    "storageAccountName": "[concat('vwstorage', uniqueString(resourceGroup().id))]",
-    "envName": "[concat('appenv-vaultwarden', uniqueString(resourceGroup().id))]",
-    "pgServerName": "[concat('vwdbi-', uniqueString(resourceGroup().id))]",
-    "pgDbName": "vaultwarden",
-    "skuParts": "[split(parameters('containerSku'), '/')]",
-    "cpuCore": "[first(variables('skuParts'))]",
-    "memorySize": "[last(variables('skuParts'))]",
-    "databaseUrl": "[format('postgresql://vwadmin:{0}@{1}:5432/{2}?sslmode=require', parameters('dbPassword'), reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName')), '2025-08-01').fullyQualifiedDomainName, variables('pgDbName'))]"
+    "storageAccountName": "[toLower(format('{0}files{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
+    "fileShareName": "vaultwarden",
+    "postgresServerName": "[toLower(format('{0}-pg-{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
+    "postgresDbName": "vaultwarden",
+    "logAnalyticsName": "[format('{0}-law', parameters('appName'))]",
+    "containerEnvName": "[format('{0}-env', parameters('appName'))]",
+    "databaseUrl": "[format('postgresql://{0}:{1}@{2}.postgres.database.azure.com:5432/{3}?sslmode=require', parameters('dbAdminUser'), parameters('dbPassword'), variables('postgresServerName'), variables('postgresDbName'))]"
   },
   "resources": [
     {
-      "type": "Microsoft.Storage/storageAccounts",
-      "apiVersion": "2025-06-01",
-      "name": "[variables('storageAccountName')]",
-      "location": "[variables('location')]",
-      "kind": "StorageV2",
-      "sku": {
-        "name": "[parameters('storageAccountSKU')]"
-      },
-      "properties": {
-        "accessTier": "Hot",
-        "allowSharedKeyAccess": true,
-        "allowBlobPublicAccess": false,
-        "supportsHttpsTrafficOnly": true,
-        "minimumTlsVersion": "TLS1_2"
-      },
-      "resources": [
-        {
-          "type": "fileServices",
-          "apiVersion": "2025-06-01",
-          "name": "default",
-          "resources": [
-            {
-              "type": "shares",
-              "apiVersion": "2025-06-01",
-              "name": "vw-data",
-              "properties": {
-                "accessTier": "Hot"
-              }
-            }
-          ]
-        }
-      ]
-    },
-    {
       "type": "Microsoft.OperationalInsights/workspaces",
-      "apiVersion": "2020-10-01",
-      "name": "[variables('logWorkspaceName')]",
-      "location": "[variables('location')]",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('logAnalyticsName')]",
+      "location": "[parameters('location')]",
       "properties": {
-        "sku": {
-          "name": "PerGB2018"
-        },
         "retentionInDays": 30
       }
     },
     {
-      "type": "Microsoft.App/managedEnvironments",
-      "apiVersion": "2025-07-01",
-      "name": "[variables('envName')]",
-      "location": "[variables('location')]",
+      "type": "Microsoft.Storage/storageAccounts",
+      "apiVersion": "2023-05-01",
+      "name": "[variables('storageAccountName')]",
+      "location": "[parameters('location')]",
       "sku": {
-        "name": "Consumption"
+        "name": "[parameters('storageAccountSku')]"
       },
+      "kind": "StorageV2",
       "properties": {
-        "appLogsConfiguration": {
-          "destination": "log-analytics",
-          "logAnalyticsConfiguration": {
-            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName')), '2020-10-01').customerId]",
-            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName')), '2020-10-01').primarySharedKey]"
-          }
-        }
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logWorkspaceName'))]"
-      ]
+        "allowBlobPublicAccess": false,
+        "minimumTlsVersion": "TLS1_2"
+      }
     },
     {
-      "type": "Microsoft.App/managedEnvironments/storages",
-      "apiVersion": "2025-07-01",
-      "name": "[format('{0}/{1}', variables('envName'), 'vw-data-link')]",
-      "properties": {
-        "azureFile": {
-          "accessMode": "ReadWrite",
-          "accountName": "[variables('storageAccountName')]",
-          "shareName": "vw-data",
-          "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2025-06-01').keys[0].value]"
-        }
-      },
+      "type": "Microsoft.Storage/storageAccounts/fileServices",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}', variables('storageAccountName'), 'default')]",
       "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
         "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
       ]
     },
     {
+      "type": "Microsoft.Storage/storageAccounts/fileServices/shares",
+      "apiVersion": "2023-05-01",
+      "name": "[format('{0}/{1}/{2}', variables('storageAccountName'), 'default', variables('fileShareName'))]",
+      "properties": {
+        "accessTier": "Hot"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices', variables('storageAccountName'), 'default')]"
+      ]
+    },
+    {
       "type": "Microsoft.DBforPostgreSQL/flexibleServers",
-      "apiVersion": "2025-08-01",
-      "name": "[variables('pgServerName')]",
-      "location": "[variables('location')]",
+      "apiVersion": "2023-03-01-preview",
+      "name": "[variables('postgresServerName')]",
+      "location": "[parameters('location')]",
       "sku": {
-        "name": "Standard_B1ms",
+        "name": "[parameters('postgresSkuName')]",
         "tier": "Burstable"
       },
       "properties": {
-        "administratorLogin": "vwadmin",
+        "administratorLogin": "[parameters('dbAdminUser')]",
         "administratorLoginPassword": "[parameters('dbPassword')]",
-        "version": "14",
+        "version": "15",
         "storage": {
-          "storageSizeGB": 32
+          "storageSizeGB": "[parameters('postgresStorageGB')]"
         },
         "authConfig": {
           "passwordAuth": "Enabled",
           "activeDirectoryAuth": "Disabled"
+        },
+        "backup": {
+          "backupRetentionDays": 7
         }
       }
     },
     {
-      "condition": "[parameters('allowAzureServicesToPostgres')]",
       "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
-      "apiVersion": "2025-08-01",
-      "name": "[format('{0}/{1}', variables('pgServerName'), 'AllowAzureServices')]",
+      "apiVersion": "2023-03-01-preview",
+      "name": "[format('{0}/{1}', variables('postgresServerName'), 'AllowAzure')]",
       "properties": {
         "startIpAddress": "0.0.0.0",
         "endIpAddress": "0.0.0.0"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]"
-      ]
-    },
-    {
-      "condition": "[and(not(empty(parameters('postgresFirewallStartIp'))), not(empty(parameters('postgresFirewallEndIp'))))]",
-      "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
-      "apiVersion": "2025-08-01",
-      "name": "[format('{0}/{1}', variables('pgServerName'), 'AllowCustomRange')]",
-      "properties": {
-        "startIpAddress": "[parameters('postgresFirewallStartIp')]",
-        "endIpAddress": "[parameters('postgresFirewallEndIp')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]"
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]"
       ]
     },
     {
       "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
-      "apiVersion": "2025-08-01",
-      "name": "[format('{0}/{1}', variables('pgServerName'), variables('pgDbName'))]",
+      "apiVersion": "2023-03-01-preview",
+      "name": "[format('{0}/{1}', variables('postgresServerName'), variables('postgresDbName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('containerEnvName')]",
+      "location": "[parameters('location')]",
       "properties": {
-        "charset": "UTF8",
-        "collation": "en_US.utf8"
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName')), '2023-09-01').primarySharedKey]"
+          }
+        }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]"
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments/storages",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}/{1}', variables('containerEnvName'), 'vaultwarden-storage')]",
+      "properties": {
+        "azureFile": {
+          "accountName": "[variables('storageAccountName')]",
+          "shareName": "[variables('fileShareName')]",
+          "accountKey": "[listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2023-05-01').keys[0].value]",
+          "accessMode": "ReadWrite"
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
       ]
     },
     {
       "type": "Microsoft.App/containerApps",
-      "apiVersion": "2025-07-01",
-      "name": "vaultwarden",
-      "location": "[variables('location')]",
+      "apiVersion": "2024-03-01",
+      "name": "[parameters('appName')]",
+      "location": "[parameters('location')]",
       "properties": {
-        "environmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
         "configuration": {
+          "ingress": {
+            "external": true,
+            "targetPort": 80,
+            "allowInsecure": "[parameters('allowInsecureHttp')]"
+          },
           "secrets": [
             {
-              "name": "admin-token",
-              "value": "[parameters('AdminAPIKEY')]"
-            },
-            {
-              "name": "database-url",
+              "name": "db-url",
               "value": "[variables('databaseUrl')]"
             },
             {
               "name": "smtp-password",
               "value": "[parameters('smtpPassword')]"
             }
-          ],
-          "ingress": {
-            "external": true,
-            "targetPort": 80,
-            "allowInsecure": "[parameters('allowInsecureHttp')]",
-            "traffic": [
-              {
-                "latestRevision": true,
-                "weight": 100
-              }
-            ]
-          }
+          ]
         },
         "template": {
           "containers": [
@@ -308,39 +280,17 @@
               "name": "vaultwarden",
               "image": "[parameters('vaultwardenImage')]",
               "resources": {
-                "cpu": "[json(variables('cpuCore'))]",
-                "memory": "[format('{0}Gi', variables('memorySize'))]"
+                "cpu": "[json(parameters('cpuCores'))]",
+                "memory": "[format('{0}Gi', parameters('memorySize'))]"
               },
-              "volumeMounts": [
-                {
-                  "volumeName": "vwdatashare",
-                  "mountPath": "/data"
-                }
-              ],
               "env": [
                 {
-                  "name": "ADMIN_TOKEN",
-                  "secretRef": "admin-token"
-                },
-                {
                   "name": "DATABASE_URL",
-                  "secretRef": "database-url"
+                  "secretRef": "db-url"
                 },
                 {
                   "name": "DOMAIN",
                   "value": "[parameters('domain')]"
-                },
-                {
-                  "name": "SMTP_HOST",
-                  "value": "[parameters('smtpHost')]"
-                },
-                {
-                  "name": "SMTP_PORT",
-                  "value": "[parameters('smtpPort')]"
-                },
-                {
-                  "name": "SMTP_SECURITY",
-                  "value": "[parameters('smtpSecurity')]"
                 },
                 {
                   "name": "SMTP_FROM",
@@ -353,55 +303,33 @@
                 {
                   "name": "SMTP_PASSWORD",
                   "secretRef": "smtp-password"
-                },
+                }
+              ],
+              "volumeMounts": [
                 {
-                  "name": "SIGNUPS_ALLOWED",
-                  "value": "[toLower(string(parameters('signupsAllowed')))]"
-                },
-                {
-                  "name": "SIGNUPS_VERIFY",
-                  "value": "[toLower(string(parameters('signupsVerify')))]"
-                },
-                {
-                  "name": "SIGNUPS_DOMAINS_WHITELIST",
-                  "value": "[parameters('signupsDomainsWhitelist')]"
-                },
-                {
-                  "name": "SHOW_PREMIUM",
-                  "value": "[toLower(string(parameters('showPremium')))]"
+                  "volumeName": "data",
+                  "mountPath": "/data"
                 }
               ]
             }
           ],
           "volumes": [
             {
-              "name": "vwdatashare",
-              "storageName": "vw-data-link",
-              "storageType": "AzureFile"
+              "name": "data",
+              "storageType": "AzureFile",
+              "storageName": "vaultwarden-storage"
             }
           ],
           "scale": {
             "minReplicas": 1,
-            "maxReplicas": 4
+            "maxReplicas": 1
           }
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
-        "[resourceId('Microsoft.App/managedEnvironments/storages', variables('envName'), 'vw-data-link')]",
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]",
-        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('pgServerName'), variables('pgDbName'))]"
+        "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
+        "[resourceId('Microsoft.App/managedEnvironments/storages', variables('containerEnvName'), 'vaultwarden-storage')]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]"
       ]
     }
-  ],
-  "outputs": {
-    "containerAppFqdn": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.App/containerApps', 'vaultwarden'), '2025-07-01').configuration.ingress.fqdn]"
-    },
-    "postgresFqdn": {
-      "type": "string",
-      "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName')), '2025-08-01').fullyQualifiedDomainName]"
-    }
-  }
-}
+  ]
