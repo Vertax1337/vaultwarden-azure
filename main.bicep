@@ -16,7 +16,8 @@ param storageAccountSKU string = 'Standard_LRS'
 @secure()
 param AdminAPIKEY string = base64(newGuid())
 
-@description('Number of CPU cores the container can use. Can be with a maximum of two decimals.')
+@description('Number of CPU cores the container can use.
+Can be with a maximum of two decimals.')
 @allowed([
   '0.25'
   '0.5'
@@ -29,7 +30,8 @@ param AdminAPIKEY string = base64(newGuid())
 ])
 param cpuCore string = '0.25'
 
-@description('Amount of memory (in gibibytes, GiB) allocated to the container up to 4GiB. Can be with a maximum of two decimals. Ratio with CPU cores must be equal to 2.')
+@description('Amount of memory (in gibibytes, GiB) allocated to the container up to 4GiB. Can be with a maximum of two decimals.
+Ratio with CPU cores must be equal to 2.')
 @allowed([
   '0.5'
   '1'
@@ -40,6 +42,40 @@ param cpuCore string = '0.25'
   '4'
 ])
 param memorySize string = '0.5'
+
+@description('Public URL of your Vaultwarden instance (used for email links, attachments, etc.)')
+param domain string
+
+@description('SMTP host')
+param smtpHost string = 'smtp.office365.com'
+
+@description('SMTP port')
+param smtpPort string = '587'
+
+@description('SMTP security (starttls / force_tls / off)')
+param smtpSecurity string = 'starttls'
+
+@description('SMTP FROM address (e.g. vaultwarden@domain.tld)')
+param smtpFrom string
+
+@description('SMTP username (often same as smtpFrom)')
+param smtpUsername string
+
+@description('SMTP password')
+@secure()
+param smtpPassword string
+
+@description('Allow new signups (recommended: false for production)')
+param signupsAllowed bool = false
+
+@description('Require email verification for signups')
+param signupsVerify bool = true
+
+@description('Comma-separated domain whitelist for signups (empty = no restriction)')
+param signupsDomainsWhitelist string = ''
+
+@description('Show premium features in UI (Bitwarden-compatible clients)')
+param showPremium bool = true
 
 @secure()
 param dbPassword string
@@ -68,7 +104,7 @@ resource storageaccount 'Microsoft.Storage/storageAccounts@2022-09-01' = {
         accessTier: 'Hot'
       }
     }
-  }  
+  }
 }
 
 resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2020-10-01' = {
@@ -81,7 +117,6 @@ resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2020-10
     retentionInDays: 30
   }
 }
-
 
 resource containerAppEnv 'Microsoft.App/managedEnvironments@2022-06-01-preview'= {
   name: 'appenv-vaultwarden${uniqueString(resourceGroup().id)}'
@@ -106,8 +141,8 @@ resource containerAppEnv 'Microsoft.App/managedEnvironments@2022-06-01-preview'=
         accountKey: storageaccount.listKeys().keys[0].value
         shareName: 'vw-data'
         accountName: storageaccount.name
+      }
     }
-  }
   }
 }
 
@@ -137,7 +172,6 @@ resource vwDBi 'Microsoft.DBforPostgreSQL/flexibleServers@2022-12-01'={
       startIpAddress: '0.0.0.0'
     }
   }
-  
 }
 
 resource vwDB 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2022-12-01'={
@@ -176,7 +210,6 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
             cpu: json(cpuCore)
             memory: '${memorySize}Gi'
           }
-          
           volumeMounts:[
             {
               volumeName: 'vwdatashare'
@@ -189,8 +222,58 @@ resource vwardenApp 'Microsoft.App/containerApps@2022-06-01-preview'= {
               value: AdminAPIKEY
             }
             {
-              name:'DATABASE_URL'
-              value:'postgresql://vwadmin:${dbPassword}@${vwDBi.properties.fullyQualifiedDomainName}/${vwDB.name}'
+              name: 'DATABASE_URL'
+              value: 'postgresql://vwadmin:${dbPassword}@${vwDBi.properties.fullyQualifiedDomainName}/${vwDB.name}'
+            }
+
+            // Public URL for correct links in emails and attachments
+            {
+              name: 'DOMAIN'
+              value: domain
+            }
+
+            // SMTP (required for password reset, signup verification, security emails)
+            {
+              name: 'SMTP_HOST'
+              value: smtpHost
+            }
+            {
+              name: 'SMTP_PORT'
+              value: smtpPort
+            }
+            {
+              name: 'SMTP_SECURITY'
+              value: smtpSecurity
+            }
+            {
+              name: 'SMTP_FROM'
+              value: smtpFrom
+            }
+            {
+              name: 'SMTP_USERNAME'
+              value: smtpUsername
+            }
+            {
+              name: 'SMTP_PASSWORD'
+              value: smtpPassword
+            }
+
+            // Signup/UI controls
+            {
+              name: 'SIGNUPS_ALLOWED'
+              value: string(signupsAllowed)
+            }
+            {
+              name: 'SIGNUPS_VERIFY'
+              value: string(signupsVerify)
+            }
+            {
+              name: 'SIGNUPS_DOMAINS_WHITELIST'
+              value: signupsDomainsWhitelist
+            }
+            {
+              name: 'SHOW_PREMIUM'
+              value: string(showPremium)
             }
           ]
         }
