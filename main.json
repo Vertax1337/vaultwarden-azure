@@ -427,6 +427,10 @@
             {
               "name": "smtp-password",
               "value": "[parameters('smtpPassword')]"
+            },
+            {
+              "name": "database-url",
+              "value": "[format('postgresql://{0}:{1}@{2}:{3}/{4}?sslmode=require', parameters('dbAdminUser'), string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.dbPassword), variables('postgresFqdn'), variables('postgresPort'), variables('postgresDbName'))]"
             }
           ]
         },
@@ -445,28 +449,8 @@
                   "secretRef": "admin-token"
                 },
                 {
-                  "name": "DATABASE_HOST",
-                  "value": "[variables('postgresFqdn')]"
-                },
-                {
-                  "name": "DATABASE_PORT",
-                  "value": "[variables('postgresPort')]"
-                },
-                {
-                  "name": "DATABASE_NAME",
-                  "value": "[variables('postgresDbName')]"
-                },
-                {
-                  "name": "DATABASE_USERNAME",
-                  "value": "[parameters('dbAdminUser')]"
-                },
-                {
-                  "name": "DATABASE_PASSWORD",
-                  "secretRef": "db-password"
-                },
-                {
-                  "name": "DATABASE_SSLMODE",
-                  "value": "require"
+                  "name": "DATABASE_URL",
+                  "secretRef": "database-url"
                 },
                 {
                   "name": "DOMAIN",
