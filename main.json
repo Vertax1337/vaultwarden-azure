@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.39.26.7824",
-      "templateHash": "5690648528040617136"
+      "templateHash": "14479989883472160647"
     }
   },
   "parameters": {
@@ -307,7 +307,7 @@
             "secureValue": "[parameters('dbPassword')]"
           }
         ],
-        "scriptContent": "set -euo pipefail\n\necho \"Ensuring Key Vault secrets exist in $KEYVAULT_NAME ...\"\n\n# ADMIN_TOKEN: generate if missing\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"ADMIN_TOKEN secret already exists.\"\nelse\n  echo \"Creating ADMIN_TOKEN secret...\"\n  ADMIN_TOKEN=$(python3 - << 'PY'\nimport secrets, base64\nprint(base64.urlsafe_b64encode(secrets.token_bytes(48)).decode('utf-8').rstrip('='))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --value \"$ADMIN_TOKEN\" 1>/dev/null\n  echo \"ADMIN_TOKEN secret created.\"\nfi\n\n# DB password: store if missing\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"DB password secret already exists.\"\nelse\n  echo \"Creating DB password secret...\"\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --value \"$DB_PASSWORD_VALUE\" 1>/dev/null\n  echo \"DB password secret created.\"\nfi\n\necho \"Done.\"\n"
+        "scriptContent": "set -euo pipefail\n\necho \"Ensuring Key Vault secrets exist in $KEYVAULT_NAME ...\"\n\n# --- ADMIN_TOKEN ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"ADMIN_TOKEN secret already exists.\"\n  ADMIN_TOKEN=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --query value -o tsv)\nelse\n  echo \"Creating ADMIN_TOKEN secret...\"\n  ADMIN_TOKEN=$(python3 - << 'PY'\nimport secrets, base64\nprint(base64.urlsafe_b64encode(secrets.token_bytes(48)).decode('utf-8').rstrip('='))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --value \"$ADMIN_TOKEN\" 1>/dev/null\n  echo \"ADMIN_TOKEN secret created.\"\nfi\n\n# --- DB password ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"DB password secret already exists.\"\n  DB_PASSWORD=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --query value -o tsv)\nelse\n  echo \"Creating DB password secret...\"\n  DB_PASSWORD=\"$DB_PASSWORD_VALUE\"\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --value \"$DB_PASSWORD\" 1>/dev/null\n  echo \"DB password secret created.\"\nfi\n\n# Write deployment script outputs (used by Bicep to set Container App secrets)\ncat > \"$AZ_SCRIPTS_OUTPUT_PATH\" <<JSON\n{\n  \"adminToken\": \"$ADMIN_TOKEN\",\n  \"dbPassword\": \"$DB_PASSWORD\"\n}\nJSON\n\necho \"Done.\"\n"
       },
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
@@ -418,13 +418,11 @@
           "secrets": [
             {
               "name": "admin-token",
-              "keyVaultUrl": "[format('https://{0}.{1}/secrets/{2}', variables('keyVaultName'), environment().suffixes.keyvaultDns, variables('kvSecretAdminTokenName'))]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+              "value": "[string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.adminToken)]"
             },
             {
               "name": "db-password",
-              "keyVaultUrl": "[format('https://{0}.{1}/secrets/{2}', variables('keyVaultName'), environment().suffixes.keyvaultDns, variables('kvSecretDbPasswordName'))]",
-              "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+              "value": "[string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.dbPassword)]"
             },
             {
               "name": "smtp-password",
