@@ -1,0 +1,371 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "mainTemplateUri": {
+      "type": "string",
+      "defaultValue": "https://raw.githubusercontent.com/Vertax1337/vaultwarden-azure/main/main.json",
+      "metadata": {
+        "description": "Remote URI of the main ARM template. Adjust this when using a fork or another branch."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources"
+      }
+    },
+    "environment": {
+      "type": "string",
+      "allowedValues": ["prod", "test", "dev"],
+      "metadata": {
+        "description": "Environment tag used for costs and operations"
+      }
+    },
+    "bsseRef": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional deployment ref, commit or tag"
+      }
+    },
+    "appName": {
+      "type": "string",
+      "metadata": {
+        "description": "Name of the Vaultwarden Container App"
+      }
+    },
+    "vaultwardenImage": {
+      "type": "string",
+      "defaultValue": "vaultwarden/server:1.35.3-alpine",
+      "metadata": {
+        "description": "Vaultwarden image tag"
+      }
+    },
+    "cpuCores": {
+      "type": "string",
+      "allowedValues": ["0.25", "0.5", "0.75", "1.0", "1.25", "1.5", "1.75", "2.0"],
+      "metadata": {
+        "description": "CPU cores for the container app"
+      }
+    },
+    "memorySize": {
+      "type": "string",
+      "allowedValues": ["0.5", "1.0", "1.5", "2.0", "2.5", "3.0", "3.5", "4.0"],
+      "metadata": {
+        "description": "Memory size in GiB"
+      }
+    },
+    "allowInsecureHttp": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Allow insecure HTTP traffic"
+      }
+    },
+    "diagnosticsEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable diagnostic settings"
+      }
+    },
+    "domainUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Public URL of your Vaultwarden instance, including https://"
+      }
+    },
+    "adminPanelEnabled": {
+      "type": "bool",
+      "metadata": {
+        "description": "Expose ADMIN_TOKEN to the app for bootstrap"
+      }
+    },
+    "invitationOrgName": {
+      "type": "string",
+      "metadata": {
+        "description": "Invitation organization name shown in emails"
+      }
+    },
+    "signupsDomainsWhitelist": {
+      "type": "string",
+      "metadata": {
+        "description": "Comma-separated email domains allowed for signup"
+      }
+    },
+    "orgCreationUsers": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional comma-separated users allowed to create organizations"
+      }
+    },
+    "mailRootDomain": {
+      "type": "string",
+      "metadata": {
+        "description": "Root domain used for mail routing and defaults"
+      }
+    },
+    "smtpUseAuth": {
+      "type": "bool",
+      "metadata": {
+        "description": "Use authenticated SMTP submission"
+      }
+    },
+    "smtpFrom": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP from address"
+      }
+    },
+    "smtpFromName": {
+      "type": "string",
+      "defaultValue": "Vaultwarden",
+      "metadata": {
+        "description": "SMTP from display name"
+      }
+    },
+    "heloName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional HELO/EHLO name"
+      }
+    },
+    "smtpHost": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP host or empty for template default"
+      }
+    },
+    "smtpPort": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP port"
+      }
+    },
+    "smtpSecurity": {
+      "type": "string",
+      "allowedValues": ["starttls", "force_tls", "off"],
+      "metadata": {
+        "description": "SMTP security mode"
+      }
+    },
+    "smtpUsername": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SMTP username"
+      }
+    },
+    "smtpPassword": {
+      "type": "secureString",
+      "defaultValue": "",
+      "metadata": {
+        "description": "SMTP password"
+      }
+    },
+    "ssoEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable OIDC / SSO"
+      }
+    },
+    "ssoOnly": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Allow only SSO login"
+      }
+    },
+    "ssoAuthority": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OIDC authority / issuer URL"
+      }
+    },
+    "ssoClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OIDC client ID"
+      }
+    },
+    "ssoClientSecret": {
+      "type": "secureString",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OIDC client secret"
+      }
+    },
+    "ssoScopes": {
+      "type": "string",
+      "defaultValue": "openid profile email offline_access User.Read",
+      "metadata": {
+        "description": "OIDC scopes"
+      }
+    },
+    "pushEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Bitwarden push relay"
+      }
+    },
+    "pushInstallationId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden push installation ID"
+      }
+    },
+    "pushInstallationKey": {
+      "type": "secureString",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden push installation key"
+      }
+    },
+    "pushUseEuServers": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Use EU Bitwarden push endpoints"
+      }
+    },
+    "acsDeployFoundation": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Deploy ACS foundation resources"
+      }
+    },
+    "acsDataLocation": {
+      "type": "string",
+      "defaultValue": "Germany",
+      "metadata": {
+        "description": "ACS data location"
+      }
+    },
+    "acsDomainName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "ACS mail domain"
+      }
+    },
+    "storageAccountSku": {
+      "type": "string",
+      "metadata": {
+        "description": "Storage account SKU for Azure Files"
+      }
+    },
+    "postgresSkuName": {
+      "type": "string",
+      "metadata": {
+        "description": "PostgreSQL SKU name"
+      }
+    },
+    "postgresStorageGB": {
+      "type": "int",
+      "metadata": {
+        "description": "PostgreSQL storage size in GB"
+      }
+    },
+    "postgresBackupRetentionDays": {
+      "type": "int",
+      "defaultValue": 14,
+      "metadata": {
+        "description": "PostgreSQL PITR retention days"
+      }
+    },
+    "allowAzureServicesToPostgres": {
+      "type": "bool",
+      "metadata": {
+        "description": "Allow Azure services to access PostgreSQL"
+      }
+    },
+    "dbAdminUser": {
+      "type": "string",
+      "metadata": {
+        "description": "Azure PostgreSQL admin username"
+      }
+    },
+    "dbPassword": {
+      "type": "secureString",
+      "metadata": {
+        "description": "Azure PostgreSQL admin password"
+      }
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2022-09-01",
+      "name": "vaultwardenMainTemplate",
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[parameters('mainTemplateUri')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "location": { "value": "[parameters('location')]" },
+          "environment": { "value": "[parameters('environment')]" },
+          "bsseRef": { "value": "[parameters('bsseRef')]" },
+          "appName": { "value": "[parameters('appName')]" },
+          "vaultwardenImage": { "value": "[parameters('vaultwardenImage')]" },
+          "cpuCores": { "value": "[parameters('cpuCores')]" },
+          "memorySize": { "value": "[parameters('memorySize')]" },
+          "allowInsecureHttp": { "value": "[parameters('allowInsecureHttp')]" },
+          "diagnosticsEnabled": { "value": "[parameters('diagnosticsEnabled')]" },
+          "domainUrl": { "value": "[parameters('domainUrl')]" },
+          "adminPanelEnabled": { "value": "[parameters('adminPanelEnabled')]" },
+          "invitationOrgName": { "value": "[parameters('invitationOrgName')]" },
+          "signupsDomainsWhitelist": { "value": "[parameters('signupsDomainsWhitelist')]" },
+          "orgCreationUsers": { "value": "[parameters('orgCreationUsers')]" },
+          "mailRootDomain": { "value": "[parameters('mailRootDomain')]" },
+          "smtpUseAuth": { "value": "[parameters('smtpUseAuth')]" },
+          "smtpFrom": { "value": "[parameters('smtpFrom')]" },
+          "smtpFromName": { "value": "[parameters('smtpFromName')]" },
+          "heloName": { "value": "[parameters('heloName')]" },
+          "smtpHost": { "value": "[parameters('smtpHost')]" },
+          "smtpPort": { "value": "[parameters('smtpPort')]" },
+          "smtpSecurity": { "value": "[parameters('smtpSecurity')]" },
+          "smtpUsername": { "value": "[parameters('smtpUsername')]" },
+          "smtpPassword": { "value": "[parameters('smtpPassword')]" },
+          "ssoEnabled": { "value": "[parameters('ssoEnabled')]" },
+          "ssoOnly": { "value": "[parameters('ssoOnly')]" },
+          "ssoAuthority": { "value": "[parameters('ssoAuthority')]" },
+          "ssoClientId": { "value": "[parameters('ssoClientId')]" },
+          "ssoClientSecret": { "value": "[parameters('ssoClientSecret')]" },
+          "ssoScopes": { "value": "[parameters('ssoScopes')]" },
+          "pushEnabled": { "value": "[parameters('pushEnabled')]" },
+          "pushInstallationId": { "value": "[parameters('pushInstallationId')]" },
+          "pushInstallationKey": { "value": "[parameters('pushInstallationKey')]" },
+          "pushUseEuServers": { "value": "[parameters('pushUseEuServers')]" },
+          "acsDeployFoundation": { "value": "[parameters('acsDeployFoundation')]" },
+          "acsDataLocation": { "value": "[parameters('acsDataLocation')]" },
+          "acsDomainName": { "value": "[parameters('acsDomainName')]" },
+          "storageAccountSku": { "value": "[parameters('storageAccountSku')]" },
+          "postgresSkuName": { "value": "[parameters('postgresSkuName')]" },
+          "postgresStorageGB": { "value": "[parameters('postgresStorageGB')]" },
+          "postgresBackupRetentionDays": { "value": "[parameters('postgresBackupRetentionDays')]" },
+          "allowAzureServicesToPostgres": { "value": "[parameters('allowAzureServicesToPostgres')]" },
+          "dbAdminUser": { "value": "[parameters('dbAdminUser')]" },
+          "dbPassword": { "value": "[parameters('dbPassword')]" }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "nestedDeploymentName": {
+      "type": "string",
+      "value": "[resourceId('Microsoft.Resources/deployments', 'vaultwardenMainTemplate')]"
+    }
+  }
+}
