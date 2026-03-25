@@ -1,5 +1,14 @@
 # Changelog
 
+## Revision 2 – 2026-03-25
+
+### Dokumentation
+- Architektur-Diagramm um Azure-Service-Icons, End-User-Element und Internet-/Zugangspfad erweitert
+- Zugriffspfad End User → Internet → Container App Ingress mit HTTPS (443) im Diagramm ergänzt
+- Legende um „External access path" erweitert
+- draw.io-Quelldatei (`docs/diagrams/vaultwarden-aca-architecture.drawio`) auf die neue Diagrammversion aktualisiert
+- `docs/architecture.md` um den externen Zugriffspfad im Abschnitt Datenflüsse ergänzt
+
 ## Revision 1 – 2026-03-25
 
 ### Dokumentation

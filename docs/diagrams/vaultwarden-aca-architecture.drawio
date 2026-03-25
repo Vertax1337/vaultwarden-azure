@@ -12,29 +12,49 @@
 -->
 <mxfile host="app.diagrams.net" agent="manual" version="24.7">
   <diagram id="vw-aca-arch" name="Baseline Architecture">
-    <mxGraphModel dx="1400" dy="820" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
 
+        <!-- ===== External: End User ===== -->
+        <mxCell id="user" value="End User" style="shape=mxgraph.azure.user;fillColor=#505050;fontColor=#1a1a1a;fontSize=12;fontStyle=1;verticalAlign=bottom;verticalLabelPosition=bottom;align=center;" vertex="1" parent="1">
+          <mxGeometry x="82" y="48" width="36" height="36" as="geometry"/>
+        </mxCell>
+
+        <!-- ===== External: Internet ===== -->
+        <mxCell id="internet" value="Internet" style="shape=mxgraph.azure.cloud;fillColor=#505050;fontColor=#1a1a1a;fontSize=12;fontStyle=1;verticalAlign=bottom;verticalLabelPosition=bottom;align=center;" vertex="1" parent="1">
+          <mxGeometry x="242" y="48" width="36" height="36" as="geometry"/>
+        </mxCell>
+
+        <!-- End User → Internet -->
+        <mxCell id="e_user_internet" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#505050;" edge="1" source="user" target="internet" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <!-- Internet → Container App (HTTPS 443) -->
+        <mxCell id="e_internet_ca" value="HTTPS (443)" style="edgeStyle=orthogonalEdgeStyle;strokeColor=#0078D4;fontSize=11;fontColor=#0078D4;fontStyle=1;" edge="1" source="internet" target="ca" parent="1">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
         <!-- Resource Group boundary -->
         <mxCell id="rg" value="Resource Group" style="rounded=1;whiteSpace=wrap;dashed=1;dashPattern=8 4;strokeColor=#0078D4;fillColor=none;fontColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
-          <mxGeometry x="30" y="50" width="1000" height="520" as="geometry"/>
+          <mxGeometry x="30" y="160" width="1010" height="530" as="geometry"/>
         </mxCell>
 
         <!-- Container Apps Environment -->
         <mxCell id="cae" value="Container Apps Environment" style="rounded=1;whiteSpace=wrap;fillColor=#E8F4FD;strokeColor=#0078D4;fontColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
-          <mxGeometry x="60" y="90" width="400" height="160" as="geometry"/>
+          <mxGeometry x="60" y="200" width="400" height="160" as="geometry"/>
         </mxCell>
 
         <!-- Container App (Vaultwarden) -->
         <mxCell id="ca" value="Azure Container App&#xa;Vaultwarden (Docker image)&#xa;Ingress · HTTPS · /data mount&#xa;ENV from Key Vault secret refs" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;strokeWidth=1.2;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="80" y="125" width="360" height="105" as="geometry"/>
+          <mxGeometry x="80" y="235" width="360" height="105" as="geometry"/>
         </mxCell>
 
         <!-- Log Analytics -->
         <mxCell id="la" value="Log Analytics&#xa;Workspace" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="520" y="90" width="200" height="60" as="geometry"/>
+          <mxGeometry x="520" y="200" width="200" height="60" as="geometry"/>
         </mxCell>
 
         <!-- CAE → Log Analytics -->
@@ -44,7 +64,7 @@
 
         <!-- Azure Files -->
         <mxCell id="af" value="Azure Files&#xa;Storage Account&#xa;File Share → /data" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="60" y="290" width="200" height="80" as="geometry"/>
+          <mxGeometry x="60" y="400" width="200" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Container App → Azure Files -->
@@ -54,7 +74,7 @@
 
         <!-- PostgreSQL -->
         <mxCell id="pg" value="PostgreSQL Flexible Server&#xa;Azure Database for PostgreSQL&#xa;DATABASE_URL via Key Vault" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="310" y="290" width="220" height="80" as="geometry"/>
+          <mxGeometry x="310" y="400" width="220" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Container App → PostgreSQL -->
@@ -64,7 +84,7 @@
 
         <!-- Key Vault -->
         <mxCell id="kv" value="Azure Key Vault&#xa;RBAC · Secrets&#xa;DB URL, SMTP, SSO, Push" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="580" y="290" width="200" height="80" as="geometry"/>
+          <mxGeometry x="580" y="400" width="200" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Container App → Key Vault -->
@@ -74,7 +94,7 @@
 
         <!-- Managed Identities -->
         <mxCell id="mi" value="Managed Identities&#xa;App Identity (Secrets User)&#xa;KV Writer Identity (Secrets Officer)" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="830" y="90" width="180" height="80" as="geometry"/>
+          <mxGeometry x="830" y="200" width="180" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Managed Identities → Key Vault -->
@@ -84,7 +104,7 @@
 
         <!-- Deployment Script -->
         <mxCell id="ds" value="Deployment Script&#xa;Bootstrap: DB user,&#xa;secrets → Key Vault" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="580" y="405" width="200" height="80" as="geometry"/>
+          <mxGeometry x="580" y="515" width="200" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Deployment Script → Key Vault -->
@@ -99,7 +119,7 @@
 
         <!-- Recovery Services Vault -->
         <mxCell id="rsv" value="Recovery Services Vault&#xa;Azure Files Backup&#xa;Daily + Weekly retention" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="60" y="405" width="200" height="80" as="geometry"/>
+          <mxGeometry x="60" y="515" width="200" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Recovery Services → Azure Files -->
@@ -109,7 +129,7 @@
 
         <!-- Diagnostic Settings -->
         <mxCell id="diag" value="Diagnostic Settings&#xa;Key Vault → Log Analytics&#xa;PostgreSQL → Log Analytics" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#0078D4;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="310" y="405" width="220" height="80" as="geometry"/>
+          <mxGeometry x="310" y="515" width="220" height="80" as="geometry"/>
         </mxCell>
 
         <!-- Diagnostic Settings → Log Analytics -->
@@ -119,19 +139,19 @@
 
         <!-- ===== Optional: ACS Foundation ===== -->
         <mxCell id="acs_box" value="Optional – ACS Foundation (acsDeployFoundation = true)" style="rounded=1;whiteSpace=wrap;dashed=1;dashPattern=6 3;strokeColor=#E6A800;fillColor=#FFF8E1;fontColor=#E6A800;fontSize=12;fontStyle=1;verticalAlign=top;align=left;spacingLeft=8;spacingTop=4;" vertex="1" parent="1">
-          <mxGeometry x="60" y="585" width="700" height="110" as="geometry"/>
+          <mxGeometry x="60" y="700" width="700" height="110" as="geometry"/>
         </mxCell>
 
         <mxCell id="acs_email" value="Email Service&#xa;ACS Email Service" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#E6A800;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="80" y="620" width="190" height="55" as="geometry"/>
+          <mxGeometry x="80" y="735" width="190" height="55" as="geometry"/>
         </mxCell>
 
         <mxCell id="acs_domain" value="Email Domain Resource&#xa;Custom domain (DNS verification)" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#E6A800;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="290" y="620" width="210" height="55" as="geometry"/>
+          <mxGeometry x="290" y="735" width="210" height="55" as="geometry"/>
         </mxCell>
 
         <mxCell id="acs_comm" value="Communication Service&#xa;ACS Communication Service" style="rounded=1;whiteSpace=wrap;fillColor=#FFFFFF;strokeColor=#E6A800;fontSize=12;fontStyle=1;verticalAlign=middle;align=center;" vertex="1" parent="1">
-          <mxGeometry x="520" y="620" width="220" height="55" as="geometry"/>
+          <mxGeometry x="520" y="735" width="220" height="55" as="geometry"/>
         </mxCell>
 
       </root>

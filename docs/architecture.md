@@ -38,14 +38,15 @@ Die ACS Foundation wird nur deployt, wenn `acsDeployFoundation = true` gesetzt i
 
 ## Datenflüsse und Beziehungen
 
-1. **Container App → Key Vault** – Die App liest Secrets über versionlose Key-Vault-Secret-URIs (secret refs im Container-App-Manifest).
-2. **Container App → Azure Files** – `/data` wird als Volume-Mount über die Container Apps Environment Storage bereitgestellt.
-3. **Container App → PostgreSQL** – Verbindung über `DATABASE_URL` (Secret aus Key Vault).
-4. **Deployment Script → Key Vault** – Schreibt und aktualisiert Bootstrap-Secrets.
-5. **Deployment Script → PostgreSQL** – Legt den App-User und die Datenbank an.
-6. **Managed Identities → Key Vault** – RBAC-Zuweisungen: App-Identity als Secrets User, KV-Writer-Identity als Secrets Officer.
-7. **Recovery Services Vault → Azure Files** – Backup-Policy mit konfigurierbarer Daily-/Weekly-Retention.
-8. **Diagnostic Settings → Log Analytics** – Key-Vault- und PostgreSQL-Diagnose-Logs werden an den Log-Analytics-Workspace gesendet.
+1. **End User → Internet → Container App** – Zugriff über HTTPS (Port 443) auf den Container App Ingress.
+2. **Container App → Key Vault** – Die App liest Secrets über versionlose Key-Vault-Secret-URIs (secret refs im Container-App-Manifest).
+3. **Container App → Azure Files** – `/data` wird als Volume-Mount über die Container Apps Environment Storage bereitgestellt.
+4. **Container App → PostgreSQL** – Verbindung über `DATABASE_URL` (Secret aus Key Vault).
+5. **Deployment Script → Key Vault** – Schreibt und aktualisiert Bootstrap-Secrets.
+6. **Deployment Script → PostgreSQL** – Legt den App-User und die Datenbank an.
+7. **Managed Identities → Key Vault** – RBAC-Zuweisungen: App-Identity als Secrets User, KV-Writer-Identity als Secrets Officer.
+8. **Recovery Services Vault → Azure Files** – Backup-Policy mit konfigurierbarer Daily-/Weekly-Retention.
+9. **Diagnostic Settings → Log Analytics** – Key-Vault- und PostgreSQL-Diagnose-Logs werden an den Log-Analytics-Workspace gesendet.
 
 ---
 
