@@ -4,7 +4,7 @@ Dieses Dokument ist das operative Betriebshandbuch (Runbook) für Deployment, Go
 
 **Zielgruppe:** Administratoren, IT-Dienstleister und KMU-Verantwortliche, die eine Vaultwarden-Instanz auf Azure betreiben oder betreuen.
 
-**Bezug:** Dieses Playbook ergänzt die [Readme.md](../../Readme.md) und den [Changelog](../changes.md). Parameter- und Architekturdetails befinden sich in der Readme; hier liegt der Fokus auf dem operativen Ablauf.
+**Bezug:** Dieses Playbook ergänzt die [Readme.md](../../Readme.md) und den [Changelog](../changes.md). Detaillierte Architektur- und Tradeoff-Dokumentation befindet sich in [docs/architecture.md](../architecture.md), die vollständige Parameterliste mit ENV-Mapping in [docs/reference/parameters.md](../reference/parameters.md). Hier liegt der Fokus auf dem operativen Ablauf.
 
 ---
 
@@ -858,7 +858,7 @@ Für jede produktive Instanz festhalten:
 | Mehr als ~500 Nutzer | Burstable B1ms und einzelnes Replikat sind für KMU dimensioniert | Größerer PostgreSQL-Tier und ACA Workload Profiles |
 | Strenge Compliance (SOC 2, ISO 27001) mit Netzwerkisolation | Öffentlicher PostgreSQL-Zugriff genügt nicht | Enterprise-Architektur mit Private Endpoints |
 
-> **Kurzregel:** Wenn „Application Gateway", „Private Endpoints" oder „Multi-Region" benötigt werden, ist dieses Template der falsche Startpunkt. Es ist bewusst für einfache, kostengünstige KMU-Deployments gebaut. Siehe [Härtungsstufen](../../Readme.md#härtungsstufen-optional) in der Readme für Erweiterungsoptionen.
+> **Kurzregel:** Wenn „Application Gateway", „Private Endpoints" oder „Multi-Region" benötigt werden, ist dieses Template der falsche Startpunkt. Es ist bewusst für einfache, kostengünstige KMU-Deployments gebaut. Siehe [Härtungsstufen](../../Readme.md#härtungsstufen) in der Readme für Erweiterungsoptionen.
 
 ---
 

@@ -17,12 +17,12 @@ Das aktuelle `main.json`-Template enthält folgende produktionsgehärtete Defaul
 
 ## Produktionsempfehlungen
 - `allowInsecureHttp`: `false`
-- `allowAzureServicesToPostgres`: `true` (erforderlich für Consumption-Plan-ACA; siehe [Härtungsstufen](./Readme.md#härtungsstufen-optional) für Alternativen)
+- `allowAzureServicesToPostgres`: `true` (erforderlich für Consumption-Plan-ACA; siehe [Härtungsstufen](./Readme.md#härtungsstufen) für Alternativen)
 - `vaultwardenImage`: gepinnt lassen; bewusst im Wartungsfenster aktualisieren
 - `adminPanelEnabled`: nach Bootstrap auf `false` setzen
 
 ## Hinweis zur Outbound-IP
-Mit einem Consumption Container App Environment sind Outbound-IPs dynamisch. Wenn du den PostgreSQL-Zugriff auf bestimmte IPs einschränken willst, brauchst du ein VNet-integriertes Environment mit NAT Gateway (Härtungsstufe 1). Siehe den Abschnitt [Härtungsstufen](./Readme.md#härtungsstufen-optional) in der Haupt-README.
+Mit einem Consumption Container App Environment sind Outbound-IPs dynamisch. Wenn du den PostgreSQL-Zugriff auf bestimmte IPs einschränken willst, brauchst du ein VNet-integriertes Environment mit NAT Gateway (Härtungsstufe 1). Siehe den Abschnitt [Härtungsstufen](./Readme.md#härtungsstufen) in der Haupt-README.
 
 ## Veraltete Dateien
 - `main.bicep` ist eine ältere Referenz und entspricht **nicht** `main.json`. Sie sollte nicht für Deployments verwendet werden.
