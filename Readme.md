@@ -69,6 +69,7 @@ Diese Schritte erfordern DNS-Propagation und externe Verifikation und können ni
 
 - [Vaultwarden – How to Use (BSSE)](./docs/HowToUse/HowToUse.pdf)
 - [Operations Playbook / Runbook](./docs/HowToInstall/Operation-Playbook.md)
+- [Changelog `main.json`](./docs/changes.md)
 
 Ein PowerShell-Hilfsskript steht unter `scripts/deploy.ps1` für lokale CLI-basierte Deployments mit interaktiven Parameter-Prompts bereit. Der primär unterstützte Deployment-Pfad bleibt das ARM-Template über Azure Portal oder `az deployment group create`.
 
@@ -536,25 +537,9 @@ Dieses Repository deployt eine **Baseline-Architektur**, die für KMU-Produktive
 
 ---
 
-## Changelog gegenüber der ursprünglichen Baseline
+## Changelog
 
-- Storage-Account-Name sicher auf 24 Zeichen begrenzt
-- PostgreSQL-Tier wird dynamisch aus dem SKU-Namenspräfix abgeleitet
-- Container-Health-Probes nutzen Vaultwardens `/alive`-Endpoint (Startup + Liveness + Readiness)
-- Deploy-Button-URL für aktuelles Repository aktualisiert
-- Repo-Struktur-Dokumentation korrigiert (PowerShell-Script berücksichtigt)
-- `main.bicep` als nicht gepflegt markiert
-- `enabledForTemplateDeployment` am Key Vault deaktiviert
-- Vaultwarden-ENV-Variablen sauber mit bedingter Einbindung modelliert
-- `SMTP_AUTH_MECHANISM` wird an Vaultwarden durchgereicht
-- Optionale ENV-Werte werden nicht mehr als Leerstrings gesetzt
-- Deployment-Script aktualisiert Secrets bei Änderungen
-- SMTP-Auth wird im Deployment-Script validiert
-- `mailRootDomain` als explizite Mail-Basisdomain (keine heuristische Ableitung aus `domainUrl`)
-- PostgreSQL-PITR-Retention parametrierbar
-- ACS von „alles auf einmal" auf **Foundation automatisiert, Finalisierung manuell** umgestellt
-- `deploymentScriptForceUpdateTag` für bewusste Bootstrap-Re-Runs
-- Deployment-Script nutzt `az postgres flexible-server execute` (kein `psql`-, `pip`- oder `pg8000`-Pfad)
+Das revisionierte Änderungsprotokoll aller Änderungen an `main.json` befindet sich in [docs/changes.md](./docs/changes.md).
 
 ---
 
