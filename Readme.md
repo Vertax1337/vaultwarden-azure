@@ -567,6 +567,117 @@ Diese Tradeoffs sind **bewusste Architekturentscheidungen** für den KMU-Fokus d
 
 ---
 
+## Observability / Troubleshooting
+
+### Log-Quellen
+
+| Quelle | Wo | Was |
+|---|---|---|
+| Vaultwarden-Containerlog | Azure Portal → Container App → **Log stream** oder Log Analytics: `ContainerAppConsoleLogs_CL` | App-Startfehler, SMTP-Fehler, SSO-Fehler, DB-Verbindungsfehler |
+| ACA-Systemlogs | Log Analytics: `ContainerAppSystemLogs_CL` | Probe-Failures, Revision-Restart, Image-Pull-Fehler |
+| Key Vault Audit | Log Analytics: `AzureDiagnostics` (Kategorie `AuditEvent`) | Secret-Zugriffe, Berechtigungsfehler (erfordert `diagnosticsEnabled=true`) |
+| PostgreSQL-Logs | Log Analytics: `AzureDiagnostics` (Kategorie `PostgreSQLLogs`) | Verbindungsfehler, langsame Queries, Auth-Fehler (erfordert `diagnosticsEnabled=true`) |
+| Deployment-Script | Azure Portal → Resource Group → Deployments → Script-Ressource → **Logs** | Bootstrap-Fehler, Input-Validierung, Secret-Provisionierung |
+
+### Erster Fehler-Check (Quick Triage)
+
+1. **Container startet nicht?**
+   - Log stream prüfen → häufigste Ursache: `DATABASE_URL` ungültig, Volume-Mount-Fehler oder Image-Pull-Fehler
+   - `ContainerAppSystemLogs_CL` auf `Liveness`-/`Readiness`-Probe-Failures prüfen
+2. **502 / Seite nicht erreichbar?**
+   - Custom Domain + TLS-Zertifikat korrekt gebunden?
+   - `domainUrl` stimmt mit der tatsächlichen URL überein?
+   - `allowInsecureHttp` ist `false`, aber kein TLS-Zertifikat konfiguriert?
+3. **Mail kommt nicht an?**
+   - Containerlog nach `SMTP`-Fehlern durchsuchen
+   - Bei Direct Send: MX-Auflösung im Deployment-Script-Log prüfen
+   - SPF/DKIM/DMARC-Records für die Absenderdomain validieren
+4. **SSO-Login schlägt fehl?**
+   - Containerlog nach `OIDC`-/`SSO`-Fehlern durchsuchen
+   - Redirect-URI in der App Registration korrekt? (`https://<domain>/identity/connect/oidc-signin`)
+   - `ssoAuthority`-URL erreichbar? (Entra-ID-Endpoint prüfen)
+5. **Deployment-Script schlägt fehl?**
+   - Script-Log im Portal prüfen → klare `ERROR:`-Meldungen für fehlende Parameter
+   - Key-Vault-Zugriff / PostgreSQL-Konnektivität: Timeout-Fehler deuten auf Netzwerk-/RBAC-Probleme hin
+
+### Nützliche Log-Analytics-Abfragen (KQL)
+
+```kusto
+// Vaultwarden-Containerlogs der letzten 30 Minuten
+ContainerAppConsoleLogs_CL
+| where TimeGenerated > ago(30m)
+| where ContainerAppName_s contains "vault"
+| project TimeGenerated, Log_s
+| order by TimeGenerated desc
+
+// Probe-Failures (Liveness/Readiness)
+ContainerAppSystemLogs_CL
+| where TimeGenerated > ago(1h)
+| where Reason_s in ("Unhealthy", "BackOff")
+| project TimeGenerated, Reason_s, Log_s
+
+// Key-Vault-Zugriffsfehler
+AzureDiagnostics
+| where ResourceProvider == "MICROSOFT.KEYVAULT"
+| where ResultSignature != "OK"
+| project TimeGenerated, OperationName, ResultSignature, CallerIPAddress
+```
+
+---
+
+## Vaultwarden-Update / Upgrade-Konzept
+
+### Image-Tag-Strategie
+
+Der Parameter `vaultwardenImage` (Default: `vaultwarden/server:1.35.3-alpine`) bestimmt das Container-Image. Empfohlene Strategie:
+
+| Ansatz | Beispiel | Empfehlung |
+|---|---|---|
+| Gepinnter Tag | `vaultwarden/server:1.35.3-alpine` | **Produktiv-Default** – reproduzierbar, kein unerwartetes Update |
+| Minor-Floating | `vaultwarden/server:1-alpine` | Nur für Test-/Dev-Umgebungen |
+| `latest` | `vaultwarden/server:latest` | **Nicht empfohlen** – unkontrolliertes Versionsupdate |
+
+### Update-Ablauf
+
+1. **Vorbereiten**
+   - Release-Notes auf https://github.com/dani-garcia/vaultwarden/releases prüfen (Breaking Changes, DB-Migrationen)
+   - Aktuellen `vaultwardenImage`-Wert aus dem letzten Deployment notieren
+2. **Backup erstellen**
+   - PostgreSQL-PITR-Zeitpunkt notieren
+   - Azure-Files-Backup prüfen / manuellen Snapshot erstellen
+3. **Image-Tag aktualisieren**
+   - In der Parameterdatei `vaultwardenImage` auf den neuen Tag setzen (z. B. `vaultwarden/server:1.36.0-alpine`)
+4. **Redeploy ausführen**
+   ```bash
+   az deployment group create \
+     -g <resource-group> \
+     -f main.json \
+     -p @params.json
+   ```
+5. **Validieren**
+   - Container-Log-Stream auf Startfehler prüfen
+   - Login testen, Tresoreintrag erstellen/lesen
+   - Mail-Versand testen (falls SMTP aktiv)
+
+### Downtime-Verhalten
+
+- Das Template nutzt `activeRevisionsMode: Single` mit `minReplicas: 1` / `maxReplicas: 1`
+- Bei einem Redeploy erstellt ACA eine **neue Revision** und deaktiviert die alte
+- Während des Übergangs gibt es eine **kurze Downtime** (typisch 10–30 Sekunden), bis die neue Revision die Startup-Probe besteht
+- Es gibt kein Blue/Green-Deployment im Single-Revision-Modus
+- Für geplante Updates: Wartungsfenster kommunizieren; für KMU-Größe ist die kurze Unterbrechung in der Regel akzeptabel
+
+### Rollback
+
+Falls das neue Image Probleme verursacht:
+1. `vaultwardenImage` auf den vorherigen Tag zurücksetzen
+2. Erneut deployen
+3. Falls DB-Migrationen nicht rückwärtskompatibel: PostgreSQL via PITR auf den Backup-Zeitpunkt wiederherstellen
+
+> **Hinweis:** Vaultwarden führt DB-Schema-Migrationen automatisch beim Start durch. Ein Downgrade auf eine ältere Version kann fehlschlagen, wenn die neue Version das Schema geändert hat. Im Zweifel immer den PITR-Pfad nutzen.
+
+---
+
 ## Changelog
 
 Das revisionierte Änderungsprotokoll aller Änderungen an `main.json` befindet sich in [docs/changes.md](./docs/changes.md).

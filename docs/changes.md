@@ -6,6 +6,17 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 9 – 2026-03-25
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| Readme.md – „Observability / Troubleshooting" | Neuer Abschnitt: Log-Quellen (Container, ACA-System, Key Vault, PostgreSQL, Deployment-Script), Quick-Triage-Anleitung für typische Fehlerfälle, KQL-Beispielabfragen. |
+| Readme.md – „Vaultwarden-Update / Upgrade-Konzept" | Neuer Abschnitt: Image-Tag-Strategie, schrittweiser Update-Ablauf, Downtime-Verhalten bei Single-Revision-Modus, Rollback-Anleitung inkl. PITR-Hinweis. |
+
+---
+
 ## Revision 8 – 2026-03-25
 
 ### Dokumentation
