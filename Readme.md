@@ -274,7 +274,7 @@ Die Parameter sind in zwei Richtungen zu lesen:
 - `location`
 - `environment`
 - `bsseRef`
-- `appName` (kurz halten; Storage-Account-Namen werden daraus abgeleitet und sind auf 24 Zeichen begrenzt)
+- `appName` (maximal 10 Zeichen; Storage-Account-Namen werden daraus abgeleitet und sind auf 24 Zeichen begrenzt)
 - `deploymentScriptForceUpdateTag` (nur bewusst ändern, wenn das Bootstrap-Script erneut laufen soll)
 - `diagnosticsEnabled`
 - `allowInsecureHttp`

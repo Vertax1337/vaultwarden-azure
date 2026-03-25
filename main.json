@@ -40,7 +40,8 @@
       "defaultValue": "vault",
       "metadata": {
         "description": "Name of the Vaultwarden Container App"
-      }
+      },
+      "maxLength": 10
     },
     "vaultwardenImage": {
       "type": "string",
@@ -122,20 +123,20 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Explizite Root-Domain f\u00fcr Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter f\u00fcr Direct Send ohne expliziten smtpHost, f\u00fcr ACS Foundation ohne explizites acsDomainName und f\u00fcr den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
+        "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter für Direct Send ohne expliziten smtpHost, für ACS Foundation ohne explizites acsDomainName und für den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
       }
     },
     "smtpUseAuth": {
       "type": "bool",
       "defaultValue": true,
       "metadata": {
-        "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig f\u00fcr Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json m\u00fcssen bei einem Moduswechsel ggf. separat bereinigt werden."
+        "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
       }
     },
     "smtpFrom": {
       "type": "string",
       "metadata": {
-        "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). F\u00fcr Produktion explizit setzen."
+        "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). Für Produktion explizit setzen."
       },
       "defaultValue": ""
     },
@@ -157,7 +158,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschlie\u00dflich auf mailRootDomain. F\u00fcr den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und l\u00e4sst SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."
+        "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschließlich auf mailRootDomain. Für den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und lässt SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."
       }
     },
     "smtpPort": {
@@ -197,7 +198,7 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Optional (nur SMTP Auth): SMTP Auth Mechanism. M\u00f6gliche Werte u.a.: Plain, Login, Xoauth2 (auch kommasepariert)."
+        "description": "Optional (nur SMTP Auth): SMTP Auth Mechanism. Mögliche Werte u.a.: Plain, Login, Xoauth2 (auch kommasepariert)."
       },
       "allowedValues": [
         "",
@@ -380,7 +381,7 @@
       "minValue": 7,
       "maxValue": 35,
       "metadata": {
-        "description": "Point-in-time restore retention in Tagen f\u00fcr PostgreSQL Flexible Server."
+        "description": "Point-in-time restore retention in Tagen für PostgreSQL Flexible Server."
       }
     },
     "allowAzureServicesToPostgres": {
