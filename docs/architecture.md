@@ -1,14 +1,5 @@
 # Architektur – Vaultwarden auf Azure Container Apps
 
-
-## Architektur-Diagramm
-
-![Vaultwarden on Azure Container Apps – Baseline Architecture](./diagrams/vaultwarden-aca-architecture.svg)
-
-> **Quell-Datei zum Bearbeiten:** [`docs/diagrams/vaultwarden-aca-architecture.drawio`](./diagrams/vaultwarden-aca-architecture.drawio) – öffnen mit [app.diagrams.net](https://app.diagrams.net) oder der VS-Code-Extension *Draw.io Integration*.
-> Nach dem Bearbeiten als SVG exportieren und unter `docs/diagrams/vaultwarden-aca-architecture.svg` speichern.
-
----
 Dieses Dokument beschreibt die Architektur, bewusste Tradeoffs und optionale Härtungsstufen des Vaultwarden-ACA-Templates im Detail. Es ergänzt die kompakte Übersicht in der [Readme.md](../Readme.md).
 
 ---
@@ -193,14 +184,11 @@ Für **planbare Sofortwirkung** ist trotzdem sinnvoll:
 
 5. **Bootstrap-Script** – Das Script hängt explizit von der optionalen PostgreSQL-Firewall-Regel `AllowAzure` ab, wenn `allowAzureServicesToPostgres=true`. Interne Warte-/Retry-Fenster sind auf 10 Minuten gesetzt, damit RBAC- und Firewall-Propagation nicht in Timing-Fehler laufen.
 
-
 ---
 
 ## Weiterführende Dokumentation
 
 - [Readme.md](../Readme.md) – Einstiegsseite mit Deploy-Button und kompakter Übersicht
 - [Operations Playbook](./HowToInstall/Operation-Playbook.md) – Betriebshandbuch für Go-Live, Betrieb und Recovery
-- [Vaultwarden – How to Use](./HowToUse/HowToUse.pdf) – Endbenutzer-Anleitung
 - [Parameter-Referenz](./reference/parameters.md) – Vollständige Parameterliste mit ENV-Mapping
 - [Gehärtete Defaults](../README.HARDENED.md) – Produktionsgehärtete Standardwerte im Template
-
