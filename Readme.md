@@ -1,49 +1,49 @@
-# Vaultwarden on Azure Container Apps (ACA)
+# Vaultwarden auf Azure Container Apps (ACA)
 
-Production-oriented ARM template for **Vaultwarden on Azure Container Apps**, designed for SMEs/KMUs.
+Produktionsorientiertes ARM-Template für **Vaultwarden auf Azure Container Apps**, ausgelegt für KMUs.
 
-## Architecture
+## Architektur
 
-This template deploys a complete Vaultwarden environment as a single ARM deployment:
+Dieses Template deployt eine vollständige Vaultwarden-Umgebung als einzelnes ARM-Deployment:
 
-| Component | Purpose |
+| Komponente | Zweck |
 |---|---|
-| **Azure Container Apps** (consumption plan) | Vaultwarden runtime (single replica, pinned image) |
-| **Azure Files** | Persistent `/data` volume (attachments, icons, config) |
-| **PostgreSQL Flexible Server** (Burstable B1ms) | Relational data |
-| **Azure Key Vault** (RBAC) | Secrets (`ADMIN_TOKEN`, `DATABASE_URL`, SMTP/SSO/Push credentials) |
-| **User Assigned Managed Identities** | App reads secrets; bootstrap script writes secrets |
-| **Deployment Script** (AzureCLI) | Bootstrap: DB app-user provisioning, secret seeding, MX lookup |
-| **Recovery Services Vault** | Azure Files backup (enabled by default) |
-| **Log Analytics + Diagnostic Settings** | Observability for Key Vault and PostgreSQL |
+| **Azure Container Apps** (Consumption Plan) | Vaultwarden-Laufzeit (einzelnes Replikat, gepinntes Image) |
+| **Azure Files** | Persistentes `/data`-Volume (Attachments, Icons, Config) |
+| **PostgreSQL Flexible Server** (Burstable B1ms) | Relationale Daten |
+| **Azure Key Vault** (RBAC) | Secrets (`ADMIN_TOKEN`, `DATABASE_URL`, SMTP-/SSO-/Push-Credentials) |
+| **User Assigned Managed Identities** | App liest Secrets; Bootstrap-Script schreibt Secrets |
+| **Deployment Script** (AzureCLI) | Bootstrap: DB-App-User-Provisionierung, Secret-Seeding, MX-Lookup |
+| **Recovery Services Vault** | Azure-Files-Backup (standardmäßig aktiv) |
+| **Log Analytics + Diagnostic Settings** | Observability für Key Vault und PostgreSQL |
 | **ACS Foundation** (optional) | Email Service, Email Domain, Communication Service |
 
-### Design Philosophy
+### Designphilosophie
 
-This repository targets **SMEs/KMUs** that need a secure, production-ready password manager without enterprise-scale cost or complexity. The architecture intentionally:
+Dieses Repository richtet sich an **KMUs**, die einen sicheren, produktionsreifen Passwortmanager brauchen – ohne Enterprise-Kosten oder -Komplexität. Die Architektur nutzt bewusst:
 
-- Uses **ACA direct ingress** (no Application Gateway or Front Door by default)
-- Uses **public PostgreSQL with firewall rules** (no VNet/Private Endpoint by default)
-- Runs on **consumption-tier ACA** (no Workload Profiles by default)
-- Keeps the entire deployment in **a single ARM template** for simplicity
+- **ACA Direct Ingress** (kein Application Gateway oder Front Door als Default)
+- **Öffentlichen PostgreSQL-Zugriff mit Firewall-Regeln** (kein VNet/Private Endpoint als Default)
+- **Consumption-Tier ACA** (keine Workload Profiles als Default)
+- **Alles in einem einzigen ARM-Template** für maximale Einfachheit
 
-These are deliberate tradeoffs documented in the [Hardening Tiers](#hardening-tiers-optional) section below.
+Diese bewussten Tradeoffs sind im Abschnitt [Härtungsstufen](#härtungsstufen-optional) dokumentiert.
 
-### ACA Networking Tradeoffs
+### ACA-Netzwerk-Tradeoffs
 
-Azure Container Apps on the consumption plan does **not** provide a fixed outbound IP. This has specific consequences:
+Azure Container Apps im Consumption Plan bietet **keine feste Outbound-IP**. Das hat folgende Konsequenzen:
 
-| Constraint | Impact | Mitigation |
+| Einschränkung | Auswirkung | Mitigation |
 |---|---|---|
-| Dynamic outbound IPs | Cannot create a specific PostgreSQL firewall rule for ACA | `allowAzureServicesToPostgres=true` (0.0.0.0 rule) allows any Azure service to connect |
-| No static egress | Third-party SMTP servers expecting IP allowlisting may reject connections | Use Microsoft 365 SMTP or ACS SMTP which do not require sender IP allowlisting |
-| No built-in WAF | No request filtering at the edge | ACA HTTPS ingress provides TLS termination; Vaultwarden itself has rate limiting; for WAF, see hardening tiers |
+| Dynamische Outbound-IPs | Keine spezifische PostgreSQL-Firewall-Regel für ACA möglich | `allowAzureServicesToPostgres=true` (0.0.0.0-Regel) erlaubt allen Azure-Diensten den Zugriff |
+| Kein statischer Egress | SMTP-Server von Drittanbietern, die IP-Allowlisting erwarten, können Verbindungen ablehnen | Microsoft 365 SMTP oder ACS SMTP verwenden – dort ist kein Sender-IP-Allowlisting nötig |
+| Keine eingebaute WAF | Kein Request-Filtering am Edge | ACA HTTPS-Ingress liefert TLS-Terminierung; Vaultwarden hat eigenes Rate Limiting; für WAF siehe Härtungsstufen |
 
-The `allowAzureServicesToPostgres=true` default is required for consumption-plan ACA. It opens PostgreSQL to any Azure service (not the public internet), which is an acceptable tradeoff for SME use. To restrict this further, see the [Hardening Tiers](#hardening-tiers-optional) section.
+Der Default `allowAzureServicesToPostgres=true` ist für Consumption-Plan-ACA erforderlich. Er öffnet PostgreSQL für alle Azure-Dienste (nicht das öffentliche Internet) – ein akzeptabler Tradeoff für KMU-Einsatz. Für weitergehende Einschränkung siehe [Härtungsstufen](#härtungsstufen-optional).
 
 ## Deploy
 
-There is intentionally **only one** deploy path. Everything that can be cleanly automated is in `main.json`.
+Es gibt bewusst **nur einen** Deploy-Pfad. Alles, was sauber automatisierbar ist, steckt in `main.json`.
 
 [![Deploy to Azure (ARM JSON)](
 https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true
@@ -51,234 +51,234 @@ https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONT
 https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmain%2Fmain.json
 )
 
-> **Note:** If you fork this repo or change the owner/branch, you must update the raw URL in the button above.
+> **Hinweis:** Wenn du dieses Repo forkst oder Owner/Branch änderst, muss die Raw-URL im Button oben angepasst werden.
 
-For local deployment without GitHub hosting, use the Azure Portal path **Deploy a custom template** → **Build your own template in the editor** and paste `main.json`.
+Für ein lokales Deployment ohne GitHub-Hosting: Azure Portal → **Benutzerdefinierte Vorlage bereitstellen** → **Eigene Vorlage im Editor erstellen** und `main.json` einfügen.
 
-**Intentionally manual post-deploy steps:**
-- ACA Custom Domain + TLS certificate binding
-- ACS DNS verification of the email domain
-- ACS Domain linking to the Communication Service
-- ACS SMTP username + final SMTP activation
+**Bewusst manuell nachgelagerte Schritte:**
+- ACA Custom Domain + TLS-Zertifikatsbindung
+- ACS DNS-Verifikation der E-Mail-Domain
+- ACS Domain-Linking auf den Communication Service
+- ACS SMTP-Username + finale SMTP-Aktivierung
 
-These steps involve DNS propagation and external verification that cannot be reliably automated in a single deployment. They are documented in the [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md).
+Diese Schritte erfordern DNS-Propagation und externe Verifikation und können nicht zuverlässig in einem einzelnen Deployment automatisiert werden. Sie sind im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) dokumentiert.
 
 ---
 
-## Documentation
+## Dokumentation
 
-- [How to Use Vaultwarden (BSSE)](./docs/HowToUse/HowToUse.pdf)
+- [Vaultwarden – How to Use (BSSE)](./docs/HowToUse/HowToUse.pdf)
 - [Operations Playbook / Runbook](./docs/HowToInstall/Operation-Playbook.md)
 
-A PowerShell helper script is available at `scripts/deploy.ps1` for local CLI-based deployments with interactive parameter prompts. The primary supported deployment path remains the ARM template via Azure Portal or `az deployment group create`.
+Ein PowerShell-Hilfsskript steht unter `scripts/deploy.ps1` für lokale CLI-basierte Deployments mit interaktiven Parameter-Prompts bereit. Der primär unterstützte Deployment-Pfad bleibt das ARM-Template über Azure Portal oder `az deployment group create`.
 
 ---
 
-## Example Parameter Files
+## Beispiel-Parameterdateien
 
-Under `./examples/parameters/` are deployment-ready templates for common scenarios:
+Unter `./examples/parameters/` liegen einsatznahe Vorlagen für typische Szenarien:
 
 - **`main.parameters.m365-smtp-auth.example.json`**
-  M365 SMTP Auth standard path (`smtp.office365.com`, Port 587, `starttls`).
+  M365-SMTP-Auth-Standardpfad (`smtp.office365.com`, Port 587, `starttls`).
 
 - **`main.parameters.m365-smtp-auth-sso.example.json`**
-  M365 SMTP Auth + Entra ID / OIDC parameters for SSO.
+  M365 SMTP Auth + Entra-ID-/OIDC-Parameter für SSO.
 
 - **`main.parameters.m365-direct-send.example.json`**
-  Direct Send without SMTP Auth. Only for specific internal scenarios.
+  Direct Send ohne SMTP-Auth. Nur für bewusst begrenzte interne Szenarien.
 
 - **`main.parameters.m365-smtp-auth-sso-push.example.json`**
-  M365 SMTP Auth + Entra ID SSO + Bitwarden Push parameters.
+  M365 SMTP Auth + Entra-ID-SSO + Bitwarden-Push-Parameter.
 
 - **`main.parameters.acs-foundation-m365-dns-hosted.example.json`**
-  ACS Foundation deploy for a custom domain with M365-hosted DNS.
+  ACS-Foundation-Deploy für eine kundeneigene Domain mit M365-gehostetem DNS.
 
-All files contain **placeholder values** and must be customized before production use.
-
----
-
-## Repository Structure
-
-- **`main.json`** → Primary ARM deployment template (all resources)
-- **`main.bicep`** → ⚠️ Older Bicep reference – **not maintained**, does not match `main.json`; do not use for deployment
-- **`scripts/deploy.ps1`** → Optional PowerShell wrapper for CLI-based deployment
-- **`docs/HowToInstall/Operation-Playbook.md`** → Go-Live, operations, ACS, backup/recovery, smoke tests
-- **`examples/parameters/`** → Scenario-specific parameter file templates
+Alle Dateien enthalten **nur Platzhalterwerte** und müssen vor dem produktiven Einsatz angepasst werden.
 
 ---
 
-## What `main.json` Deploys
+## Repo-Struktur
 
-### Always Included
+- **`main.json`** → Primäres ARM-Deployment-Template (alle Ressourcen)
+- **`main.bicep`** → ⚠️ Ältere Bicep-Referenz – **nicht gepflegt**, entspricht nicht `main.json`; nicht für Deployments verwenden
+- **`scripts/deploy.ps1`** → Optionaler PowerShell-Wrapper für CLI-basiertes Deployment
+- **`docs/HowToInstall/Operation-Playbook.md`** → Go-Live, Betrieb, ACS, Backup/Recovery, Smoke-Tests
+- **`examples/parameters/`** → Szenariospezifische Parameterdatei-Vorlagen
+
+---
+
+## Was `main.json` deployt
+
+### Immer enthalten
 - Azure Container Apps Environment + Log Analytics
-- Azure Container App for Vaultwarden (with startup, liveness, and readiness probes)
+- Azure Container App für Vaultwarden (mit Startup-, Liveness- und Readiness-Probes)
 - Azure Storage Account + Azure Files Share (`/data`)
-- Azure Database for PostgreSQL Flexible Server + database
-- User Assigned Managed Identities (app reader + script writer)
+- Azure Database for PostgreSQL Flexible Server + Datenbank
+- User Assigned Managed Identities (App-Reader + Script-Writer)
 - Azure Key Vault (RBAC)
-- Deployment Script for:
-  - `ADMIN_TOKEN` generation
-  - DB app-user + `DATABASE_URL` provisioning
-  - SMTP secret (when SMTP Auth enabled)
-  - SSO secret (optional)
-  - Push secrets (optional; Installation ID + Key)
-  - MX lookup for Direct Send (when `smtpUseAuth=false`)
-  - Controllable re-run via `deploymentScriptForceUpdateTag`
-- Azure Files Backup (enabled by default via Recovery Services Vault)
-- Diagnostic Settings for Key Vault and PostgreSQL (enabled by default)
+- Deployment Script für:
+  - `ADMIN_TOKEN`-Generierung
+  - DB-App-User + `DATABASE_URL`-Provisionierung
+  - SMTP-Secret (bei aktiviertem SMTP-Auth)
+  - SSO-Secret (optional)
+  - Push-Secrets (optional; Installation ID + Key)
+  - MX-Lookup für Direct Send (bei `smtpUseAuth=false`)
+  - Kontrollierbarer Re-Run über `deploymentScriptForceUpdateTag`
+- Azure-Files-Backup (standardmäßig aktiv über Recovery Services Vault)
+- Diagnostic Settings für Key Vault und PostgreSQL (standardmäßig aktiv)
 
-The bootstrap script explicitly depends on the optional PostgreSQL firewall rule `AllowAzure` when `allowAzureServicesToPostgres=true`. Internal wait/retry windows are set to 10 minutes to allow RBAC and firewall propagation.
+Das Bootstrap-Script hängt explizit von der optionalen PostgreSQL-Firewall-Regel `AllowAzure` ab, wenn `allowAzureServicesToPostgres=true`. Interne Warte-/Retry-Fenster sind auf 10 Minuten gesetzt, damit RBAC- und Firewall-Propagation nicht in Timing-Fehler laufen.
 
 ### Optional: ACS Foundation
-When `acsDeployFoundation = true`, `main.json` additionally deploys:
+Wenn `acsDeployFoundation = true`, deployt `main.json` zusätzlich:
 - **Azure Communication Services Email Service**
 - **ACS Email Domain Resource**
 - **ACS Communication Service**
 
-This provides the foundation infrastructure. **Not** automated are DNS verification, domain linking, and SMTP username creation.
+Damit ist die Grundinfrastruktur vorhanden. **Nicht** automatisiert sind DNS-Verifikation, Domain-Linking und SMTP-Username-Erstellung.
 
-### Intentionally **Not** Automated
-- ACA Custom Domain / certificate binding
-- ACS Domain verification
+### Bewusst **nicht** automatisiert
+- ACA Custom Domain / Zertifikatsbindung
+- ACS Domain-Verifikation
 - ACS `linkedDomains`
 - ACS `smtpUsernames`
-- ACS RBAC for the SMTP Entra app
+- ACS-RBAC für die SMTP-Entra-App
 
-These steps remain **manual post-deploy** tasks. This keeps the core deploy at one button click, while domain/mail activation follows the documented procedures in the Operations Playbook.
+Diese Schritte bleiben **manuelle Post-Deploy-Aufgaben**. So bleibt der Core-Deploy bei einem Button-Klick, während Domain-/Mail-Aktivierung den dokumentierten Abläufen im Operations Playbook folgt.
 
 ---
 
-## SMTP Modes
+## SMTP-Modi
 
-### A) SMTP Auth (**Production Default**)
-Recommended standard path.
+### A) SMTP Auth (**Produktiv-Default**)
+Empfohlener Standardpfad.
 
-- `smtpUseAuth = true` (default)
-- Empty `smtpHost` → `smtp.office365.com`
+- `smtpUseAuth = true` (Default)
+- Leerer `smtpHost` → `smtp.office365.com`
 - `smtpPort = 587`
 - `smtpSecurity = starttls`
-- `smtpUsername` + `smtpPassword` required
-- Optional `smtpAuthMechanism` (e.g. `Login`, `Plain`, `Xoauth2`)
+- `smtpUsername` + `smtpPassword` erforderlich
+- Optional `smtpAuthMechanism` (z. B. `Login`, `Plain`, `Xoauth2`)
 
-#### Suitable for
+#### Geeignet für
 - Microsoft 365 SMTP Submission
-- Custom SMTP relay / mail gateway
-- ACS SMTP **after** ACS finalization
+- Eigenen SMTP-Relay / Mailgateway
+- ACS SMTP **nach** ACS-Finalisierung
 
 ---
 
 ### B) Direct Send
-Only for clearly bounded internal scenarios.
+Nur für klar begrenzte interne Szenarien.
 
 - `smtpUseAuth = false`
-- Empty `smtpHost` → MX lookup via `mailRootDomain`
-- Template sets `SMTP_PORT=25` and `SMTP_SECURITY=starttls` for this mode
-- **`SMTP_USERNAME` must not be set**
-- **`SMTP_PASSWORD` must not be set**
-- **`SMTP_AUTH_MECHANISM` must not be set**
+- Leerer `smtpHost` → MX-Lookup über `mailRootDomain`
+- Template setzt `SMTP_PORT=25` und `SMTP_SECURITY=starttls` für diesen Modus
+- **`SMTP_USERNAME` darf nicht gesetzt sein**
+- **`SMTP_PASSWORD` darf nicht gesetzt sein**
+- **`SMTP_AUTH_MECHANISM` darf nicht gesetzt sein**
 
-#### Vaultwarden-Specific Behavior
-Vaultwarden treats SMTP auth based on whether settings are actually present, not just their values. Per the official `.env.template`: when `SMTP_USERNAME` is set, `SMTP_PASSWORD` is mandatory. For Direct Send, the template correctly omits all auth env vars when `smtpUseAuth=false`.
+#### Vaultwarden-spezifisches Verhalten
+Vaultwarden behandelt SMTP-Auth anhand der tatsächlich vorhandenen Settings, nicht nur deren Werte. Laut offizieller `.env.template`: Wenn `SMTP_USERNAME` gesetzt ist, ist `SMTP_PASSWORD` verpflichtend. Für Direct Send lässt das Template korrekt alle Auth-ENV-Variablen weg, wenn `smtpUseAuth=false`.
 
-#### Admin UI / `config.json` Override Warning
-Vaultwarden persists Admin UI changes to `/data/config.json`. These can override ENV values for `SMTP_HOST`, `SMTP_SECURITY`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD`, etc. **When switching from SMTP Auth to Direct Send**, you must also clear any persisted SMTP auth values from the Vaultwarden admin panel.
+#### Admin-UI / `config.json`-Override-Warnung
+Vaultwarden speichert Admin-UI-Änderungen persistent in `/data/config.json`. Diese können ENV-Werte für `SMTP_HOST`, `SMTP_SECURITY`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USERNAME`, `SMTP_PASSWORD` etc. überlagern. **Beim Wechsel von SMTP Auth auf Direct Send** müssen auch die persistierten SMTP-Auth-Werte im Vaultwarden-Adminbereich bereinigt werden.
 
-#### Suitable for
-- Internal mail delivery in controlled Microsoft 365 scenarios
+#### Geeignet für
+- Internen Mailversand in kontrollierten Microsoft-365-Szenarien
 
-#### Operational Note
-When `smtpHost` is empty, `mailRootDomain` must be set for the bootstrap script to resolve the MX record. The script does not install additional OS packages. If the runtime has neither `dig` nor `nslookup`, set `smtpHost` explicitly for Direct Send.
+#### Betriebsnotiz
+Wenn `smtpHost` leer ist, muss `mailRootDomain` gesetzt sein, damit das Bootstrap-Script den MX-Record auflösen kann. Das Script installiert keine zusätzlichen OS-Pakete. Falls die Runtime weder `dig` noch `nslookup` hat, setze `smtpHost` für Direct Send explizit.
 
-#### Not Recommended as Default
-For production use where email is critical, SMTP Auth or ACS SMTP is more robust and predictable.
+#### Nicht als Default empfohlen
+Für produktiven Einsatz, bei dem E-Mail-Versand kritisch ist, sind SMTP Auth oder ACS SMTP robuster und planbarer.
 
 ---
 
 ### C) ACS SMTP
-ACS can now be **partially** prepared via `main.json`.
+ACS kann jetzt **teilweise** über `main.json` vorbereitet werden.
 
-#### Step 1 – Foundation with `main.json`
-Set during deployment:
+#### Schritt 1 – Foundation mit `main.json`
+Beim Deploy setzen:
 - `acsDeployFoundation = true`
-- `acsDataLocation` matching your desired geography
-- `acsDomainName` optionally explicit, otherwise `mailRootDomain` is used
-- The repo uses only the publicly documented ACS custom domain path `CustomerManaged`
+- `acsDataLocation` passend zur gewünschten Geography
+- `acsDomainName` optional explizit, sonst wird `mailRootDomain` verwendet
+- Das Repo nutzt bewusst nur den öffentlich dokumentierten ACS-Custom-Domain-Pfad `CustomerManaged`
 
-This creates:
+Damit werden erstellt:
 - Email Service
 - Email Domain Resource
 - Communication Service
 
-#### Step 2 – Manual ACS Finalization
-The complete manual steps are in the [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) under **"ACS Foundation + ACS SMTP"**. Summary:
-1. Set DNS records for the ACS domain in the authoritative DNS system
-2. Wait until **Domain Status**, **SPF**, **DKIM**, and **DKIM2** are fully verified
-3. Link the verified domain to the Communication Service
-4. Assign the Entra application the **Communication and Email Service Owner** role
-5. Create an SMTP username and wait for **Ready to use** status
-6. Redeploy `main.json` with final values:
+#### Schritt 2 – Manuelle ACS-Finalisierung
+Die vollständigen manuellen Schritte stehen im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) unter **„ACS Foundation + ACS SMTP"**. Kurzfassung:
+1. DNS-Einträge der ACS-Domain im maßgeblichen DNS-System setzen
+2. Warten, bis **Domain Status**, **SPF**, **DKIM** und **DKIM2** vollständig verified sind
+3. Die verifizierte Domain mit dem Communication Service verknüpfen
+4. Der Entra-Anwendung die Rolle **Communication and Email Service Owner** zuweisen
+5. SMTP-Username anlegen und Status **Ready to use** abwarten
+6. `main.json` erneut mit den finalen Werten deployen:
    - `smtpUseAuth = true`
    - `smtpHost = smtp.azurecomm.net`
    - `smtpPort = 587`
    - `smtpSecurity = starttls`
    - `smtpUsername = <ACS SMTP Username>`
-   - `smtpPassword = <Client Secret of the Entra App>`
+   - `smtpPassword = <Client Secret der Entra App>`
    - Optional `smtpAuthMechanism = Xoauth2`
 
+---
+
+## Vaultwarden-spezifische Hinweise
+
+1. **Mail-Service-Aktivierung**
+   Der Vaultwarden-Maildienst aktiviert sich, wenn `SMTP_FROM` und entweder `SMTP_HOST` oder `USE_SENDMAIL` gesetzt sind. `DOMAIN` muss korrekt sein, damit E-Mail-Links auf den richtigen Host zeigen. Für Produktion `smtpFrom` explizit setzen statt auf den impliziten Default zu vertrauen.
+
+2. **Direct Send: Auth-Variablen müssen fehlen**
+   Für Direct Send dürfen `SMTP_USERNAME`, `SMTP_PASSWORD` und `SMTP_AUTH_MECHANISM` in der App-Konfiguration nicht vorhanden sein. Das Template lässt diese korrekt weg, wenn `smtpUseAuth=false`.
+
+3. **Admin-UI kann Template-Werte überlagern**
+   Vaultwarden speichert Admin-UI-Änderungen in `/data/config.json`. Wenn dort SMTP-Werte oder ein `admin_token` persistiert sind, überlagern sie ENV-Werte. Bei einem Moduswechsel oder beim Abschalten des Admin-Panels immer die Vaultwarden-Diagnoseansicht prüfen.
+
+4. **Admin-Panel-Lifecycle ist bewusst zweistufig**
+   Der vorgesehene Weg: Erstdeployment mit `adminPanelEnabled=true` für Bootstrap/Tests/Admin-Diagnose; danach Redeploy mit `adminPanelEnabled=false`, damit `ADMIN_TOKEN` nicht mehr an die App durchgereicht wird. **Wichtig:** Falls im Adminbereich gespeichert wurde, muss ein persistierter `admin_token` in `/data/config.json` ebenfalls entfernt werden, sonst bleibt das Admin-Panel trotz entfernter ENV-Variable aktiv.
+
+5. **Optionale SMTP-Feinparameter**
+   `SMTP_AUTH_MECHANISM`, `HELO_NAME`, `SMTP_EMBED_IMAGES`, `SMTP_DEBUG`, `SMTP_ACCEPT_INVALID_CERTS` und `SMTP_ACCEPT_INVALID_HOSTNAMES` sind echte Vaultwarden-Parameter. Das Template reicht aktuell nur `SMTP_AUTH_MECHANISM` und `HELO_NAME` durch. Die übrigen Optionen sind bewusst nicht automatisiert und gehören in Troubleshooting-/Sonderfälle.
+
+6. **`/data/config.json`-Persistenzrisiko**
+   Jede im Vaultwarden-Admin-UI geänderte Einstellung wird in `/data/config.json` auf dem Azure-Files-Share persistiert. Diese Werte haben bei nachfolgenden Container-Starts Vorrang vor ENV-Variablen. Das ist bekanntes Vaultwarden-Verhalten. Der sichere Ansatz ist:
+   - Admin-Panel nur während Bootstrap nutzen
+   - SMTP-Einstellungen nicht über das Admin-UI speichern (sie kommen aus ENV)
+   - Nach dem Bootstrap das Admin-Panel deaktivieren und prüfen, dass keine veralteten Werte persistiert sind
+
+7. **SSO / OIDC Hinweise**
+   - `SSO_ONLY=true` deaktiviert den Master-Passwort-Login vollständig. SSO vorher gründlich testen.
+   - Die OIDC-Callback-URL wird aus `DOMAIN` abgeleitet: `https://<domain>/identity/connect/oidc-signin`
+   - Bei Entra ID die Redirect-URI in der App Registration hinterlegen.
+
+8. **Push-Benachrichtigungen – externe Abhängigkeit**
+   - Push-Benachrichtigungen erfordern eine gültige Bitwarden Installation ID und Key von https://bitwarden.com/host/
+   - Beide Werte werden als Secrets behandelt und in Key Vault abgelegt
+   - Ohne Push funktionieren Mobile-Clients weiter, aber ohne Echtzeit-Sync-Signale
 
 ---
 
-## Vaultwarden-Specific Caveats
+## Wichtige Parameter in `main.json`
 
-1. **Mail service activation**
-   The Vaultwarden mail service activates when `SMTP_FROM` and either `SMTP_HOST` or `USE_SENDMAIL` are set. `DOMAIN` must be correct so that email links point to the right host. For production, set `smtpFrom` explicitly rather than relying on the implicit default.
+Die Parameter sind in zwei Richtungen zu lesen:
+- **Azure-/Deploy-Parameter** = steuern Ressourcen, Sizing, Bootstrap und Azure-Dienste
+- **Vaultwarden-Parameter** = werden zu Vaultwarden-ENV-Werten oder steuern Vaultwarden-nahes Verhalten
 
-2. **Direct Send: auth variables must be omitted**
-   For Direct Send, `SMTP_USERNAME`, `SMTP_PASSWORD`, and `SMTP_AUTH_MECHANISM` must not be present in the app configuration. The template correctly omits these when `smtpUseAuth=false`.
-
-3. **Admin UI can override template values**
-   Vaultwarden persists Admin UI changes to `/data/config.json`. If SMTP values or `admin_token` are persisted there, they will override ENV values. When switching modes or disabling the admin panel, always verify the Vaultwarden admin diagnostics view.
-
-   The intended workflow is: initial deployment with `adminPanelEnabled=true` for bootstrap/testing/admin diagnostics; then redeploy with `adminPanelEnabled=false` to stop passing `ADMIN_TOKEN` to the app. **Important:** If settings were saved in the admin UI, a persisted `admin_token` in `/data/config.json` must also be removed, or the admin panel will remain active despite the removed ENV var.
-
-5. **Optional SMTP fine-tuning parameters**
-   `SMTP_AUTH_MECHANISM`, `HELO_NAME`, `SMTP_EMBED_IMAGES`, `SMTP_DEBUG`, `SMTP_ACCEPT_INVALID_CERTS`, and `SMTP_ACCEPT_INVALID_HOSTNAMES` are real Vaultwarden parameters. The template currently passes through only `SMTP_AUTH_MECHANISM` and `HELO_NAME`. The remaining options are intentionally not automated and belong to troubleshooting/special cases.
-
-6. **`/data/config.json` persistence risk**
-   Any setting changed in the Vaultwarden admin UI is persisted to `/data/config.json` on the Azure Files share. These values take precedence over ENV vars on subsequent container starts. This is a known Vaultwarden behavior. The safe approach is:
-   - Use the admin panel only during bootstrap
-   - Do not save SMTP settings from the admin UI (they come from ENV)
-   - After bootstrap, disable the admin panel and verify no stale values persist
-
-7. **SSO / OIDC caveats**
-   - `SSO_ONLY=true` disables master-password login entirely. Test SSO thoroughly before enabling this.
-   - The OIDC callback URL is derived from `DOMAIN`: `https://<domain>/identity/connect/oidc-signin`
-   - If using Entra ID, ensure the redirect URI is registered in the App Registration.
-
-8. **Push notifications external dependency**
-   - Push notifications require a valid Bitwarden Installation ID and Key from https://bitwarden.com/host/
-   - Both values are treated as secrets and stored in Key Vault
-   - Without push, mobile clients still work but lack real-time sync signals
-
----
-
-## Key Parameters in `main.json`
-
-Parameters are organized in two dimensions:
-- **Azure/Deploy parameters** = control resources, sizing, bootstrap, and Azure services
-- **Vaultwarden parameters** = map to Vaultwarden ENV vars or control Vaultwarden-adjacent behavior
-
-### Azure/Deploy Parameters
+### Azure-/Deploy-Parameter
 
 #### Core / Deploy
 - `location`
 - `environment`
 - `bsseRef`
-- `appName` (keep short; storage account names are derived from it and limited to 24 chars)
-- `deploymentScriptForceUpdateTag` (only change intentionally when the bootstrap script should re-run)
+- `appName` (kurz halten; Storage-Account-Namen werden daraus abgeleitet und sind auf 24 Zeichen begrenzt)
+- `deploymentScriptForceUpdateTag` (nur bewusst ändern, wenn das Bootstrap-Script erneut laufen soll)
 - `diagnosticsEnabled`
 - `allowInsecureHttp`
-- `vaultwardenImage` (pinned by default; update intentionally during maintenance windows)
+- `vaultwardenImage` (standardmäßig gepinnt; bewusst im Wartungsfenster aktualisieren)
 - `cpuCores`
 - `memorySize`
 
@@ -292,39 +292,39 @@ Parameters are organized in two dimensions:
 - `azureFilesBackupWeeklyRetentionWeeks`
 
 #### PostgreSQL / Bootstrap-only
-- `postgresSkuName` (tier is automatically derived: `Standard_B*` = Burstable, `Standard_D*` = GeneralPurpose, `Standard_E*` = MemoryOptimized)
+- `postgresSkuName` (Tier wird automatisch abgeleitet: `Standard_B*` = Burstable, `Standard_D*` = GeneralPurpose, `Standard_E*` = MemoryOptimized)
 - `postgresStorageGB`
 - `postgresBackupRetentionDays`
 - `allowAzureServicesToPostgres`
 - `dbAdminUser`
 - `dbPassword`
 
-`dbAdminUser` and `dbPassword` remain in the template because they are needed for PostgreSQL server creation and the bootstrap script. They are **not** productive Vaultwarden app credentials; the app uses a separate least-privilege user via `DATABASE_URL` from Key Vault.
+`dbAdminUser` und `dbPassword` bleiben im Template, weil sie für die PostgreSQL-Server-Erstellung und das Bootstrap-Script benötigt werden. Sie sind **keine** produktiven Vaultwarden-App-Credentials; die App nutzt einen separaten Least-Privilege-User über `DATABASE_URL` aus Key Vault.
 
 #### ACS Foundation
 - `acsDeployFoundation`
 - `acsDataLocation`
 - `acsDomainName`
 
-### Vaultwarden Parameters / ENV Mapping
+### Vaultwarden-Parameter / ENV-Mapping
 
-#### Core / Instance Behavior
+#### Core / Instanzverhalten
 - `domainUrl` → `DOMAIN`
-- `adminPanelEnabled` → controls whether `ADMIN_TOKEN` is passed to the app
+- `adminPanelEnabled` → steuert, ob `ADMIN_TOKEN` an die App durchgereicht wird
 
-#### Organization / Signup / Policies
+#### Organisation / Signup / Richtlinien
 - `invitationOrgName` → `INVITATION_ORG_NAME`
 - `signupsDomainsWhitelist` → `SIGNUPS_DOMAINS_WHITELIST`
 - `orgCreationUsers` → `ORG_CREATION_USERS`
 
-**Important:** `SIGNUPS_DOMAINS_WHITELIST` has specific Vaultwarden behavior. When set, test the self-service signup process carefully; domain whitelist and invitation/org flows behave differently than with open registration.
+**Wichtig:** `SIGNUPS_DOMAINS_WHITELIST` hat spezifisches Vaultwarden-Verhalten. Wenn gesetzt, den Self-Service-Signup-Prozess bewusst testen; Domain-Whitelist und Einladungs-/Org-Flows verhalten sich anders als bei offener Registrierung.
 
 #### Mail / SMTP
 - `mailRootDomain`
 - `smtpUseAuth`
 - `smtpFrom` → `SMTP_FROM`
 - `smtpFromName` → `SMTP_FROM_NAME`
-- `heloName` → `HELO_NAME` (empty = host from `DOMAIN`)
+- `heloName` → `HELO_NAME` (leer = Host aus `DOMAIN`)
 - `smtpHost` → `SMTP_HOST`
 - `smtpPort` → `SMTP_PORT`
 - `smtpSecurity` → `SMTP_SECURITY`
@@ -344,20 +344,20 @@ Parameters are organized in two dimensions:
 - `pushEnabled` → `PUSH_ENABLED`
 - `pushInstallationId` → `PUSH_INSTALLATION_ID`
 - `pushInstallationKey` → `PUSH_INSTALLATION_KEY`
-- `pushUseEuServers` → sets `PUSH_RELAY_URI` / `PUSH_IDENTITY_URI` for `.com` vs `.eu`
+- `pushUseEuServers` → setzt `PUSH_RELAY_URI` / `PUSH_IDENTITY_URI` für `.com` vs `.eu`
 
-Both `pushInstallationId` and `pushInstallationKey` are stored as secrets in Key Vault.
+Sowohl `pushInstallationId` als auch `pushInstallationKey` werden als Secrets in Key Vault abgelegt.
 
-### Further Documentation
+### Weiterführende Dokumentation
 - Operations Playbook: [docs/HowToInstall/Operation-Playbook.md](./docs/HowToInstall/Operation-Playbook.md)
 - Bitwarden Installation ID / Key: https://bitwarden.com/host/
-- Bitwarden Hosting FAQ: https://bitwarden.com/help/hosting-faqs/
+- Bitwarden Hosting-FAQ: https://bitwarden.com/help/hosting-faqs/
 - Bitwarden Push Relay: https://bitwarden.com/help/configure-push-relay/
 - Vaultwarden SSO (Wiki): https://github.com/dani-garcia/vaultwarden/wiki/Enabling-SSO-support-using-OpenId-Connect
 
 ## Outputs
 
-When `acsDeployFoundation = true`, the deployment additionally outputs:
+Wenn `acsDeployFoundation = true`, gibt das Deployment zusätzlich aus:
 - `acsFoundationEnabled`
 - `acsEmailServiceName`
 - `acsCommunicationServiceName`
@@ -365,219 +365,219 @@ When `acsDeployFoundation = true`, the deployment additionally outputs:
 - `acsEmailDomainResourceId`
 - `acsNextSteps`
 
-These outputs serve as an operational bridge between core deploy and manual ACS finalization.
+Diese Outputs dienen als operative Brücke zwischen Core-Deploy und manueller ACS-Finalisierung.
 
 ---
 
-## Redeploy and Secret Behavior
+## Redeploy- und Secret-Verhalten
 
-### Redeploying the Same Template to the Same Resource Group
-- ARM works in **incremental** mode by default
-- Existing PostgreSQL / Azure Files / Vaultwarden data is preserved
-- The bootstrap `deploymentScript` does **not** automatically re-run if nothing changed in its resource definition
-- Use `deploymentScriptForceUpdateTag` for intentional re-runs
+### Gleiches Template erneut in dieselbe Resource Group deployen
+- ARM arbeitet standardmäßig im **incremental**-Modus
+- Bestehende PostgreSQL-/Azure-Files-/Vaultwarden-Daten bleiben erhalten
+- Das Bootstrap-`deploymentScript` läuft **nicht automatisch erneut**, wenn sich in seiner Resource-Definition nichts geändert hat
+- Für bewusste Re-Runs `deploymentScriptForceUpdateTag` nutzen
 
-### When to Use `deploymentScriptForceUpdateTag`
-Use this parameter intentionally, for example when:
-- DB app-user / `DATABASE_URL` should be reconciled again
-- SMTP/SSO/Push secrets should be re-written despite otherwise identical template values
-- A no-op redeploy is not sufficient and the bootstrap script must run again
+### Wann `deploymentScriptForceUpdateTag` sinnvoll ist
+Diesen Parameter nur bewusst ändern, z. B. wenn:
+- DB-App-User / `DATABASE_URL` erneut reconciled werden sollen
+- SMTP-/SSO-/Push-Secrets trotz sonst identischer Template-Werte erneut geschrieben werden sollen
+- Ein No-Op-Redeploy nicht ausreicht und das Bootstrap-Script sicher erneut laufen soll
 
-### Key Vault Secrets in ACA
-The Container App uses versionless Key Vault secret URIs. New secret versions can be picked up without changing the secret URI in the template.
+### Key-Vault-Secrets in ACA
+Die Container App nutzt versionlose Key-Vault-Secret-URIs. Neue Secret-Versionen können ohne Änderung der Secret-URI im Template übernommen werden.
 
-For **predictable immediate effect**, it is still advisable to:
-- Perform a targeted redeploy with a content change
-- Or restart / create a new revision after sensitive secret changes
+Für **planbare Sofortwirkung** ist trotzdem sinnvoll:
+- Gezielter Redeploy mit inhaltlicher Änderung
+- Oder Restart / neue Revision nach sensiblen Secret-Änderungen
 
-### Disabling the Admin Panel After Bootstrap
-Recommended operational workflow:
-1. Initial deployment with `adminPanelEnabled = true` (default)
-2. Complete bootstrap / tests / admin diagnostics
-3. If settings were saved in the Vaultwarden admin UI: verify no persisted `admin_token` remains in `/data/config.json`
-4. Redeploy `main.json` with `adminPanelEnabled = false`
-5. Verify the admin panel is no longer accessible
+### Admin-Panel nach Bootstrap deaktivieren
+Empfohlener Betriebsablauf:
+1. Erstdeployment mit `adminPanelEnabled = true` (Default)
+2. Bootstrap / Tests / Admin-Diagnose durchführen
+3. Falls im Vaultwarden-Admin-UI gespeichert wurde: prüfen, dass kein persistierter `admin_token` in `/data/config.json` stehen bleibt
+4. `main.json` mit `adminPanelEnabled = false` erneut deployen
+5. Prüfen, dass das Admin-Panel nicht mehr erreichbar ist
 
-For later maintenance, the admin panel can be temporarily re-enabled by setting `adminPanelEnabled = true` and then disabling it again after completing the work.
-
----
-
-## Manual Steps Before Go-Live
-
-These steps are **intentionally** not fully automated.
-
-### 1) Custom Domain + TLS for ACA
-If you do not want to stay on the default `*.azurecontainerapps.io` URL:
-
-1. Add a custom domain to the Container App ingress
-2. Set DNS records
-3. Bind a certificate (Managed Certificate or your own)
-4. Test under the final target URL
-
-> `domainUrl` and the actual ACA binding must match at the end.
-
-### 2) ACS Domain DNS / Verification / Linking
-If using ACS Email:
-
-1. Deploy with `acsDeployFoundation = true`
-2. Set the displayed DNS records
-3. Wait until the domain is **verified**
-4. Link the verified domain to the Communication Service
-5. Create SMTP username + RBAC for the Entra app
-6. Redeploy `main.json` with the final ACS SMTP values
-
-### 3) Smoke Tests
-Before go-live, run the tests from the [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md).
+Für spätere Wartung kann das Admin-Panel temporär wieder aktiviert werden, indem `adminPanelEnabled = true` gesetzt und nach Abschluss der Arbeiten wieder auf `false` zurückgestellt wird.
 
 ---
 
-## Production / Go-Live Checklist
+## Manuelle Schritte vor Go-Live
 
-Before going live, verify all items:
+Diese Schritte sind **bewusst** nicht vollständig automatisiert.
+
+### 1) Custom Domain + TLS für ACA
+Wenn du nicht auf der Standard-URL `*.azurecontainerapps.io` bleiben willst:
+
+1. Custom Domain am Container-App-Ingress hinzufügen
+2. DNS-Records setzen
+3. Zertifikat binden (Managed Certificate oder eigenes)
+4. Unter der finalen Ziel-URL testen
+
+> `domainUrl` und die tatsächliche ACA-Bindung müssen am Ende übereinstimmen.
+
+### 2) ACS Domain-DNS / Verifikation / Linking
+Wenn ACS Email genutzt wird:
+
+1. Mit `acsDeployFoundation = true` deployen
+2. Die angezeigten DNS-Records setzen
+3. Warten, bis die Domain **verified** ist
+4. Die verifizierte Domain mit dem Communication Service verknüpfen
+5. SMTP-Username + RBAC für die Entra-App anlegen
+6. `main.json` mit den finalen ACS-SMTP-Werten erneut deployen
+
+### 3) Smoke-Tests
+Vor Go-Live die Tests aus dem [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) durchführen.
+
+---
+
+## Produktiv- / Go-Live-Checkliste
+
+Vor dem Go-Live alle Punkte prüfen:
 
 ### App / URL
-- [ ] Container App is reachable
+- [ ] Container App ist erreichbar
 - [ ] `allowInsecureHttp = false`
-- [ ] Final target URL responds with a valid TLS certificate
-- [ ] `domainUrl` matches the actually bound URL
+- [ ] Finale Ziel-URL antwortet mit gültigem TLS-Zertifikat
+- [ ] `domainUrl` entspricht der real gebundenen URL
 
 ### Mail
-- [ ] Test email from Vaultwarden successful
-- [ ] Sender address correct
-- [ ] SPF/DKIM/DMARC appropriate for chosen mail path
-- [ ] No placeholder values remaining in SMTP parameters
-- [ ] For ACS: domain is verified and linked to the Communication Service
+- [ ] Testmail aus Vaultwarden erfolgreich
+- [ ] Absenderadresse korrekt
+- [ ] SPF/DKIM/DMARC passend zum gewählten Mailpfad
+- [ ] Keine Platzhalterwerte mehr in SMTP-Parametern
+- [ ] Bei ACS: Domain ist verified und mit dem Communication Service verknüpft
 
-### Security
-- [ ] `ADMIN_TOKEN` retrieved only from Key Vault, not stored locally
-- [ ] `adminPanelEnabled` set to `false` after successful bootstrap/testing
-- [ ] No persisted `admin_token` in `/data/config.json`
-- [ ] Unnecessary signups disabled (`SIGNUPS_ALLOWED=false` is the default)
-- [ ] SSO/Push only active if tested
-- [ ] `SHOW_PASSWORD_HINT=false` (default)
-- [ ] `HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS=true` (default, prevents SSRF)
+### Sicherheit
+- [ ] `ADMIN_TOKEN` nur aus Key Vault entnommen, nicht lokal gespeichert
+- [ ] `adminPanelEnabled` nach erfolgreichem Bootstrap/Testing auf `false` gesetzt
+- [ ] Kein persistierter `admin_token` in `/data/config.json`
+- [ ] Unnötige Signups deaktiviert (`SIGNUPS_ALLOWED=false` ist der Default)
+- [ ] SSO/Push nur aktiv, wenn getestet
+- [ ] `SHOW_PASSWORD_HINT=false` (Default)
+- [ ] `HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS=true` (Default, verhindert SSRF)
 
-### Data
-- [ ] Login successful
-- [ ] New vault entry can be saved
-- [ ] Attachment can be uploaded
-- [ ] Attachment can be retrieved
+### Daten
+- [ ] Login erfolgreich
+- [ ] Neuer Tresoreintrag speicherbar
+- [ ] Attachment hochladbar
+- [ ] Attachment wieder abrufbar
 
 ### Backup / Recovery
-- [ ] At least one restore drill planned or already performed
-- [ ] Known how to restore PostgreSQL + Azure Files together
-- [ ] Verified that PostgreSQL PITR retention (`postgresBackupRetentionDays`) is sufficient
-- [ ] Verified that Azure Files backup is enabled and running
+- [ ] Mindestens ein Restore-Drill geplant oder bereits durchgeführt
+- [ ] Bekannt, wie PostgreSQL + Azure Files gemeinsam wiederhergestellt werden
+- [ ] PostgreSQL-PITR-Retention (`postgresBackupRetentionDays`) ist ausreichend
+- [ ] Azure-Files-Backup ist aktiv und läuft
 
 ---
 
-## Hardening Tiers (Optional)
+## Härtungsstufen (optional)
 
-This repository deploys a **baseline architecture** suitable for SME/KMU production use. For environments with stricter security requirements, consider the following graduated hardening tiers:
+Dieses Repository deployt eine **Baseline-Architektur**, die für KMU-Produktiveinsatz geeignet ist. Für Umgebungen mit strengeren Sicherheitsanforderungen gibt es folgende abgestufte Härtungsstufen:
 
-### Tier 0: Baseline (Default)
-**What you get out of the box:**
-- ACA direct ingress with HTTPS
-- PostgreSQL public access with `AllowAzureServices` firewall rule
-- Key Vault with RBAC and purge protection
-- Azure Files backup via Recovery Services Vault
-- Diagnostic settings for Key Vault and PostgreSQL
-- Vaultwarden image pinned, signups disabled, password hints off
+### Stufe 0: Baseline (Default)
+**Was man out-of-the-box bekommt:**
+- ACA Direct Ingress mit HTTPS
+- PostgreSQL öffentlicher Zugriff mit `AllowAzureServices`-Firewall-Regel
+- Key Vault mit RBAC und Purge Protection
+- Azure-Files-Backup über Recovery Services Vault
+- Diagnostic Settings für Key Vault und PostgreSQL
+- Vaultwarden-Image gepinnt, Signups deaktiviert, Passwort-Hints aus
 
 **Tradeoffs:**
-- No fixed outbound IP → PostgreSQL firewall relies on `AllowAzureServices`
-- No WAF → rate limiting is Vaultwarden-internal only
-- No VNet isolation
+- Keine feste Outbound-IP → PostgreSQL-Firewall verlässt sich auf `AllowAzureServices`
+- Keine WAF → Rate Limiting ist nur Vaultwarden-intern
+- Keine VNet-Isolation
 
-**Cost: ~€30-50/month** (consumption ACA + B1ms PostgreSQL + Standard_LRS storage)
+**Kosten: ~30–50 €/Monat** (Consumption ACA + B1ms PostgreSQL + Standard_LRS Storage)
 
-### Tier 1: Fixed Egress + PostgreSQL Restriction
-**Add:**
-- ACA Environment with VNet integration (Workload Profiles)
-- NAT Gateway for fixed outbound IP
-- Specific PostgreSQL firewall rule replacing `AllowAzureServices`
+### Stufe 1: Fester Egress + PostgreSQL-Einschränkung
+**Zusätzlich:**
+- ACA-Environment mit VNet-Integration (Workload Profiles)
+- NAT Gateway für feste Outbound-IP
+- Spezifische PostgreSQL-Firewall-Regel anstelle von `AllowAzureServices`
 
-**Benefits:**
-- PostgreSQL only accepts connections from your known IP
-- Third-party SMTP servers can allowlist your IP
-- Outbound traffic is traceable
+**Vorteile:**
+- PostgreSQL akzeptiert nur Verbindungen von der bekannten IP
+- SMTP-Server von Drittanbietern können die IP allowlisten
+- Outbound-Traffic ist nachvollziehbar
 
-**Cost impact: +€30-50/month** (NAT Gateway + Workload Profiles overhead)
+**Mehrkosten: +30–50 €/Monat** (NAT Gateway + Workload-Profiles-Overhead)
 
-### Tier 2: Enterprise Hardening
-**Add:**
-- Private Endpoint for PostgreSQL (no public access)
-- Private Endpoint for Key Vault
-- Private Endpoint for Storage Account
-- Private DNS Zones for all endpoints
-- Optional: Azure Front Door or Application Gateway with WAF
+### Stufe 2: Enterprise-Härtung
+**Zusätzlich:**
+- Private Endpoint für PostgreSQL (kein öffentlicher Zugriff)
+- Private Endpoint für Key Vault
+- Private Endpoint für Storage Account
+- Private DNS Zones für alle Endpoints
+- Optional: Azure Front Door oder Application Gateway mit WAF
 
-**Benefits:**
-- No public data-plane exposure for backend services
-- WAF-level protection at the edge
-- Network microsegmentation
+**Vorteile:**
+- Keine öffentliche Data-Plane-Exposition für Backend-Dienste
+- WAF-Schutz am Edge
+- Netzwerk-Mikrosegmentierung
 
-**Cost impact: +€100-200/month** (private endpoints + DNS zones + optional WAF)
+**Mehrkosten: +100–200 €/Monat** (Private Endpoints + DNS Zones + optionale WAF)
 
-> **Note:** Each tier adds operational complexity. Evaluate whether the additional security posture justifies the cost and management burden for your organization.
+> **Hinweis:** Jede Stufe erhöht die betriebliche Komplexität. Abwägen, ob die zusätzliche Sicherheit die Kosten und den Verwaltungsaufwand für die eigene Organisation rechtfertigt.
 
 ---
 
-## Known Constraints and Open Risks
+## Bekannte Einschränkungen und offene Risiken
 
-| Constraint | Impact | Mitigation |
+| Einschränkung | Auswirkung | Mitigation |
 |---|---|---|
-| ACA consumption plan has no fixed outbound IP | PostgreSQL firewall uses `AllowAzureServices` (0.0.0.0 rule) | Upgrade to Tier 1 for fixed egress |
-| Vaultwarden `config.json` can override ENV vars | Settings saved in admin UI persist across redeployments | Disable admin panel after bootstrap; document in runbook |
-| Azure Files is not a transactional store | `/data` backup and PostgreSQL backup may not be perfectly synchronized | Document restore procedure; perform restore drills |
-| `allowInsecureHttp` defaults to `false` but can be set to `true` | Exposes traffic in plaintext | Enforce `false` in production |
-| Deployment script depends on Azure CLI container image version | Future AzureCLI image changes could affect script behavior | `azCliVersion` is pinned to `2.81.0` |
-| PostgreSQL password is auto-generated if not provided | On redeploy, the `dbPassword` parameter gets a new `newGuid()` value, but PostgreSQL ignores it because the server already exists (incremental deploy) | This is safe for redeployment; the password is set only on initial creation |
+| ACA-Consumption-Plan hat keine feste Outbound-IP | PostgreSQL-Firewall nutzt `AllowAzureServices` (0.0.0.0-Regel) | Auf Stufe 1 upgraden für festen Egress |
+| Vaultwarden `config.json` kann ENV-Variablen überlagern | Im Admin-UI gespeicherte Einstellungen persistieren über Redeployments | Admin-Panel nach Bootstrap deaktivieren; im Runbook dokumentieren |
+| Azure Files ist kein transaktionaler Store | `/data`-Backup und PostgreSQL-Backup sind möglicherweise nicht perfekt synchronisiert | Restore-Ablauf dokumentieren; Restore-Drills durchführen |
+| `allowInsecureHttp` ist standardmäßig `false`, kann aber auf `true` gesetzt werden | Exponiert Traffic im Klartext | In Produktion `false` erzwingen |
+| Deployment-Script hängt von Azure-CLI-Container-Image-Version ab | Zukünftige AzureCLI-Image-Änderungen könnten Script-Verhalten beeinflussen | `azCliVersion` ist auf `2.81.0` gepinnt |
+| PostgreSQL-Passwort wird auto-generiert wenn nicht angegeben | Beim Redeploy erhält der `dbPassword`-Parameter einen neuen `newGuid()`-Wert, aber PostgreSQL ignoriert ihn, weil der Server bereits existiert (incrementelles Deploy) | Das ist sicher für Redeployment; das Passwort wird nur bei Erstanlage gesetzt |
 
 ---
 
-## Changelog from Original Baseline
+## Changelog gegenüber der ursprünglichen Baseline
 
-- Storage account name safely truncated to 24 characters
-- PostgreSQL tier dynamically derived from SKU name prefix
-- Container health probes use Vaultwarden `/alive` endpoint (startup + liveness + readiness)
-- Deploy button URL updated for current repository
-- Repository structure documentation corrected (PowerShell script acknowledged)
-- `main.bicep` marked as unmaintained
-- `enabledForTemplateDeployment` disabled on Key Vault
-- Vaultwarden ENV vars cleanly modeled with conditional inclusion
-- `SMTP_AUTH_MECHANISM` passed through to Vaultwarden
-- Optional ENV values not set to empty strings
-- Deployment script updates secrets on changes
-- SMTP auth validated in deployment script
-- `mailRootDomain` as explicit mail base domain (no heuristic derivation from `domainUrl`)
-- PostgreSQL PITR retention parameterized
-- ACS changed from "all at once" to **foundation automated, finalization manual**
-- `deploymentScriptForceUpdateTag` for intentional bootstrap re-runs
-- Deployment script uses `az postgres flexible-server execute` (no `psql`, `pip`, or `pg8000` dependency)
+- Storage-Account-Name sicher auf 24 Zeichen begrenzt
+- PostgreSQL-Tier wird dynamisch aus dem SKU-Namenspräfix abgeleitet
+- Container-Health-Probes nutzen Vaultwardens `/alive`-Endpoint (Startup + Liveness + Readiness)
+- Deploy-Button-URL für aktuelles Repository aktualisiert
+- Repo-Struktur-Dokumentation korrigiert (PowerShell-Script berücksichtigt)
+- `main.bicep` als nicht gepflegt markiert
+- `enabledForTemplateDeployment` am Key Vault deaktiviert
+- Vaultwarden-ENV-Variablen sauber mit bedingter Einbindung modelliert
+- `SMTP_AUTH_MECHANISM` wird an Vaultwarden durchgereicht
+- Optionale ENV-Werte werden nicht mehr als Leerstrings gesetzt
+- Deployment-Script aktualisiert Secrets bei Änderungen
+- SMTP-Auth wird im Deployment-Script validiert
+- `mailRootDomain` als explizite Mail-Basisdomain (keine heuristische Ableitung aus `domainUrl`)
+- PostgreSQL-PITR-Retention parametrierbar
+- ACS von „alles auf einmal" auf **Foundation automatisiert, Finalisierung manuell** umgestellt
+- `deploymentScriptForceUpdateTag` für bewusste Bootstrap-Re-Runs
+- Deployment-Script nutzt `az postgres flexible-server execute` (kein `psql`-, `pip`- oder `pg8000`-Pfad)
 
 ---
 
-## References (ACS, M365, Bitwarden/Vaultwarden)
+## Quellen (ACS, M365, Bitwarden/Vaultwarden)
 
-The linked statements in README and Playbook were last verified **on 2026-03-20 16:02 CET**.
+Die verlinkten Aussagen in README und Playbook wurden zuletzt **am 2026-03-20 16:02 CET** gegengeprüft.
 
 ### Microsoft Learn / Microsoft 365
-- Connect a verified email domain to send email
+- Verifizierte E-Mail-Domain verbinden
   https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/connect-email-communication-resource
-- Set up SMTP authentication for sending emails
+- SMTP-Authentifizierung für E-Mail-Versand einrichten
   https://learn.microsoft.com/azure/communication-services/quickstarts/email/send-email-smtp/smtp-authentication
-- Add custom verified email domains
+- Benutzerdefinierte verifizierte E-Mail-Domains hinzufügen
   https://learn.microsoft.com/en-us/azure/communication-services/quickstarts/email/add-custom-verified-domains
-- Troubleshooting domain configuration issues
+- Fehlerbehebung bei Domain-Konfigurationsproblemen
   https://learn.microsoft.com/en-gb/azure/communication-services/concepts/email/email-domain-configuration-troubleshooting
-- Add DNS records if Microsoft hosts your DNS
+- DNS-Einträge hinzufügen (Microsoft-gehostetes DNS)
   https://learn.microsoft.com/en-us/office365/admin/setup/add-domain
 
 ### Bitwarden / Vaultwarden
-- Bitwarden: Request Hosting Installation ID & Key
+- Bitwarden: Installation ID & Key anfordern
   https://bitwarden.com/host/
-- Bitwarden Hosting FAQs
+- Bitwarden Hosting-FAQ
   https://bitwarden.com/help/hosting-faqs/
 - Bitwarden Push Relay
   https://bitwarden.com/help/configure-push-relay/

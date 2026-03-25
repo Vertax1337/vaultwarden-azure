@@ -1,8 +1,8 @@
-// ⚠️ DEPRECATED: This Bicep file is an older reference and does NOT match main.json.
-// Do NOT use this file for deployment. Use main.json instead.
-// This file is kept for historical reference only and will be removed in a future version.
-// Key differences: this file lacks SSO, Push, ACS, backup, diagnostics, deployment script
-// with DB user provisioning, and uses incorrect split DB env vars instead of DATABASE_URL.
+// ⚠️ VERALTET: Diese Bicep-Datei ist eine ältere Referenz und entspricht NICHT main.json.
+// Diese Datei NICHT für Deployments verwenden. Stattdessen main.json nutzen.
+// Die Datei wird nur als historische Referenz aufbewahrt und in einer zukünftigen Version entfernt.
+// Wesentliche Unterschiede: Es fehlen SSO, Push, ACS, Backup, Diagnostics, Deployment-Script
+// mit DB-User-Provisionierung, und es werden falsche Split-DB-ENV-Variablen statt DATABASE_URL verwendet.
 
 targetScope = 'resourceGroup'
 
