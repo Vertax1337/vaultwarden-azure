@@ -28,38 +28,6 @@
         "description": "Kosten/Zuordnung: Umgebung (prod/test/dev)"
       }
     },
-    "edgeMode": {
-      "type": "string",
-      "defaultValue": "none",
-      "allowedValues": [
-        "none",
-        "cloudflare-managed"
-      ],
-      "metadata": {
-        "description": "Deployment mode for edge hardening. none = Azure-only/basic, cloudflare-managed = production path with post-deploy Cloudflare automation."
-      }
-    },
-    "enableIngressIpRestrictions": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "If true, apply ACA ingress IP restrictions using ingressAllowedCidrs. Intended for the Cloudflare-managed production path."
-      }
-    },
-    "ingressAllowedCidrs": {
-      "type": "array",
-      "defaultValue": [],
-      "metadata": {
-        "description": "Allowed CIDR ranges for ACA ingress when enableIngressIpRestrictions=true. Example: Cloudflare edge IP ranges."
-      }
-    },
-    "customHostname": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Optional customer-facing hostname (for example vault.example.com). Used by the production wrapper/documentation. The ARM deployment itself does not bind the hostname."
-      }
-    },
     "bsseRef": {
       "type": "string",
       "defaultValue": "",
@@ -445,7 +413,6 @@
     "bsseRefRaw": "[if(empty(parameters('bsseRef')), if(empty(variables('templateLinkRefRaw')), 'local', variables('templateLinkRefRaw')), parameters('bsseRef'))]",
     "bsseRefEffective": "[if(empty(variables('bsseRefRaw')), '', substring(variables('bsseRefRaw'), 0, min(length(variables('bsseRefRaw')), 256)))]",
     "commonTags": "[createObject('Environment', parameters('environment'), 'bsse:ref', variables('bsseRefEffective'))]",
-    "ingressIpSecurityRestrictions": "[if(parameters('enableIngressIpRestrictions'), parameters('ingressAllowedCidrs'), createArray())]",
     "storageAccountName": "[toLower(take(format('{0}files{1}', parameters('appName'), uniqueString(resourceGroup().id)), 24))]",
     "fileShareName": "vaultwarden",
     "postgresServerName": "[toLower(format('{0}-pg-{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
@@ -1015,8 +982,7 @@
           "ingress": {
             "external": true,
             "targetPort": 80,
-            "allowInsecure": "[parameters('allowInsecureHttp')]",
-            "ipSecurityRestrictions": "[variables('ingressIpSecurityRestrictions')]"
+            "allowInsecure": "[parameters('allowInsecureHttp')]"
           },
           "secrets": "[concat(variables('vwSecretsBase'), if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), json('[]')), if(parameters('ssoEnabled'), variables('vwSecretsSso'), json('[]')), if(parameters('pushEnabled'), variables('vwSecretsPush'), json('[]')))]",
           "activeRevisionsMode": "Single"
@@ -1320,30 +1286,6 @@
     "acsNextSteps": {
       "type": "array",
       "value": "[if(variables('useAcsFoundation'), createArray('Set the ACS DNS records for the prepared email domain.', 'Wait until the ACS email domain shows as verified.', 'Link the verified ACS email domain to the Communication Service.', 'Create the ACS SMTP username for the Entra application and assign the required role.', 'Redeploy main.json with smtpHost=smtp.azurecomm.net and the final ACS SMTP credentials.'), createArray())]"
-    },
-    "edgeMode": {
-      "type": "string",
-      "value": "[parameters('edgeMode')]"
-    },
-    "containerAppName": {
-      "type": "string",
-      "value": "[parameters('appName')]"
-    },
-    "containerAppEnvironmentName": {
-      "type": "string",
-      "value": "[variables('containerEnvName')]"
-    },
-    "customHostname": {
-      "type": "string",
-      "value": "[parameters('customHostname')]"
-    },
-    "ingressIpRestrictionsEnabled": {
-      "type": "bool",
-      "value": "[parameters('enableIngressIpRestrictions')]"
-    },
-    "ingressIpRestrictionsCount": {
-      "type": "int",
-      "value": "[length(parameters('ingressAllowedCidrs'))]"
     }
   }
 }
