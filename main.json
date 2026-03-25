@@ -411,10 +411,11 @@
     "bsseRefRaw": "[if(empty(parameters('bsseRef')), if(empty(variables('templateLinkRefRaw')), 'local', variables('templateLinkRefRaw')), parameters('bsseRef'))]",
     "bsseRefEffective": "[if(empty(variables('bsseRefRaw')), '', substring(variables('bsseRefRaw'), 0, min(length(variables('bsseRefRaw')), 256)))]",
     "commonTags": "[createObject('Environment', parameters('environment'), 'bsse:ref', variables('bsseRefEffective'))]",
-    "storageAccountName": "[toLower(format('{0}files{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
+    "storageAccountName": "[toLower(take(format('{0}files{1}', parameters('appName'), uniqueString(resourceGroup().id)), 24))]",
     "fileShareName": "vaultwarden",
     "postgresServerName": "[toLower(format('{0}-pg-{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
     "postgresDbName": "vaultwarden",
+    "postgresTier": "[if(startsWith(parameters('postgresSkuName'), 'Standard_B'), 'Burstable', if(startsWith(parameters('postgresSkuName'), 'Standard_D'), 'GeneralPurpose', if(startsWith(parameters('postgresSkuName'), 'Standard_E'), 'MemoryOptimized', 'Burstable')))]",
     "postgresFqdn": "[format('{0}.postgres.database.azure.com', variables('postgresServerName'))]",
     "postgresPort": "5432",
     "dbAppUser": "vw_app",
@@ -865,7 +866,7 @@
       "location": "[parameters('location')]",
       "sku": {
         "name": "[parameters('postgresSkuName')]",
-        "tier": "Burstable"
+        "tier": "[variables('postgresTier')]"
       },
       "properties": {
         "administratorLogin": "[parameters('dbAdminUser')]",
@@ -982,14 +983,27 @@
               ],
               "probes": [
                 {
-                  "type": "Liveness",
+                  "type": "Startup",
                   "httpGet": {
-                    "path": "/",
+                    "path": "/alive",
                     "port": 80,
                     "scheme": "HTTP"
                   },
-                  "initialDelaySeconds": 30,
-                  "periodSeconds": 20,
+                  "initialDelaySeconds": 5,
+                  "periodSeconds": 5,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 30,
+                  "successThreshold": 1
+                },
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/alive",
+                    "port": 80,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 0,
+                  "periodSeconds": 30,
                   "timeoutSeconds": 5,
                   "failureThreshold": 3,
                   "successThreshold": 1
@@ -997,11 +1011,11 @@
                 {
                   "type": "Readiness",
                   "httpGet": {
-                    "path": "/",
+                    "path": "/alive",
                     "port": 80,
                     "scheme": "HTTP"
                   },
-                  "initialDelaySeconds": 10,
+                  "initialDelaySeconds": 0,
                   "periodSeconds": 10,
                   "timeoutSeconds": 3,
                   "failureThreshold": 3,
