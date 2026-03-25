@@ -1,1 +1,14 @@
 main.parameters.json
+
+# Generated customer deployment artifacts
+customers/*/azure.parameters.json
+customers/*/artifacts/*.pem
+customers/*/artifacts/*.key
+customers/*/artifacts/*.pfx
+customers/*/artifacts/*.csr
+customers/*/artifacts/tmp/
+
+# Local test caches
+.pytest_cache/
+__pycache__/
+tests/__pycache__/

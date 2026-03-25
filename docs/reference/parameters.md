@@ -21,6 +21,10 @@ Diese Parameter steuern Azure-Ressourcen, Sizing, Bootstrap und Azure-Dienste.
 | `deploymentScriptForceUpdateTag` | Nur bewusst ändern, wenn das Bootstrap-Script erneut laufen soll |
 | `diagnosticsEnabled` | Aktiviert Diagnostic Settings für Key Vault und PostgreSQL |
 | `allowInsecureHttp` | HTTP-Zugriff erlauben (`false` = Produktion) |
+| `edgeMode` | Betriebsmodus: `none` (Basic/Azure-only) oder `cloudflare-managed` (Production Wizard) |
+| `enableIngressIpRestrictions` | Aktiviert ACA-Ingress-Restriktionen für den Production-Pfad |
+| `ingressAllowedCidrs` | Liste der erlaubten CIDR-Ranges für ACA-Ingress (z. B. Cloudflare IPs) |
+| `customHostname` | Optionaler Ziel-Hostname für den Kunden (vom Wizard genutzt) |
 | `vaultwardenImage` | Container-Image (standardmäßig gepinnt; bewusst im Wartungsfenster aktualisieren) |
 | `cpuCores` | CPU-Ressourcen für die Container App |
 | `memorySize` | Speicher-Ressourcen für die Container App |

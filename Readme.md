@@ -46,20 +46,43 @@ Diese bewussten Tradeoffs sind im Abschnitt [Bekannte Tradeoffs und Härtungsstu
 
 ## Deploy
 
-Es gibt bewusst **nur einen** Deploy-Pfad. Alles, was sauber automatisierbar ist, steckt in `main.json`.
+Es gibt jetzt bewusst **zwei** Deploy-Pfade:
 
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmaster%2Fmain.json)
+1. **Basic Mode / Azure-only** über den bestehenden **Deploy-to-Azure-Button**
+2. **Production Mode / Cloudflare-managed** über den neuen **Wizard `scripts/Invoke-CustomerDeployment.ps1`**
+
+Der Basic Mode bleibt der einfache Azure-Pfad ohne Cloudflare-Automatisierung. Der Production Mode erzeugt unter `customers/<slug-aus-vaultwarden-domain>/...` eine Kundenkonfiguration, generiert daraus die Azure-Parameterdatei und schreibt zusätzlich eine **aktive Kopie** nach `current/`. Der Deploy-to-Azure-Button zeigt auf diese aktive Kopie.
+
+[![Deploy to Azure (ARM JSON)](
+https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true
+)](
+https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2FVertax1337%2Fvaultwarden-azure%2Fmain%2Fcurrent%2Fmain.deploytoazure.json
+)
 
 > **Hinweis:** Wenn du dieses Repo forkst oder Owner/Branch änderst, muss die Raw-URL im Button oben angepasst werden.
 
 Für ein lokales Deployment ohne GitHub-Hosting: Azure Portal → **Benutzerdefinierte Vorlage bereitstellen** → **Eigene Vorlage im Editor erstellen** und `main.json` einfügen.
 
-**Bewusst manuell nachgelagerte Schritte:**
-- ACA Custom Domain + TLS-Zertifikatsbindung
+**Basic Mode (Deploy-to-Azure-Button):**
+- verwendet `current/main.deploytoazure.json` als aktive Portal-Eingabemaske
+- nested deploy auf `main.json`
+- Azure-only
+- kein Cloudflare
+- deutlich mehr einstellbare Basisparameter im Portal
+- Custom Domain / TLS für ACA bleibt manuell
+
+**Production Mode (Wizard / Wrapper):**
+- `scripts/Invoke-CustomerDeployment.ps1`
+- erzeugt `customers/<slug-aus-vaultwarden-domain>/deployment.config.json`
+- generiert `customers/<slug-aus-vaultwarden-domain>/azure.parameters.json`
+- Azure-Deploy + Cloudflare-DNS/SSL/WAF/Rate-Limits + optionaler Origin-Lockdown
+
+**Bewusst manuell oder extern bleibende Themen:**
 - ACS DNS-Verifikation der E-Mail-Domain
 - ACS Domain-Linking + SMTP-Username
+- echte produktive Secrets sollten nicht in Git eingecheckt werden
 
-Diese Schritte erfordern DNS-Propagation und externe Verifikation und können nicht zuverlässig in einem einzelnen Deployment automatisiert werden. Sie sind im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) dokumentiert.
+Diese Schritte und die neue Trennung zwischen Basic-/Production-Mode sind im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) dokumentiert.
 
 ---
 
@@ -169,6 +192,11 @@ Alle Dateien enthalten **nur Platzhalterwerte** und müssen vor dem produktiven 
 | Pfad | Beschreibung |
 |---|---|
 | `main.json` | Primäres ARM-Deployment-Template (alle Ressourcen) |
+| `main.deploytoazure.json` | Deploy-to-Azure-Wrapper mit breiterem Parameterdialog für den Basic-Pfad |
+| `customers/<slug-aus-vaultwarden-domain>/...` | Kundenbezogene Konfiguration, generierte Azure-Parameterdatei und Deploy-Artefakte für den Wizard-Pfad |
+| `scripts/Invoke-CustomerDeployment.ps1` | Interaktiver Wizard / Wrapper für den produktiven Cloudflare-Pfad |
+| `scripts/Set-CloudflareZoneConfig.ps1` | Cloudflare DNS / SSL / WAF / Rate-Limit API-Orchestrierung |
+| `scripts/Bind-AcaCustomDomain.ps1` | Origin-Zertifikat erzeugen, hochladen und ACA-Hostname binden |
 | `main.bicep` | ⚠️ Ältere Bicep-Referenz – **nicht gepflegt**, nicht für Deployments verwenden |
 | `scripts/deploy.ps1` | Optionaler PowerShell-Wrapper für CLI-basiertes Deployment |
 | `docs/architecture.md` | Detaillierte Architektur, Tradeoffs, Härtungsstufen |

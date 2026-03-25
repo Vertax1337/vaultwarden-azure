@@ -1,0 +1,110 @@
+{
+    "$schema":  "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion":  "1.0.0.0",
+    "parameters":  {
+                       "location":  {
+                                        "value":  "germanywestcentral"
+                                    },
+                       "environment":  {
+                                           "value":  "prod"
+                                       },
+                       "appName":  {
+                                       "value":  "vaulttherm"
+                                   },
+                       "domainUrl":  {
+                                         "value":  "https://vault.thermosun.de"
+                                     },
+                       "customHostname":  {
+                                              "value":  "vault.thermosun.de"
+                                          },
+                       "mailRootDomain":  {
+                                              "value":  "thermosun.de"
+                                          },
+                       "smtpUseAuth":  {
+                                           "value":  false
+                                       },
+                       "smtpFrom":  {
+                                        "value":  "vaultwarden@thermosun.de"
+                                    },
+                       "smtpFromName":  {
+                                            "value":  "Vaultwarden"
+                                        },
+                       "edgeMode":  {
+                                        "value":  "none"
+                                    },
+                       "enableIngressIpRestrictions":  {
+                                                           "value":  false
+                                                       },
+                       "ingressAllowedCidrs":  {
+                                                   "value":  [
+
+                                                             ]
+                                               },
+                       "orgCreationUsers":  {
+                                                "value":  ""
+                                            },
+                       "ssoEnabled":  {
+                                          "value":  false
+                                      },
+                       "acsDomainName":  {
+                                             "value":  ""
+                                         },
+                       "allowAzureServicesToPostgres":  {
+                                                            "value":  true
+                                                        },
+                       "pushInstallationId":  {
+                                                  "value":  ""
+                                              },
+                       "storageAccountSku":  {
+                                                 "value":  "Standard_LRS"
+                                             },
+                       "postgresSkuName":  {
+                                               "value":  "Standard_B1ms"
+                                           },
+                       "acsDataLocation":  {
+                                               "value":  "Germany"
+                                           },
+                       "ssoOnly":  {
+                                       "value":  false
+                                   },
+                       "adminPanelEnabled":  {
+                                                 "value":  true
+                                             },
+                       "invitationOrgName":  {
+                                                 "value":  "thermosun.de"
+                                             },
+                       "diagnosticsEnabled":  {
+                                                  "value":  true
+                                              },
+                       "ssoAuthority":  {
+                                            "value":  ""
+                                        },
+                       "postgresBackupRetentionDays":  {
+                                                           "value":  14
+                                                       },
+                       "ssoClientId":  {
+                                           "value":  ""
+                                       },
+                       "ssoScopes":  {
+                                         "value":  "openid profile email offline_access User.Read"
+                                     },
+                       "signupsDomainsWhitelist":  {
+                                                       "value":  "thermosun.de"
+                                                   },
+                       "acsDeployFoundation":  {
+                                                   "value":  false
+                                               },
+                       "allowInsecureHttp":  {
+                                                 "value":  false
+                                             },
+                       "pushUseEuServers":  {
+                                                "value":  false
+                                            },
+                       "pushEnabled":  {
+                                           "value":  false
+                                       },
+                       "postgresStorageGB":  {
+                                                 "value":  32
+                                             }
+                   }
+}
