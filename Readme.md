@@ -67,6 +67,14 @@ Diese Schritte erfordern DNS-Propagation und externe Verifikation und können ni
 
 ---
 
+## Architektur-Überblick
+
+![Vaultwarden on Azure Container Apps – Baseline Architecture](./docs/diagrams/vaultwarden-aca-architecture.svg)
+
+Detaillierte Beschreibung der Ressourcen, Datenflüsse und Designentscheidungen: [docs/architecture.md](./docs/architecture.md)
+
+---
+
 ## Was `main.json` deployt
 
 ### Immer enthalten
