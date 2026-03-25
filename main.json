@@ -424,7 +424,7 @@
     "kvSecretDbAppPasswordName": "vw-db-app-password",
     "logAnalyticsName": "[format('{0}-law', parameters('appName'))]",
     "containerEnvName": "[format('{0}-env', parameters('appName'))]",
-    "keyVaultName": "[toLower(format('vwkv{0}', substring(uniqueString(resourceGroup().id, parameters('appName')), 0, 20)))]",
+    "keyVaultName": "[toLower(format('vwkv{0}', uniqueString(resourceGroup().id, parameters('appName'))))]",
     "kvSecretAdminTokenName": "vw-admin-token",
     "kvSecretDatabaseUrlName": "vw-database-url",
     "kvSecretSmtpPasswordName": "vw-smtp-password",
