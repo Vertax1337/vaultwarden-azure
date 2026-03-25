@@ -32,8 +32,17 @@ Der Grund ist in beiden Fällen derselbe: DNS-/Verifikations-Schritte erzeugen e
 
 ---
 
+## Architektur-Überblick
+
+![Vaultwarden on Azure Container Apps – Baseline Architecture](./docs/diagrams/vaultwarden-aca-architecture.svg)
+
+Detaillierte Beschreibung der Ressourcen, Datenflüsse und Designentscheidungen: [docs/architecture.md](./docs/architecture.md)
+
+---
+
 ## Dokumentation
 
+- [Architektur-Dokumentation](./docs/architecture.md)
 - [Vaultwarden – How to Use (BSSE)](./docs/HowToUse/HowToUse.pdf)
 - [Operations Playbook / Runbook](./docs/HowToInstall/Operation-Playbook.md)
 
