@@ -6,6 +6,31 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 5 – 2026-03-25
+
+### Parameter
+
+| Änderung | Detail |
+|---|---|
+| `domainUrl` – `minLength: 9` hinzugefügt | Verhindert leere oder zu kurze Werte auf ARM-Ebene (Minimum für `https://x`). |
+
+### Deployment Script – Input-Validierung erweitert
+
+| Prüfung | Detail |
+|---|---|
+| `domainUrl` muss mit `https://` beginnen | Script bricht mit Fehlermeldung ab, wenn das Präfix fehlt. |
+| `ssoEnabled=true` → Pflichtparameter | `ssoAuthority`, `ssoClientId` und `ssoClientSecret` müssen gesetzt sein. |
+| `pushEnabled=true` → Pflichtparameter | `pushInstallationId` und `pushInstallationKey` müssen gesetzt sein. |
+
+### Deployment Script – Umgebungsvariablen
+
+| Variable | Typ | Zweck |
+|---|---|---|
+| `SSO_AUTHORITY_INPUT` | value | Weiterleitung von `ssoAuthority` an das Script für Eingabevalidierung |
+| `SSO_CLIENT_ID_INPUT` | value | Weiterleitung von `ssoClientId` an das Script für Eingabevalidierung |
+
+---
+
 ## Revision 4 – 2026-03-25
 
 ### Bugfix
