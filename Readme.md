@@ -135,10 +135,13 @@ DNS-Verifikation, Domain-Linking und SMTP-Username bleiben manuelle Post-Deploy-
 
 | Dokument | Inhalt |
 |---|---|
-| [Operations Playbook / Runbook](./docs/HowToInstall/Operation-Playbook.md) | Go-Live, Mail (SMTP Auth / Direct Send / ACS), SSO, Push, Update/Upgrade, Observability, Backup/Recovery, Troubleshooting, Parameter-Referenz |
+| [Operations Playbook / Runbook](./docs/HowToInstall/Operation-Playbook.md) | Go-Live, Mail (SMTP Auth / Direct Send / ACS), SSO, Push, Update/Upgrade, Observability, Backup/Recovery, Troubleshooting |
+| [Architektur-Referenz](./docs/architecture.md) | Detaillierte Architektur, Tradeoffs, Härtungsstufen, Redeploy-Verhalten |
+| [Parameter-Referenz](./docs/reference/parameters.md) | Vollständige Parameterliste mit ENV-Mapping |
 | [Vaultwarden – How to Use (BSSE)](./docs/HowToUse/HowToUse.pdf) | Endbenutzer-Anleitung |
 | [Changelog `main.json`](./docs/changes.md) | Revisioniertes Änderungsprotokoll |
 | [Gehärtete Defaults](./README.HARDENED.md) | Produktionsgehärtete Standardwerte im Template |
+| [Quellen](./docs/reference/sources.md) | Geprüfte Quellenlinks (ACS, M365, Bitwarden/Vaultwarden) |
 | [Beispiel-Parameterdateien](./examples/parameters/) | Szenariospezifische Vorlagen (M365, SSO, Push, ACS) |
 
 ### Beispiel-Parameterdateien
@@ -164,8 +167,11 @@ Alle Dateien enthalten **nur Platzhalterwerte** und müssen vor dem produktiven 
 | `main.json` | Primäres ARM-Deployment-Template (alle Ressourcen) |
 | `main.bicep` | ⚠️ Ältere Bicep-Referenz – **nicht gepflegt**, nicht für Deployments verwenden |
 | `scripts/deploy.ps1` | Optionaler PowerShell-Wrapper für CLI-basiertes Deployment |
+| `docs/architecture.md` | Detaillierte Architektur, Tradeoffs, Härtungsstufen |
 | `docs/HowToInstall/Operation-Playbook.md` | Betriebshandbuch (24 Abschnitte) |
 | `docs/HowToUse/` | Endbenutzer-Dokumentation (PDF + Markdown) |
+| `docs/operations/` | Navigationsseiten zu Playbook-Abschnitten (Runbook, Troubleshooting, Upgrades, SMTP/ACS) |
+| `docs/reference/` | Parameter-Referenz und Quellen |
 | `docs/changes.md` | Changelog für `main.json` |
 | `examples/parameters/` | Parameterdatei-Vorlagen für typische Szenarien |
 | `README.HARDENED.md` | Gehärtete Defaults |
@@ -180,7 +186,7 @@ Das revisionierte Änderungsprotokoll aller Änderungen an `main.json` befindet 
 
 ## Quellen
 
-Die verlinkten Aussagen in README und Playbook wurden zuletzt **am 2026-03-20 16:02 CET** gegengeprüft. Die vollständige Quellenliste steht im [Operations Playbook §24](./docs/HowToInstall/Operation-Playbook.md#24-quellen).
+Die verlinkten Aussagen in README und Playbook wurden zuletzt **am 2026-03-20 16:02 CET** gegengeprüft. Die vollständige Quellenliste steht in [docs/reference/sources.md](./docs/reference/sources.md) und im [Operations Playbook §24](./docs/HowToInstall/Operation-Playbook.md#24-quellen).
 
 Wichtigste Referenzen:
 - [Bitwarden: Installation ID & Key](https://bitwarden.com/host/)
