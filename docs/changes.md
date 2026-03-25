@@ -6,6 +6,17 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 8 – 2026-03-25
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| Readme.md – „Wann dieses Template nicht geeignet ist" | Neuer Abschnitt: klare Abgrenzung, für welche Szenarien das Template nicht passt (Enterprise-Isolation, WAF-Pflicht, Multi-Region, >500 Nutzer). |
+| Readme.md – „Bekannte Tradeoffs" | Neuer Abschnitt: konsolidierte Übersicht aller bewussten Architektur-Tradeoffs (Netzwerk, HA, WAF, Storage, Admin-Panel). |
+
+---
+
 ## Revision 7 – 2026-03-25
 
 ### Deployment Script – Input-Validierung erweitert

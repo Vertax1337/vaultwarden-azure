@@ -41,6 +41,19 @@ Azure Container Apps im Consumption Plan bietet **keine feste Outbound-IP**. Das
 
 Der Default `allowAzureServicesToPostgres=true` ist für Consumption-Plan-ACA erforderlich. Er öffnet PostgreSQL für alle Azure-Dienste (nicht das öffentliche Internet) – ein akzeptabler Tradeoff für KMU-Einsatz. Für weitergehende Einschränkung siehe [Härtungsstufen](#härtungsstufen-optional).
 
+### Wann dieses Template **nicht** geeignet ist
+
+| Anforderung | Warum nicht passend | Alternative |
+|---|---|---|
+| VNet-Isolation ist Pflicht (z. B. durch Unternehmensrichtlinie) | Die Baseline nutzt Consumption-Plan-ACA ohne VNet. Private Endpoints sind nicht enthalten. | [Härtungsstufe 2](#stufe-2-enterprise-härtung) oder eigenes Template |
+| WAF / DDoS-Schutz ist compliancepflichtig | Kein Application Gateway oder Front Door im Default-Deploy | Eigenes Template mit Azure Front Door + WAF |
+| Hochverfügbarkeit / Multi-Region | ACA läuft mit einem einzelnen Replikat in einer Region | Azure-native Multi-Region-Architektur mit Traffic Manager |
+| Feste Outbound-IP für SMTP-Drittanbieter | Consumption-Plan-ACA hat dynamische Outbound-IPs | [Härtungsstufe 1](#stufe-1-fester-egress--postgresql-einschränkung) mit NAT Gateway |
+| Mehr als ~500 Nutzer oder sehr hoher Durchsatz | Burstable B1ms PostgreSQL und ein einzelnes ACA-Replikat sind für KMU-Größe dimensioniert | Größerer PostgreSQL-Tier und ACA Workload Profiles |
+| Strenge Compliance (SOC 2, ISO 27001) mit Audit-Anforderung an Netzwerk-Isolation | Öffentlicher PostgreSQL-Zugriff und fehlende Private Endpoints genügen nicht | Enterprise-Architektur mit Private Endpoints und NSGs |
+
+> **Kurzregel:** Wenn du „Application Gateway", „Private Endpoints" oder „Multi-Region" brauchst, ist dieses Template der falsche Startpunkt. Es ist bewusst für **einfache, kostengünstige KMU-Deployments** gebaut.
+
 ## Deploy
 
 Es gibt bewusst **nur einen** Deploy-Pfad. Alles, was sauber automatisierbar ist, steckt in `main.json`.
@@ -526,6 +539,20 @@ Dieses Repository deployt eine **Baseline-Architektur**, die für KMU-Produktive
 > **Hinweis:** Jede Stufe erhöht die betriebliche Komplexität. Abwägen, ob die zusätzliche Sicherheit die Kosten und den Verwaltungsaufwand für die eigene Organisation rechtfertigt.
 
 ---
+
+## Bekannte Tradeoffs
+
+Diese Tradeoffs sind **bewusste Architekturentscheidungen** für den KMU-Fokus dieses Templates:
+
+| Tradeoff | Entscheidung | Auswirkung | Mitigation |
+|---|---|---|---|
+| Kein VNet / Keine Private Endpoints | ACA Consumption Plan, öffentlicher PostgreSQL-Zugriff | Backend-Dienste sind nicht netzwerkisoliert | `AllowAzureServices`-Firewallregel; Härtungsstufe 2 für Private Endpoints |
+| Keine feste Outbound-IP | ACA Consumption Plan hat dynamische Egress-IPs | PostgreSQL-Firewall kann ACA nicht spezifisch einschränken; SMTP-Drittanbieter ggf. nicht nutzbar | Microsoft 365 / ACS SMTP verwenden; Härtungsstufe 1 für NAT Gateway |
+| Keine WAF | Kein Application Gateway oder Front Door | Kein Request-Filtering am Edge | ACA HTTPS-Ingress + Vaultwarden-internes Rate Limiting; Härtungsstufe 2 für WAF |
+| Einzelnes Replikat | ACA läuft mit `maxReplicas: 1` | Kein HA, kurzer Ausfall bei ACA-Neustarts | Für KMU-Größe akzeptabel; `liveness`-/`readiness`-Probes sorgen für automatischen Restart |
+| Einzelne Region | Kein Multi-Region-Setup | Kein Disaster Recovery in eine andere Region | Azure-Files-Backup + PostgreSQL-PITR für Restore-in-Place |
+| Azure Files statt Managed Disk | Vaultwarden benötigt ein beschreibbares Volume | Azure Files ist kein transaktionaler Store; Backup-Zeitpunkt kann von PostgreSQL abweichen | Restore-Drills durchführen; Dokumentation im Operations Playbook |
+| Admin-Panel überschreibt ENV | `/data/config.json` persistiert UI-Änderungen über Redeployments | Im Admin-UI gespeicherte Werte haben Vorrang vor Template-Parametern | Admin-Panel nach Bootstrap deaktivieren (`adminPanelEnabled=false`) |
 
 ## Bekannte Einschränkungen und offene Risiken
 
