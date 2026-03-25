@@ -1,0 +1,6 @@
+[
+  "tests/test_repo_contract.py::RepoContractTests::test_generate_only_basic_customer_files",
+  "tests/test_repo_contract.py::RepoContractTests::test_generate_only_cloudflare_customer_files",
+  "tests/test_repo_contract.py::RepoContractTests::test_main_json_has_dual_mode_parameters",
+  "tests/test_repo_contract.py::RepoContractTests::test_powershell_scripts_parse"
+]

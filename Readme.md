@@ -46,7 +46,12 @@ Diese bewussten Tradeoffs sind im Abschnitt [Bekannte Tradeoffs und Härtungsstu
 
 ## Deploy
 
-Es gibt bewusst **nur einen** Deploy-Pfad. Alles, was sauber automatisierbar ist, steckt in `main.json`.
+Es gibt jetzt bewusst **zwei** Deploy-Pfade:
+
+1. **Basic Mode / Azure-only** über den bestehenden **Deploy-to-Azure-Button**
+2. **Production Mode / Cloudflare-managed** über den neuen **Wizard `scripts/Invoke-CustomerDeployment.ps1`**
+
+Der Basic Mode bleibt der einfache Azure-Pfad ohne Cloudflare-Automatisierung. Der Production Mode erzeugt unter `customers/<kunde>/...` eine Kundenkonfiguration, generiert daraus die Azure-Parameterdatei, deployt `main.json` und konfiguriert danach Cloudflare per API.
 
 [![Deploy to Azure (ARM JSON)](
 https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/1-CONTRIBUTION-GUIDE/images/deploytoazure.svg?sanitize=true
@@ -58,12 +63,23 @@ https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.github
 
 Für ein lokales Deployment ohne GitHub-Hosting: Azure Portal → **Benutzerdefinierte Vorlage bereitstellen** → **Eigene Vorlage im Editor erstellen** und `main.json` einfügen.
 
-**Bewusst manuell nachgelagerte Schritte:**
-- ACA Custom Domain + TLS-Zertifikatsbindung
+**Basic Mode (Deploy-to-Azure-Button):**
+- Azure-only
+- kein Cloudflare
+- Custom Domain / TLS für ACA bleibt manuell
+
+**Production Mode (Wizard / Wrapper):**
+- `scripts/Invoke-CustomerDeployment.ps1`
+- erzeugt `customers/<kunde>/deployment.config.json`
+- generiert `customers/<kunde>/azure.parameters.json`
+- Azure-Deploy + Cloudflare-DNS/SSL/WAF/Rate-Limits + optionaler Origin-Lockdown
+
+**Bewusst manuell oder extern bleibende Themen:**
 - ACS DNS-Verifikation der E-Mail-Domain
 - ACS Domain-Linking + SMTP-Username
+- echte produktive Secrets sollten nicht in Git eingecheckt werden
 
-Diese Schritte erfordern DNS-Propagation und externe Verifikation und können nicht zuverlässig in einem einzelnen Deployment automatisiert werden. Sie sind im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) dokumentiert.
+Diese Schritte und die neue Trennung zwischen Basic-/Production-Mode sind im [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md) dokumentiert.
 
 ---
 
@@ -173,6 +189,10 @@ Alle Dateien enthalten **nur Platzhalterwerte** und müssen vor dem produktiven 
 | Pfad | Beschreibung |
 |---|---|
 | `main.json` | Primäres ARM-Deployment-Template (alle Ressourcen) |
+| `customers/<kunde>/...` | Kundenbezogene Konfiguration, generierte Azure-Parameterdatei und Deploy-Artefakte für den Wizard-Pfad |
+| `scripts/Invoke-CustomerDeployment.ps1` | Interaktiver Wizard / Wrapper für den produktiven Cloudflare-Pfad |
+| `scripts/Set-CloudflareZoneConfig.ps1` | Cloudflare DNS / SSL / WAF / Rate-Limit API-Orchestrierung |
+| `scripts/Bind-AcaCustomDomain.ps1` | Origin-Zertifikat erzeugen, hochladen und ACA-Hostname binden |
 | `main.bicep` | ⚠️ Ältere Bicep-Referenz – **nicht gepflegt**, nicht für Deployments verwenden |
 | `scripts/deploy.ps1` | Optionaler PowerShell-Wrapper für CLI-basiertes Deployment |
 | `docs/architecture.md` | Detaillierte Architektur, Tradeoffs, Härtungsstufen |
