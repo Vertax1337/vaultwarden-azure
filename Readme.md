@@ -252,6 +252,7 @@ Die vollständigen manuellen Schritte stehen im [Operations Playbook](./docs/How
    - Nach dem Bootstrap das Admin-Panel deaktivieren und prüfen, dass keine veralteten Werte persistiert sind
 
 7. **SSO / OIDC Hinweise**
+   - `ssoOnly=true` erfordert `ssoEnabled=true`. Das Deployment bricht mit einer Fehlermeldung ab, wenn `ssoOnly` ohne aktives SSO gesetzt wird.
    - `SSO_ONLY=true` deaktiviert den Master-Passwort-Login vollständig. SSO vorher gründlich testen.
    - Die OIDC-Callback-URL wird aus `DOMAIN` abgeleitet: `https://<domain>/identity/connect/oidc-signin`
    - Bei Entra ID die Redirect-URI in der App Registration hinterlegen.

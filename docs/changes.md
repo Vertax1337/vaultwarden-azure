@@ -6,6 +6,28 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 6 – 2026-03-25
+
+### Deployment Script – Input-Validierung erweitert
+
+| Prüfung | Detail |
+|---|---|
+| `ssoOnly=true` → `ssoEnabled=true` Pflicht | Script bricht mit Fehlermeldung ab, wenn `ssoOnly=true` ohne `ssoEnabled=true` gesetzt ist. |
+
+### Deployment Script – Umgebungsvariablen
+
+| Variable | Typ | Zweck |
+|---|---|---|
+| `SSO_ONLY` | value | Weiterleitung von `ssoOnly` an das Script für Eingabevalidierung |
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| Readme.md – SSO-Hinweise | Guardrail `ssoOnly=true` → `ssoEnabled=true` dokumentiert |
+
+---
+
 ## Revision 5 – 2026-03-25
 
 ### Parameter
