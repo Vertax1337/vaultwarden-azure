@@ -138,6 +138,8 @@ Wenn `acsDeployFoundation = true`, deployt `main.json` zusätzlich:
 
 Damit ist die Grundinfrastruktur vorhanden. **Nicht** automatisiert sind DNS-Verifikation, Domain-Linking und SMTP-Username-Erstellung.
 
+> **Hinweis:** Wenn `acsDeployFoundation = true` gesetzt ist, aber weder `acsDomainName` noch `mailRootDomain` angegeben wird, werden die ACS-Ressourcen **nicht** deployt. Das Deployment gibt in diesem Fall eine explizite **WARNING**-Meldung aus.
+
 ### Bewusst **nicht** automatisiert
 - ACA Custom Domain / Zertifikatsbindung
 - ACS Domain-Verifikation

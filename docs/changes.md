@@ -6,6 +6,29 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 7 – 2026-03-25
+
+### Deployment Script – Input-Validierung erweitert
+
+| Prüfung | Detail |
+|---|---|
+| `acsDeployFoundation=true` ohne Domain | WARNING im Output, wenn weder `acsDomainName` noch `mailRootDomain` gesetzt ist. ACS-Ressourcen werden in diesem Fall nicht deployt. |
+
+### Deployment Script – Umgebungsvariablen
+
+| Variable | Typ | Zweck |
+|---|---|---|
+| `ACS_DEPLOY_FOUNDATION` | value | Weiterleitung von `acsDeployFoundation` an das Script für ACS-Warnung |
+| `ACS_DOMAIN_NAME` | value | Weiterleitung von `acsDomainName` an das Script für ACS-Warnung |
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| Readme.md – ACS Foundation | Hinweis ergänzt: WARNING bei fehlendem `acsDomainName` / `mailRootDomain` |
+
+---
+
 ## Revision 6 – 2026-03-25
 
 ### Deployment Script – Input-Validierung erweitert
