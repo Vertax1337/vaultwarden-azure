@@ -6,6 +6,16 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 10 – 2026-03-25
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| Operation-Playbook.md – Vollständige Überarbeitung | Komplettes Playbook redaktionell überarbeitet: saubere H1/H2/H3-Hierarchie, Inhaltsverzeichnis, Einleitung mit Zweck und Zielgruppe, konsistente deutsche Sprache (englische Fragmente übersetzt), neue Abschnitte „Voraussetzungen", „Manuelle Nacharbeiten", „Observability und Troubleshooting" (Log-Quellen, Quick Triage, KQL), „Vaultwarden-Update und Upgrade" (Image-Tag-Strategie, Downtime, Rollback), „Regelbetrieb und Prüfroutine", „Wann dieses Setup nicht geeignet ist". Screenshot-/Bild-Platzhalter an sinnvollen Stellen ergänzt. Checklisten und Tabellen für bessere Übersicht. |
+
+---
+
 ## Revision 9 – 2026-03-25
 
 ### Dokumentation
