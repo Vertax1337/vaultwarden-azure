@@ -6,6 +6,22 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 
 ---
 
+## Revision 4 – 2026-03-25
+
+### Bugfix
+
+| Änderung | Detail |
+|---|---|
+| `useAcsFoundation` – Guard gegen leere Domain | Die Variable prüft jetzt zusätzlich, ob `acsDomainNameEffective` nicht leer ist (`and(acsDeployFoundation, not(empty(acsDomainNameEffective)))`). Vorher konnte `acsDeployFoundation=true` mit leeren `acsDomainName` **und** `mailRootDomain` dazu führen, dass ACS-Ressourcen mit einem leeren Domainnamen deployt wurden und das Deployment fehlschlug. |
+
+### Verhalten
+
+- `acsDeployFoundation=true` + Domain gesetzt → ACS wird deployt (wie bisher)
+- `acsDeployFoundation=true` + keine Domain → ACS wird **nicht** deployt (neu: kein Fehlerpfad mehr)
+- `acsDeployFoundation=false` → ACS wird nicht deployt (unverändert)
+
+---
+
 ## Revision 3 – 2026-03-25
 
 ### Parameter

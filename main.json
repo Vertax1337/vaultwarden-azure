@@ -597,7 +597,7 @@
     "vwEnvOptional": "[concat(if(empty(parameters('invitationOrgName')), json('[]'), createArray(createObject('name','INVITATION_ORG_NAME','value', parameters('invitationOrgName')))), if(empty(parameters('signupsDomainsWhitelist')), json('[]'), createArray(createObject('name','SIGNUPS_DOMAINS_WHITELIST','value', parameters('signupsDomainsWhitelist')))), if(empty(parameters('orgCreationUsers')), json('[]'), createArray(createObject('name','ORG_CREATION_USERS','value', parameters('orgCreationUsers')))))]",
     "vwEnvAdminToken": "[if(parameters('adminPanelEnabled'), createArray(createObject('name','ADMIN_TOKEN','secretRef','admin-token')), json('[]'))]",
     "vwEnvSmtpAuthMechanism": "[if(or(not(parameters('smtpUseAuth')), empty(parameters('smtpAuthMechanism'))), json('[]'), createArray(createObject('name','SMTP_AUTH_MECHANISM','value', parameters('smtpAuthMechanism'))))]",
-    "useAcsFoundation": "[parameters('acsDeployFoundation')]",
+    "useAcsFoundation": "[and(parameters('acsDeployFoundation'), not(empty(variables('acsDomainNameEffective'))))]",
     "acsEmailServiceName": "[toLower(format('{0}-email-{1}', parameters('appName'), substring(uniqueString(resourceGroup().id), 0, 6)))]",
     "acsDomainNameEffective": "[if(empty(parameters('acsDomainName')), variables('mailRootDomainEffective'), toLower(parameters('acsDomainName')))]",
     "acsCommunicationServiceName": "[toLower(format('{0}-acs-{1}', parameters('appName'), substring(uniqueString(resourceGroup().id), 0, 6)))]",
