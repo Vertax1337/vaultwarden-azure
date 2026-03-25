@@ -12,7 +12,7 @@ Dieses Dokument ist das operative Betriebshandbuch (Runbook) für Deployment, Go
 
 1. [Zielbild und Komponentenübersicht](#1-zielbild-und-komponentenübersicht)
 2. [Voraussetzungen](#2-voraussetzungen)
-3. [Deployment-Ablauf](#3-deployment-ablauf)
+3. [Deployment-Modi und Ablauf](#3-deployment-modi-und-ablauf)
 4. [Manuelle Nacharbeiten vor Go-Live](#4-manuelle-nacharbeiten-vor-go-live)
 5. [Go-Live-Checkliste](#5-go-live-checkliste)
 6. [Smoke-Tests](#6-smoke-tests)
@@ -76,9 +76,11 @@ Vor dem ersten Deployment müssen folgende Voraussetzungen erfüllt sein:
 
 ---
 
-## 3. Deployment-Ablauf
+## 3. Deployment-Modi und Ablauf
 
-### 3.1 Standard-Ablauf (ohne ACS)
+### 3.1 Basic Mode (Deploy-to-Azure / Azure-only)
+
+Dieser Pfad bleibt der einfachste Einstieg:
 
 1. `main.json` deployen (`adminPanelEnabled=true`, Default)
 2. `domainUrl` prüfen
@@ -88,9 +90,24 @@ Vor dem ersten Deployment müssen folgende Voraussetzungen erfüllt sein:
 6. `main.json` erneut mit `adminPanelEnabled=false` deployen
 7. Produktiv schalten
 
-### 3.2 Ablauf mit ACS Foundation
+### 3.2 Production Mode (Wizard / Cloudflare-managed)
 
-1. `main.json` mit `acsDeployFoundation=true` deployen (`adminPanelEnabled=true`, Default)
+Empfohlener produktiver Pfad für kundenfähige Deployments:
+
+1. `scripts/Invoke-CustomerDeployment.ps1` starten
+2. Kundenkonfiguration unter `customers/<kunde>/deployment.config.json` erzeugen oder laden
+3. `customers/<kunde>/azure.parameters.json` generieren
+4. Azure-Deployment mit `main.json` ausführen
+5. Cloudflare per API konfigurieren (CNAME, TXT, SSL strict, WAF, Rate Limit)
+6. Cloudflare-Origin-CA-Zertifikat erzeugen und in ACA hochladen
+7. Hostname an ACA binden
+8. Optional: ACA-Ingress auf Cloudflare-IP-Ranges einschränken (zweiter ARM-Apply)
+
+### 3.3 ACS Foundation
+
+ACS bleibt auch im neuen Modell ein separater Nachgang:
+
+1. `main.json` mit `acsDeployFoundation=true` deployen
 2. Deployment-Outputs für ACS notieren
 3. DNS für ACS setzen (auch bei Microsoft-365-gehosteter Zone im M365 Admin Center)
 4. ACS-Domain verifizieren
