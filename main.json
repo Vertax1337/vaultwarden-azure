@@ -16,22 +16,35 @@
         "description": "Azure region for all resources"
       }
     },
+    "environment": {
+      "type": "string",
+      "defaultValue": "prod",
+      "allowedValues": [
+        "prod",
+        "test",
+        "dev"
+      ],
+      "metadata": {
+        "description": "Kosten/Zuordnung: Umgebung (prod/test/dev)"
+      }
+    },
+    "bsseRef": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Traceability: BSSE Deploy-Ref (z.B. Git Tag oder Commit SHA)"
+      }
+    },
     "appName": {
       "type": "string",
-      "defaultValue": "vaultwarden",
+      "defaultValue": "vault",
       "metadata": {
         "description": "Name of the Vaultwarden Container App"
       }
     },
-    "domainUrl": {
-      "type": "string",
-      "metadata": {
-        "description": "Public URL of your Vaultwarden instance. MUST include https:// (example: https://sub.domain.tld)"
-      }
-    },
     "vaultwardenImage": {
       "type": "string",
-      "defaultValue": "vaultwarden/server:1.33.2",
+      "defaultValue": "vaultwarden/server:1.35.3-alpine",
       "metadata": {
         "description": "Container image to use for Vaultwarden (pin a version for reproducible deployments)"
       }
@@ -57,11 +70,94 @@
         "description": "Allow insecure HTTP traffic (recommended: false for production)"
       }
     },
+    "diagnosticsEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Azure Monitor diagnostic settings for Key Vault and PostgreSQL Flexible Server (Log Analytics)."
+      }
+    },
+    "deploymentScriptForceUpdateTag": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Optional forceUpdateTag for the bootstrap deploymentScript. Change this value to force a controlled rerun without changing app settings."
+      }
+    },
+    "domainUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "Public URL of your Vaultwarden instance. MUST include https:// (example: https://sub.domain.tld)"
+      }
+    },
+    "adminPanelEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Vaultwarden ADMIN_TOKEN als App-ENV setzen. Default true fuer Erstdeployment/Bootstrap/Tests. Fuer den produktiven Steady State nach erfolgreichem Setup auf false setzen, damit ADMIN_TOKEN nicht mehr an die App durchgereicht wird. Achtung: Falls admin_token bereits in /data/config.json persistiert wurde, dort ebenfalls entfernen, sonst bleibt das Admin-Panel aktiv."
+      }
+    },
+    "invitationOrgName": {
+      "type": "string",
+      "defaultValue": "Vaultwarden",
+      "metadata": {
+        "description": "Vaultwarden ENV: INVITATION_ORG_NAME. Organization name shown in invitation mails."
+      }
+    },
+    "signupsDomainsWhitelist": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Vaultwarden ENV: SIGNUPS_DOMAINS_WHITELIST. Comma-separated email domains allowed to self-register."
+      }
+    },
+    "orgCreationUsers": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Vaultwarden ENV: ORG_CREATION_USERS. Optional comma-separated user emails allowed to create organizations. Empty = all users."
+      }
+    },
+    "mailRootDomain": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Explizite Root-Domain f\u00fcr Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter f\u00fcr Direct Send ohne expliziten smtpHost, f\u00fcr ACS Foundation ohne explizites acsDomainName und f\u00fcr den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
+      }
+    },
+    "smtpUseAuth": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig f\u00fcr Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json m\u00fcssen bei einem Moduswechsel ggf. separat bereinigt werden."
+      }
+    },
+    "smtpFrom": {
+      "type": "string",
+      "metadata": {
+        "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). F\u00fcr Produktion explizit setzen."
+      },
+      "defaultValue": ""
+    },
+    "smtpFromName": {
+      "type": "string",
+      "defaultValue": "Vaultwarden",
+      "metadata": {
+        "description": "Anzeigename im From-Header."
+      }
+    },
+    "heloName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Vaultwarden ENV: HELO_NAME. Empty = derive host name from DOMAIN / domainUrl."
+      }
+    },
     "smtpHost": {
       "type": "string",
-      "defaultValue": "smtp.office365.com",
+      "defaultValue": "",
       "metadata": {
-        "description": "SMTP host (M365 default: smtp.office365.com)"
+        "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschlie\u00dflich auf mailRootDomain. F\u00fcr den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und l\u00e4sst SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."
       }
     },
     "smtpPort": {
@@ -83,56 +179,124 @@
         "description": "SMTP security (starttls / force_tls / off)"
       }
     },
-    "smtpFrom": {
-      "type": "string",
-      "metadata": {
-        "description": "SMTP FROM address (e.g. vaultwarden@domain.tld)"
-      }
-    },
     "smtpUsername": {
       "type": "string",
       "metadata": {
         "description": "SMTP username (often same as smtpFrom)"
-      }
+      },
+      "defaultValue": ""
     },
     "smtpPassword": {
       "type": "securestring",
       "metadata": {
         "description": "SMTP password"
-      }
+      },
+      "defaultValue": ""
     },
-    "dbAdminUser": {
+    "smtpAuthMechanism": {
       "type": "string",
-      "defaultValue": "vaultwarden",
+      "defaultValue": "",
       "metadata": {
-        "description": "PostgreSQL admin username"
-      }
+        "description": "Optional (nur SMTP Auth): SMTP Auth Mechanism. M\u00f6gliche Werte u.a.: Plain, Login, Xoauth2 (auch kommasepariert)."
+      },
+      "allowedValues": [
+        "",
+        "Plain",
+        "Login",
+        "Xoauth2",
+        "Plain,Login",
+        "Login,Plain"
+      ]
     },
-    "dbPassword": {
-      "type": "securestring",
-      "metadata": {
-        "description": "PostgreSQL admin password (will be stored in Key Vault for later retrieval)"
-      }
-    },
-    "postgresSkuName": {
-      "type": "string",
-      "defaultValue": "Standard_B1ms",
-      "metadata": {
-        "description": "PostgreSQL SKU name"
-      }
-    },
-    "postgresStorageGB": {
-      "type": "int",
-      "defaultValue": 32,
-      "metadata": {
-        "description": "PostgreSQL storage size in GB"
-      }
-    },
-    "allowAzureServicesToPostgres": {
+    "ssoEnabled": {
       "type": "bool",
       "defaultValue": false,
       "metadata": {
-        "description": "Allow Azure services to access PostgreSQL (0.0.0.0 firewall rule). Recommended: false."
+        "description": "Enable Vaultwarden SSO (OIDC) for Web Vault login (requires Vaultwarden >= 1.35)."
+      }
+    },
+    "ssoOnly": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "If true, only SSO login is allowed (no email/password). Use with care."
+      }
+    },
+    "ssoAuthority": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OIDC authority/issuer base URL. For Entra ID use https://login.microsoftonline.com/<TENANT_ID>/v2.0 and do not append /.well-known/openid-configuration."
+      }
+    },
+    "ssoClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "OIDC Client ID / Application (client) ID."
+      }
+    },
+    "ssoClientSecret": {
+      "type": "securestring",
+      "metadata": {
+        "description": "OIDC Client Secret / App secret value."
+      },
+      "defaultValue": ""
+    },
+    "ssoScopes": {
+      "type": "string",
+      "defaultValue": "openid profile email offline_access User.Read",
+      "metadata": {
+        "description": "OIDC scopes passed to Vaultwarden. For Entra ID the default openid profile email offline_access User.Read is recommended."
+      }
+    },
+    "pushEnabled": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable mobile push notifications (requires Bitwarden push relay credentials)."
+      }
+    },
+    "pushInstallationId": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Bitwarden push installation id (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
+      }
+    },
+    "pushInstallationKey": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Bitwarden push installation key (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
+      },
+      "defaultValue": ""
+    },
+    "pushUseEuServers": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Use Bitwarden EU push relay / identity endpoints. Select this only when the Installation ID / Key were requested for the EU region."
+      }
+    },
+    "acsDeployFoundation": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Optional: deploy Azure Communication Services foundation resources (Email Service, Email Domain resource, Communication Service) together with the core stack. Domain verification, domain linking and SMTP username activation remain manual post-deploy steps."
+      }
+    },
+    "acsDataLocation": {
+      "type": "string",
+      "defaultValue": "Germany",
+      "metadata": {
+        "description": "ACS data location for Email Service and Communication Service, e.g. Germany, Europe or UnitedStates. Email Service and Communication Service must use the same geography."
+      }
+    },
+    "acsDomainName": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Custom domain to prepare in ACS Email, e.g. example.com. Leer = verwende mailRootDomain. Es gibt keine automatische Ableitung mehr aus domainUrl."
       }
     },
     "storageAccountSku": {
@@ -149,22 +313,295 @@
       "metadata": {
         "description": "Storage account SKU for Azure Files"
       }
+    },
+    "azureFilesBackupEnabled": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Enable Azure Backup for the Azure File Share used by Vaultwarden (/data)."
+      }
+    },
+    "azureFilesBackupScheduleRunTime": {
+      "type": "string",
+      "defaultValue": "05:30",
+      "metadata": {
+        "description": "Time of day (HH:MM) when backup should run. MM must be 00 or 30."
+      }
+    },
+    "azureFilesBackupTimeZone": {
+      "type": "string",
+      "defaultValue": "UTC",
+      "metadata": {
+        "description": "Windows timezone name for the backup schedule, e.g. UTC, W. Europe Standard Time."
+      }
+    },
+    "azureFilesBackupDailyRetentionDays": {
+      "type": "int",
+      "defaultValue": 30,
+      "metadata": {
+        "description": "Number of days to retain daily Azure Files backups."
+      }
+    },
+    "azureFilesBackupWeeklyDaysOfWeek": {
+      "type": "array",
+      "defaultValue": [
+        "Sunday",
+        "Tuesday",
+        "Thursday"
+      ],
+      "metadata": {
+        "description": "Days of week used for weekly retention points."
+      }
+    },
+    "azureFilesBackupWeeklyRetentionWeeks": {
+      "type": "int",
+      "defaultValue": 12,
+      "metadata": {
+        "description": "Number of weeks to retain weekly Azure Files backups."
+      }
+    },
+    "postgresSkuName": {
+      "type": "string",
+      "defaultValue": "Standard_B1ms",
+      "metadata": {
+        "description": "PostgreSQL SKU name"
+      }
+    },
+    "postgresStorageGB": {
+      "type": "int",
+      "defaultValue": 32,
+      "metadata": {
+        "description": "PostgreSQL storage size in GB"
+      }
+    },
+    "postgresBackupRetentionDays": {
+      "type": "int",
+      "defaultValue": 14,
+      "minValue": 7,
+      "maxValue": 35,
+      "metadata": {
+        "description": "Point-in-time restore retention in Tagen f\u00fcr PostgreSQL Flexible Server."
+      }
+    },
+    "allowAzureServicesToPostgres": {
+      "type": "bool",
+      "defaultValue": true,
+      "metadata": {
+        "description": "Allow Azure services to access PostgreSQL (0.0.0.0 firewall rule). Recommended: true for Container Apps without VNet/NAT."
+      }
+    },
+    "dbAdminUser": {
+      "type": "string",
+      "defaultValue": "vaultwarden",
+      "metadata": {
+        "description": "Azure PostgreSQL Flexible Server administrator login. Required for server creation and initial bootstrap only; not used by the Vaultwarden app itself."
+      }
+    },
+    "dbPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "Azure PostgreSQL Flexible Server administrator password. Required for server creation and initial bootstrap only; not stored in Key Vault and not used as Vaultwarden app credential."
+      },
+      "defaultValue": "[concat(toUpper(newGuid()), newGuid())]"
     }
   },
   "variables": {
+    "templateLinkUri": "[if(contains(deployment().properties,'templateLink'), if(contains(deployment().properties.templateLink,'uri'), deployment().properties.templateLink.uri, ''), '')]",
+    "templateLinkRefRaw": "[if(contains(variables('templateLinkUri'), 'raw.githubusercontent.com'), split(variables('templateLinkUri'), '/')[5], variables('templateLinkUri'))]",
+    "bsseRefRaw": "[if(empty(parameters('bsseRef')), if(empty(variables('templateLinkRefRaw')), 'local', variables('templateLinkRefRaw')), parameters('bsseRef'))]",
+    "bsseRefEffective": "[if(empty(variables('bsseRefRaw')), '', substring(variables('bsseRefRaw'), 0, min(length(variables('bsseRefRaw')), 256)))]",
+    "commonTags": "[createObject('Environment', parameters('environment'), 'bsse:ref', variables('bsseRefEffective'))]",
     "storageAccountName": "[toLower(format('{0}files{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
     "fileShareName": "vaultwarden",
     "postgresServerName": "[toLower(format('{0}-pg-{1}', parameters('appName'), uniqueString(resourceGroup().id)))]",
     "postgresDbName": "vaultwarden",
     "postgresFqdn": "[format('{0}.postgres.database.azure.com', variables('postgresServerName'))]",
     "postgresPort": "5432",
+    "dbAppUser": "vw_app",
+    "kvSecretDbAppPasswordName": "vw-db-app-password",
     "logAnalyticsName": "[format('{0}-law', parameters('appName'))]",
     "containerEnvName": "[format('{0}-env', parameters('appName'))]",
-    "keyVaultName": "[toLower(format('vwkv{0}', uniqueString(resourceGroup().id)))]",
+    "keyVaultName": "[toLower(format('vwkv{0}', substring(uniqueString(resourceGroup().id, parameters('appName')), 0, 20)))]",
     "kvSecretAdminTokenName": "vw-admin-token",
-    "kvSecretDbPasswordName": "vw-db-password",
+    "kvSecretDatabaseUrlName": "vw-database-url",
+    "kvSecretSmtpPasswordName": "vw-smtp-password",
     "roleKeyVaultSecretsOfficer": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'b86a8fe4-44ce-4948-aee5-eccb2c155cd7')]",
-    "roleKeyVaultSecretsUser": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]"
+    "roleKeyVaultSecretsUser": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '4633458b-17de-408a-b874-0445c86b69e6')]",
+    "domainHostDefault": "[split(variables('domainHostWithPortDefault'),':')[0]]",
+    "vwEnvBase": [
+      {
+        "name": "DATABASE_URL",
+        "secretRef": "database-url"
+      },
+      {
+        "name": "DOMAIN",
+        "value": "[parameters('domainUrl')]"
+      },
+      {
+        "name": "EMAIL_2FA_AUTO_FALLBACK",
+        "value": "false"
+      },
+      {
+        "name": "HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS",
+        "value": "true"
+      },
+      {
+        "name": "INVITATIONS_ALLOWED",
+        "value": "true"
+      },
+      {
+        "name": "SHOW_PASSWORD_HINT",
+        "value": "false"
+      },
+      {
+        "name": "SIGNUPS_ALLOWED",
+        "value": "false"
+      }
+    ],
+    "vwEnvSmtpCommon": [
+      {
+        "name": "SMTP_FROM",
+        "value": "[if(empty(parameters('smtpFrom')), if(empty(variables('mailRootDomainEffective')), '', format('vault@{0}', variables('mailRootDomainEffective'))), parameters('smtpFrom'))]"
+      },
+      {
+        "name": "SMTP_FROM_NAME",
+        "value": "[parameters('smtpFromName')]"
+      },
+      {
+        "name": "HELO_NAME",
+        "value": "[if(empty(parameters('heloName')), variables('domainHostDefault'), parameters('heloName'))]"
+      },
+      {
+        "name": "SMTP_PORT",
+        "value": "[if(parameters('smtpUseAuth'), string(parameters('smtpPort')), '25')]"
+      },
+      {
+        "name": "SMTP_SECURITY",
+        "value": "[if(parameters('smtpUseAuth'), parameters('smtpSecurity'), 'starttls')]"
+      }
+    ],
+    "vwEnvSmtpAuthCore": [
+      {
+        "name": "SMTP_USERNAME",
+        "value": "[parameters('smtpUsername')]"
+      },
+      {
+        "name": "SMTP_PASSWORD",
+        "secretRef": "smtp-password"
+      }
+    ],
+    "vwSecretsBase": [
+      {
+        "name": "admin-token",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretAdminTokenName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      },
+      {
+        "name": "database-url",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretDatabaseUrlName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      }
+    ],
+    "vwSecretsSmtp": [
+      {
+        "name": "smtp-password",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretSmtpPasswordName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      }
+    ],
+    "recoveryServicesVaultName": "[format('{0}-rsv', variables('namePrefix'))]",
+    "azureFilesBackupFabric": "Azure",
+    "azureFilesBackupManagementType": "AzureStorage",
+    "azureFilesBackupPolicyName": "[format('{0}-afiles-daily', variables('namePrefix'))]",
+    "azureFilesBackupScheduleRunTimes": [
+      "[format('2020-01-01T{0}:00Z', parameters('azureFilesBackupScheduleRunTime'))]"
+    ],
+    "azureFilesBackupTimeZone": "[parameters('azureFilesBackupTimeZone')]",
+    "azureFilesBackupDailyRetentionDurationCount": "[parameters('azureFilesBackupDailyRetentionDays')]",
+    "azureFilesBackupDaysOfTheWeek": "[parameters('azureFilesBackupWeeklyDaysOfWeek')]",
+    "azureFilesBackupWeeklyRetentionDurationCount": "[parameters('azureFilesBackupWeeklyRetentionWeeks')]",
+    "namePrefix": "[toLower(format('{0}{1}', parameters('appName'), substring(uniqueString(resourceGroup().id),0,6)))]",
+    "deploymentScriptName": "[format('{0}-ensure-kv-secrets', parameters('appName'))]",
+    "deploymentScriptApiVersion": "2023-08-01",
+    "kvSecretSsoClientSecretName": "sso-client-secret",
+    "kvSecretPushInstallationKeyName": "push-installation-key",
+    "vwSecretsSso": [
+      {
+        "name": "sso-client-secret",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretSsoClientSecretName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      }
+    ],
+    "vwSecretsPush": [
+      {
+        "name": "push-installation-id",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretPushInstallationIdName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      },
+      {
+        "name": "push-installation-key",
+        "keyVaultUrl": "[format('https://{0}.vault.azure.net/secrets/{1}', variables('keyVaultName'), variables('kvSecretPushInstallationKeyName'))]",
+        "identity": "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName')))]"
+      }
+    ],
+    "vwEnvSso": [
+      {
+        "name": "SSO_ENABLED",
+        "value": "true"
+      },
+      {
+        "name": "SSO_ONLY",
+        "value": "[toLower(string(parameters('ssoOnly')))]"
+      },
+      {
+        "name": "SSO_AUTHORITY",
+        "value": "[parameters('ssoAuthority')]"
+      },
+      {
+        "name": "SSO_SCOPES",
+        "value": "[parameters('ssoScopes')]"
+      },
+      {
+        "name": "SSO_CLIENT_ID",
+        "value": "[parameters('ssoClientId')]"
+      },
+      {
+        "name": "SSO_CLIENT_SECRET",
+        "secretRef": "sso-client-secret"
+      }
+    ],
+    "vwEnvPush": [
+      {
+        "name": "PUSH_ENABLED",
+        "value": "true"
+      },
+      {
+        "name": "PUSH_INSTALLATION_ID",
+        "secretRef": "push-installation-id"
+      },
+      {
+        "name": "PUSH_INSTALLATION_KEY",
+        "secretRef": "push-installation-key"
+      },
+      {
+        "name": "PUSH_RELAY_URI",
+        "value": "[if(parameters('pushUseEuServers'), 'https://api.bitwarden.eu', 'https://api.bitwarden.com')]"
+      },
+      {
+        "name": "PUSH_IDENTITY_URI",
+        "value": "[if(parameters('pushUseEuServers'), 'https://identity.bitwarden.eu', 'https://identity.bitwarden.com')]"
+      }
+    ],
+    "vwEnvOptional": "[concat(if(empty(parameters('invitationOrgName')), json('[]'), createArray(createObject('name','INVITATION_ORG_NAME','value', parameters('invitationOrgName')))), if(empty(parameters('signupsDomainsWhitelist')), json('[]'), createArray(createObject('name','SIGNUPS_DOMAINS_WHITELIST','value', parameters('signupsDomainsWhitelist')))), if(empty(parameters('orgCreationUsers')), json('[]'), createArray(createObject('name','ORG_CREATION_USERS','value', parameters('orgCreationUsers')))))]",
+    "vwEnvAdminToken": "[if(parameters('adminPanelEnabled'), createArray(createObject('name','ADMIN_TOKEN','secretRef','admin-token')), json('[]'))]",
+    "vwEnvSmtpAuthMechanism": "[if(or(not(parameters('smtpUseAuth')), empty(parameters('smtpAuthMechanism'))), json('[]'), createArray(createObject('name','SMTP_AUTH_MECHANISM','value', parameters('smtpAuthMechanism'))))]",
+    "useAcsFoundation": "[parameters('acsDeployFoundation')]",
+    "acsEmailServiceName": "[toLower(format('{0}-email-{1}', parameters('appName'), substring(uniqueString(resourceGroup().id), 0, 6)))]",
+    "acsDomainNameEffective": "[if(empty(parameters('acsDomainName')), variables('mailRootDomainEffective'), toLower(parameters('acsDomainName')))]",
+    "acsCommunicationServiceName": "[toLower(format('{0}-acs-{1}', parameters('appName'), substring(uniqueString(resourceGroup().id), 0, 6)))]",
+    "domainHostWithPortDefault": "[split(replace(replace(parameters('domainUrl'),'https://',''),'http://',''),'/')[0]]",
+    "mailRootDomainEffective": "[toLower(parameters('mailRootDomain'))]",
+    "kvSecretPushInstallationIdName": "push-installation-id"
   },
   "resources": [
     {
@@ -174,7 +611,8 @@
       "location": "[parameters('location')]",
       "properties": {
         "retentionInDays": 30
-      }
+      },
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.Storage/storageAccounts",
@@ -189,7 +627,8 @@
         "allowBlobPublicAccess": false,
         "minimumTlsVersion": "TLS1_2",
         "supportsHttpsTrafficOnly": true
-      }
+      },
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.Storage/storageAccounts/fileServices",
@@ -223,24 +662,27 @@
         },
         "enableRbacAuthorization": true,
         "enabledForDeployment": false,
-        "enabledForTemplateDeployment": true,
+        "enabledForTemplateDeployment": false,
         "enabledForDiskEncryption": false,
         "publicNetworkAccess": "Enabled",
         "softDeleteRetentionInDays": 90,
         "enablePurgeProtection": true
-      }
+      },
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[format('{0}-id', parameters('appName'))]",
-      "location": "[parameters('location')]"
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
       "apiVersion": "2023-01-31",
       "name": "[format('{0}-kv-writer-id', parameters('appName'))]",
-      "location": "[parameters('location')]"
+      "location": "[parameters('location')]",
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.Authorization/roleAssignments",
@@ -285,9 +727,9 @@
         }
       },
       "properties": {
-        "azCliVersion": "2.60.0",
+        "azCliVersion": "2.81.0",
         "timeout": "PT30M",
-        "retentionInterval": "P1D",
+        "retentionInterval": "P7D",
         "cleanupPreference": "OnSuccess",
         "environmentVariables": [
           {
@@ -299,25 +741,126 @@
             "value": "[variables('kvSecretAdminTokenName')]"
           },
           {
-            "name": "DB_PASSWORD_SECRET",
-            "value": "[variables('kvSecretDbPasswordName')]"
+            "name": "SMTP_PASSWORD_SECRET",
+            "value": "[variables('kvSecretSmtpPasswordName')]"
           },
           {
-            "name": "DB_PASSWORD_VALUE",
+            "name": "SMTP_PASSWORD_VALUE",
+            "secureValue": "[parameters('smtpPassword')]"
+          },
+          {
+            "name": "DATABASE_URL_SECRET",
+            "value": "[variables('kvSecretDatabaseUrlName')]"
+          },
+          {
+            "name": "POSTGRES_FQDN",
+            "value": "[variables('postgresFqdn')]"
+          },
+          {
+            "name": "POSTGRES_PORT",
+            "value": "[string(variables('postgresPort'))]"
+          },
+          {
+            "name": "POSTGRES_DBNAME",
+            "value": "[variables('postgresDbName')]"
+          },
+          {
+            "name": "DB_ADMIN_USER",
+            "value": "[parameters('dbAdminUser')]"
+          },
+          {
+            "name": "TLS_SSLMODE",
+            "value": "require"
+          },
+          {
+            "name": "POSTGRES_SERVER_NAME",
+            "value": "[variables('postgresServerName')]"
+          },
+          {
+            "name": "DB_ADMIN_PASSWORD",
             "secureValue": "[parameters('dbPassword')]"
+          },
+          {
+            "name": "DB_APP_USER",
+            "value": "[variables('dbAppUser')]"
+          },
+          {
+            "name": "DB_APP_PASSWORD_SECRET",
+            "value": "[variables('kvSecretDbAppPasswordName')]"
+          },
+          {
+            "name": "UAMI_CLIENT_ID",
+            "value": "[reference(resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), '2018-11-30').clientId]"
+          },
+          {
+            "name": "RESOURCE_GROUP_NAME",
+            "value": "[resourceGroup().name]"
+          },
+          {
+            "name": "SMTP_FROM_INPUT",
+            "value": "[parameters('smtpFrom')]"
+          },
+          {
+            "name": "SMTP_USE_AUTH",
+            "value": "[string(parameters('smtpUseAuth'))]"
+          },
+          {
+            "name": "SMTP_HOST_INPUT",
+            "value": "[parameters('smtpHost')]"
+          },
+          {
+            "name": "DOMAIN_URL",
+            "value": "[parameters('domainUrl')]"
+          },
+          {
+            "name": "SSO_ENABLED",
+            "value": "[string(parameters('ssoEnabled'))]"
+          },
+          {
+            "name": "SSO_CLIENT_SECRET_SECRET",
+            "value": "[variables('kvSecretSsoClientSecretName')]"
+          },
+          {
+            "name": "SSO_CLIENT_SECRET_VALUE",
+            "secureValue": "[parameters('ssoClientSecret')]"
+          },
+          {
+            "name": "PUSH_ENABLED",
+            "value": "[string(parameters('pushEnabled'))]"
+          },
+          {
+            "name": "PUSH_INSTALLATION_ID_SECRET",
+            "value": "[variables('kvSecretPushInstallationIdName')]"
+          },
+          {
+            "name": "PUSH_INSTALLATION_ID_VALUE",
+            "secureValue": "[parameters('pushInstallationId')]"
+          },
+          {
+            "name": "PUSH_INSTALLATION_KEY_SECRET",
+            "value": "[variables('kvSecretPushInstallationKeyName')]"
+          },
+          {
+            "name": "PUSH_INSTALLATION_KEY_VALUE",
+            "secureValue": "[parameters('pushInstallationKey')]"
+          },
+          {
+            "name": "SMTP_USERNAME_INPUT",
+            "value": "[parameters('smtpUsername')]"
+          },
+          {
+            "name": "MAIL_ROOT_DOMAIN",
+            "value": "[parameters('mailRootDomain')]"
           }
         ],
-        "scriptContent": "set -euo pipefail\n\necho \"Ensuring Key Vault secrets exist in $KEYVAULT_NAME ...\"\n\n# --- ADMIN_TOKEN ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"ADMIN_TOKEN secret already exists.\"\n  ADMIN_TOKEN=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --query value -o tsv)\nelse\n  echo \"Creating ADMIN_TOKEN secret...\"\n  ADMIN_TOKEN=$(python3 - << 'PY'\nimport secrets, base64\nprint(base64.urlsafe_b64encode(secrets.token_bytes(48)).decode('utf-8').rstrip('='))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --value \"$ADMIN_TOKEN\" 1>/dev/null\n  echo \"ADMIN_TOKEN secret created.\"\nfi\n\n# --- DB password ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"DB password secret already exists.\"\n  DB_PASSWORD=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --query value -o tsv)\nelse\n  echo \"Creating DB password secret...\"\n  DB_PASSWORD=\"$DB_PASSWORD_VALUE\"\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DB_PASSWORD_SECRET\" --value \"$DB_PASSWORD\" 1>/dev/null\n  echo \"DB password secret created.\"\nfi\n\n# Write deployment script outputs (used by Bicep to set Container App secrets)\ncat > \"$AZ_SCRIPTS_OUTPUT_PATH\" <<JSON\n{\n  \"adminToken\": \"$ADMIN_TOKEN\",\n  \"dbPassword\": \"$DB_PASSWORD\"\n}\nJSON\n\necho \"Done.\"\n"
+        "scriptContent": "set -euo pipefail\n\necho \"[vault-ensure-kv-secrets] ensuring Key Vault secrets exist in $KEYVAULT_NAME ...\"\n\n# Ensure we are authenticated (deploymentScripts should use the assigned managed identity, but harden against missing session)\nif ! az account show 1>/dev/null 2>/dev/null; then\n  echo \"[vault-ensure-kv-secrets] az account not available - logging in with managed identity\"\n  if [ -n \"${UAMI_CLIENT_ID:-}\" ]; then\n    az login --identity --client-id \"$UAMI_CLIENT_ID\" 1>/dev/null\n  else\n    az login --identity 1>/dev/null\n  fi\nfi\n\n# ------------------------------------------------------------\n# Input validation\n# ------------------------------------------------------------\nif [ \"${SMTP_USE_AUTH:-false}\" = \"true\" ]; then\n  if [ -z \"${SMTP_USERNAME_INPUT:-}\" ]; then\n    echo \"[vault-ensure-kv-secrets] ERROR: smtpUseAuth=true requires smtpUsername.\"\n    exit 1\n  fi\n  if [ -z \"${SMTP_PASSWORD_VALUE:-}\" ]; then\n    echo \"[vault-ensure-kv-secrets] ERROR: smtpUseAuth=true requires smtpPassword.\"\n    exit 1\n  fi\nfi\n\nif [ -z \"${SMTP_FROM_INPUT:-}\" ] && [ -z \"${MAIL_ROOT_DOMAIN:-}\" ]; then\n  echo \"[vault-ensure-kv-secrets] ERROR: Either smtpFrom or mailRootDomain must be set.\"\n  echo \"[vault-ensure-kv-secrets] Auto-generating SMTP_FROM from domainUrl is intentionally no longer supported.\"\n  exit 1\nfi\n\nif [ \"${SMTP_USE_AUTH:-false}\" != \"true\" ] && [ -z \"${SMTP_HOST_INPUT:-}\" ] && [ -z \"${MAIL_ROOT_DOMAIN:-}\" ]; then\n  echo \"[vault-ensure-kv-secrets] ERROR: Direct Send without explicit smtpHost requires mailRootDomain.\"\n  exit 1\nfi\n\nWAIT_RETRIES=\"${WAIT_RETRIES:-60}\"\nWAIT_SLEEP_SECONDS=\"${WAIT_SLEEP_SECONDS:-10}\"\nexport WAIT_RETRIES WAIT_SLEEP_SECONDS\n\nPG_CLI_BASE=(az postgres flexible-server execute -g \"$RESOURCE_GROUP_NAME\" -n \"$POSTGRES_SERVER_NAME\" -u \"$DB_ADMIN_USER\" -p \"$DB_ADMIN_PASSWORD\")\n\necho \"[vault-ensure-kv-secrets] waiting for Key Vault permissions...\"\nfor i in $(seq 1 \"$WAIT_RETRIES\"); do\n  if az keyvault secret list --vault-name \"$KEYVAULT_NAME\" --maxresults 1 1>/dev/null 2>/dev/null; then\n    echo \"[vault-ensure-kv-secrets] Key Vault access OK\"\n    break\n  fi\n  echo \"[vault-ensure-kv-secrets] Key Vault access not ready yet ($i/$WAIT_RETRIES), sleeping ${WAIT_SLEEP_SECONDS}s...\"\n  sleep \"$WAIT_SLEEP_SECONDS\"\n  if [ \"$i\" -eq \"$WAIT_RETRIES\" ]; then\n    echo \"[vault-ensure-kv-secrets] ERROR: Key Vault permissions not ready after $((WAIT_RETRIES*WAIT_SLEEP_SECONDS))s\"\n    exit 1\n  fi\ndone\n\n# ------------------------------------------------------------\n# Wait for PostgreSQL to accept connections\n# ------------------------------------------------------------\necho \"[vault-ensure-kv-secrets] waiting for PostgreSQL connectivity...\"\nfor i in $(seq 1 \"$WAIT_RETRIES\"); do\n  if \"${PG_CLI_BASE[@]}\" -d postgres -q \"SELECT 1\" 1>/dev/null 2>/dev/null; then\n    echo \"[vault-ensure-kv-secrets] PostgreSQL reachable\"\n    break\n  fi\n  echo \"[vault-ensure-kv-secrets] PostgreSQL not ready yet ($i/$WAIT_RETRIES), sleeping ${WAIT_SLEEP_SECONDS}s...\"\n  sleep \"$WAIT_SLEEP_SECONDS\"\n  if [ \"$i\" -eq \"$WAIT_RETRIES\" ]; then\n    echo \"[vault-ensure-kv-secrets] ERROR: PostgreSQL not reachable after $((WAIT_RETRIES*WAIT_SLEEP_SECONDS))s\"\n    exit 1\n  fi\ndone\n\n# ------------------------------------------------------------\n# Secrets in Key Vault\n# ------------------------------------------------------------\n\n# --- ADMIN_TOKEN ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"ADMIN_TOKEN secret already exists.\"\nelse\n  echo \"Creating ADMIN_TOKEN secret...\"\n  ADMIN_TOKEN=$(python3 - << 'PY'\nimport secrets, base64\nprint(base64.urlsafe_b64encode(secrets.token_bytes(48)).decode('utf-8').rstrip('='))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$ADMIN_TOKEN_SECRET\" --value \"$ADMIN_TOKEN\" 1>/dev/null\n  echo \"ADMIN_TOKEN secret created.\"\nfi\n\n# --- SMTP password ---\nif [ \"${SMTP_USE_AUTH:-false}\" = \"true\" ]; then\n  CURRENT_SMTP_PASSWORD=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$SMTP_PASSWORD_SECRET\" --query value -o tsv 2>/dev/null || echo \"\")\n  if [ -z \"$CURRENT_SMTP_PASSWORD\" ] || [ \"$CURRENT_SMTP_PASSWORD\" != \"$SMTP_PASSWORD_VALUE\" ]; then\n    echo \"Setting SMTP password secret...\"\n    az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$SMTP_PASSWORD_SECRET\" --value \"$SMTP_PASSWORD_VALUE\" 1>/dev/null\n    echo \"SMTP password secret set.\"\n  else\n    echo \"SMTP password secret already up to date.\"\n  fi\nelse\n  echo \"SMTP auth disabled (Direct Send). Skipping SMTP password secret.\"\nfi\n\n# --- SSO client secret (OIDC) ---\nif [ \"${SSO_ENABLED:-false}\" = \"true\" ]; then\n  CURRENT_SSO_SECRET=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$SSO_CLIENT_SECRET_SECRET\" --query value -o tsv 2>/dev/null || echo \"\")\n  if [ -z \"$CURRENT_SSO_SECRET\" ] || [ \"$CURRENT_SSO_SECRET\" != \"$SSO_CLIENT_SECRET_VALUE\" ]; then\n    echo \"Setting SSO client secret...\"\n    az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$SSO_CLIENT_SECRET_SECRET\" --value \"$SSO_CLIENT_SECRET_VALUE\" 1>/dev/null\n    echo \"SSO client secret set.\"\n  else\n    echo \"SSO client secret already up to date.\"\n  fi\nelse\n  echo \"SSO disabled. Skipping SSO client secret.\"\nfi\n\n# --- Push installation id / key (Bitwarden push relay) ---\nif [ \"${PUSH_ENABLED:-false}\" = \"true\" ]; then\n  CURRENT_PUSH_ID=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$PUSH_INSTALLATION_ID_SECRET\" --query value -o tsv 2>/dev/null || echo \"\")\n  if [ -z \"$CURRENT_PUSH_ID\" ] || [ \"$CURRENT_PUSH_ID\" != \"$PUSH_INSTALLATION_ID_VALUE\" ]; then\n    echo \"Setting Push installation id...\"\n    az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$PUSH_INSTALLATION_ID_SECRET\" --value \"$PUSH_INSTALLATION_ID_VALUE\" 1>/dev/null\n    echo \"Push installation id set.\"\n  else\n    echo \"Push installation id already up to date.\"\n  fi\nelse\n  echo \"Push notifications disabled. Skipping Push installation id.\"\nfi\n\n# --- Push installation key (Bitwarden push relay) ---\nif [ \"${PUSH_ENABLED:-false}\" = \"true\" ]; then\n  CURRENT_PUSH_KEY=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$PUSH_INSTALLATION_KEY_SECRET\" --query value -o tsv 2>/dev/null || echo \"\")\n  if [ -z \"$CURRENT_PUSH_KEY\" ] || [ \"$CURRENT_PUSH_KEY\" != \"$PUSH_INSTALLATION_KEY_VALUE\" ]; then\n    echo \"Setting Push installation key...\"\n    az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$PUSH_INSTALLATION_KEY_SECRET\" --value \"$PUSH_INSTALLATION_KEY_VALUE\" 1>/dev/null\n    echo \"Push installation key set.\"\n  else\n    echo \"Push installation key already up to date.\"\n  fi\nelse\n  echo \"Push notifications disabled. Skipping Push installation key.\"\nfi\n\n# --- App DB password (least-privilege user for Vaultwarden) ---\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_APP_PASSWORD_SECRET\" 1>/dev/null 2>/dev/null; then\n  echo \"App DB password secret already exists.\"\n  DB_APP_PASSWORD=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DB_APP_PASSWORD_SECRET\" --query value -o tsv)\nelse\n  echo \"Creating App DB password secret...\"\n  DB_APP_PASSWORD=$(python3 - << 'PY'\nimport secrets\nprint(secrets.token_urlsafe(32))\nPY\n)\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DB_APP_PASSWORD_SECRET\" --value \"$DB_APP_PASSWORD\" 1>/dev/null\n  echo \"App DB password secret created.\"\nfi\n\nexport DB_APP_PASSWORD=\"$DB_APP_PASSWORD\"\nSQL_TMP_DIR=$(mktemp -d)\nexport SQL_TMP_DIR\ntrap 'rm -rf \"$SQL_TMP_DIR\"' EXIT\n\n# ------------------------------------------------------------\n# Provision least-privilege role & grants (idempotent)\n# ------------------------------------------------------------\necho \"Provisioning Postgres role '$DB_APP_USER' and database privileges (idempotent) ...\"\npython3 - <<'PY'\nimport os\nfrom pathlib import Path\n\ndef qident(s: str) -> str:\n    return '\"' + s.replace('\"', '\"\"') + '\"'\n\ndef qlit(s: str) -> str:\n    return \"'\" + s.replace(\"'\", \"''\") + \"'\"\n\napp_user = os.environ['DB_APP_USER']\napp_pw = os.environ['DB_APP_PASSWORD']\ndb_name = os.environ['POSTGRES_DBNAME']\nout_dir = Path(os.environ['SQL_TMP_DIR'])\n\nadmin_sql = f'''DO $$\nBEGIN\n  IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = {qlit(app_user)}) THEN\n    CREATE ROLE {qident(app_user)} LOGIN PASSWORD {qlit(app_pw)};\n  END IF;\nEND\n$$;\n\nALTER ROLE {qident(app_user)} WITH LOGIN PASSWORD {qlit(app_pw)} NOCREATEDB NOCREATEROLE NOINHERIT;\nGRANT CONNECT ON DATABASE {qident(db_name)} TO {qident(app_user)};\n'''\n\ndb_sql = f'GRANT USAGE, CREATE ON SCHEMA public TO {qident(app_user)};\\n'\n\n(out_dir / 'bootstrap-admin.sql').write_text(admin_sql)\n(out_dir / 'bootstrap-db.sql').write_text(db_sql)\nPY\n\n\"${PG_CLI_BASE[@]}\" -d postgres -f \"$SQL_TMP_DIR/bootstrap-admin.sql\" 1>/dev/null\n\"${PG_CLI_BASE[@]}\" -d \"$POSTGRES_DBNAME\" -f \"$SQL_TMP_DIR/bootstrap-db.sql\" 1>/dev/null\necho \"Postgres provisioning done.\"\n\n# ------------------------------------------------------------\n# DATABASE_URL (PostgreSQL connection string for Vaultwarden)\n# ------------------------------------------------------------\nENCODED_APP_PASSWORD=$(python3 - << 'PY'\nimport os, urllib.parse\nprint(urllib.parse.quote(os.environ.get(\"DB_APP_PASSWORD\",\"\"), safe=\"\"))\nPY\n)\n\nDATABASE_URL=\"postgresql://${DB_APP_USER}:${ENCODED_APP_PASSWORD}@${POSTGRES_FQDN}:${POSTGRES_PORT}/${POSTGRES_DBNAME}?sslmode=${TLS_SSLMODE}\"\n\nif az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DATABASE_URL_SECRET\" 1>/dev/null 2>/dev/null; then\n  CURRENT_DBURL=$(az keyvault secret show --vault-name \"$KEYVAULT_NAME\" --name \"$DATABASE_URL_SECRET\" --query value -o tsv || echo \"\")\n  if echo \"$CURRENT_DBURL\" | grep -qiE '^postgres(ql)?://'; then\n    if echo \"$CURRENT_DBURL\" | grep -q \"://${DB_ADMIN_USER}:\"; then\n      echo \"DATABASE_URL currently uses admin user; updating to app user...\"\n      az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DATABASE_URL_SECRET\" --value \"$DATABASE_URL\" 1>/dev/null\n      echo \"DATABASE_URL secret updated.\"\n    else\n      echo \"DATABASE_URL secret already exists and looks valid.\"\n    fi\n  else\n    echo \"DATABASE_URL secret exists but looks invalid; updating to PostgreSQL URL...\"\n    az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DATABASE_URL_SECRET\" --value \"$DATABASE_URL\" 1>/dev/null\n    echo \"DATABASE_URL secret updated.\"\n  fi\nelse\n  echo \"Creating DATABASE_URL secret...\"\n  az keyvault secret set --vault-name \"$KEYVAULT_NAME\" --name \"$DATABASE_URL_SECRET\" --value \"$DATABASE_URL\" 1>/dev/null\n  echo \"DATABASE_URL secret created.\"\nfi\n\n# ------------------------------------------------------------\n# SMTP host resolution (Direct Send without auth)\n# ------------------------------------------------------------\n# Default behavior:\n# - SMTP Auth: smtp.office365.com (unless SMTP_HOST_INPUT is set)\n# - Direct Send: resolve MX of MAIL_ROOT_DOMAIN (unless SMTP_HOST_INPUT is set)\n\nMX_HOST=\"\"\nif [ \"${SMTP_USE_AUTH:-false}\" = \"true\" ]; then\n  if [ -n \"${SMTP_HOST_INPUT:-}\" ]; then\n    MX_HOST=\"${SMTP_HOST_INPUT}\"\n  else\n    MX_HOST=\"smtp.office365.com\"\n  fi\nelse\n  if [ -n \"${SMTP_HOST_INPUT:-}\" ]; then\n    MX_HOST=\"${SMTP_HOST_INPUT}\"\n  else\n    BASE_DOMAIN=\"$(printf '%s' \"${MAIL_ROOT_DOMAIN:-}\" | tr '[:upper:]' '[:lower:]' | xargs)\"\n    if [ -z \"${BASE_DOMAIN}\" ]; then\n      echo \"[vault-ensure-kv-secrets] ERROR: Direct Send without explicit smtpHost requires mailRootDomain.\"\n      exit 1\n    fi\n    echo \"[vault-ensure-kv-secrets] Resolving MX for ${BASE_DOMAIN} ...\"\n\n    if command -v dig 1>/dev/null 2>/dev/null; then\n      MX_HOST=$(dig +short MX \"${BASE_DOMAIN}\" | python3 - <<'PY'\nimport sys\nbest=None\nfor line in sys.stdin:\n    line=line.strip()\n    if not line:\n        continue\n    parts=line.split()\n    if len(parts) < 2:\n        continue\n    try:\n        pref=int(parts[0])\n    except Exception:\n        continue\n    host=parts[1].rstrip('.')\n    if best is None or pref < best[0]:\n        best=(pref,host)\nif best:\n    print(best[1])\nPY\n)\n    elif command -v nslookup 1>/dev/null 2>/dev/null; then\n      MX_HOST=$(nslookup -type=mx \"${BASE_DOMAIN}\" 2>/dev/null | python3 - <<'PY'\nimport sys, re\nbest=None\npat=re.compile(r'preference\\s*=\\s*(\\d+)\\s*,\\s*mail exchanger\\s*=\\s*(\\S+)')\nfor line in sys.stdin:\n    m=pat.search(line)\n    if not m:\n        continue\n    pref=int(m.group(1))\n    host=m.group(2).rstrip('.')\n    if best is None or pref < best[0]:\n        best=(pref,host)\nif best:\n    print(best[1])\nPY\n)\n    else\n      echo \"[vault-ensure-kv-secrets] ERROR: Neither dig nor nslookup is available for Direct Send MX lookup.\"\n      echo \"[vault-ensure-kv-secrets] Provide smtpHost explicitly when smtpUseAuth=false.\"\n      exit 1\n    fi\n\n    if [ -z \"${MX_HOST}\" ]; then\n      echo \"[vault-ensure-kv-secrets] ERROR: MX lookup returned empty for ${BASE_DOMAIN}. Provide smtpHost override (parameter 'smtpHost') for Direct Send.\"\n      exit 1\n    fi\n  fi\nfi\necho \"[vault-ensure-kv-secrets] SMTP host resolved: ${MX_HOST}\"\n\ncat > \"$AZ_SCRIPTS_OUTPUT_PATH\" <<JSON\n{\n  \"status\": \"ok\",\n  \"smtp_host\": \"${MX_HOST}\"\n}\nJSON\n\necho \"Done.\"\n",
+        "forceUpdateTag": "[parameters('deploymentScriptForceUpdateTag')]"
       },
-      "dependsOn": [
-        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
-        "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), variables('roleKeyVaultSecretsOfficer')))]",
-        "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName')))]"
-      ]
+      "dependsOn": "[concat(createArray(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), variables('roleKeyVaultSecretsOfficer'))), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName')), resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('postgresServerName'), variables('postgresDbName'))), if(parameters('allowAzureServicesToPostgres'), createArray(resourceId('Microsoft.DBforPostgreSQL/flexibleServers/firewallRules', variables('postgresServerName'), 'AllowAzure')), json('[]')))]"
     },
     {
       "type": "Microsoft.DBforPostgreSQL/flexibleServers",
-      "apiVersion": "2023-03-01-preview",
+      "apiVersion": "2024-08-01",
       "name": "[variables('postgresServerName')]",
       "location": "[parameters('location')]",
       "sku": {
@@ -336,9 +879,10 @@
           "activeDirectoryAuth": "Disabled"
         },
         "backup": {
-          "backupRetentionDays": 7
+          "backupRetentionDays": "[parameters('postgresBackupRetentionDays')]"
         }
-      }
+      },
+      "tags": "[variables('commonTags')]"
     },
     {
       "condition": "[parameters('allowAzureServicesToPostgres')]",
@@ -377,7 +921,8 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
-      ]
+      ],
+      "tags": "[variables('commonTags')]"
     },
     {
       "type": "Microsoft.App/managedEnvironments/storages",
@@ -393,7 +938,8 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.App/managedEnvironments', variables('containerEnvName'))]",
-        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('fileShareName'))]"
       ]
     },
     {
@@ -415,24 +961,8 @@
             "targetPort": 80,
             "allowInsecure": "[parameters('allowInsecureHttp')]"
           },
-          "secrets": [
-            {
-              "name": "admin-token",
-              "value": "[string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.adminToken)]"
-            },
-            {
-              "name": "db-password",
-              "value": "[string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.dbPassword)]"
-            },
-            {
-              "name": "smtp-password",
-              "value": "[parameters('smtpPassword')]"
-            },
-            {
-              "name": "database-url",
-              "value": "[format('postgresql://{0}:{1}@{2}:{3}/{4}?sslmode=require', parameters('dbAdminUser'), string(reference(resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName'))), '2023-08-01').outputs.dbPassword), variables('postgresFqdn'), variables('postgresPort'), variables('postgresDbName'))]"
-            }
-          ]
+          "secrets": "[concat(variables('vwSecretsBase'), if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), json('[]')), if(parameters('ssoEnabled'), variables('vwSecretsSso'), json('[]')), if(parameters('pushEnabled'), variables('vwSecretsPush'), json('[]')))]",
+          "activeRevisionsMode": "Single"
         },
         "template": {
           "containers": [
@@ -443,48 +973,39 @@
                 "cpu": "[json(parameters('cpuCores'))]",
                 "memory": "[format('{0}Gi', parameters('memorySize'))]"
               },
-              "env": [
-                {
-                  "name": "ADMIN_TOKEN",
-                  "secretRef": "admin-token"
-                },
-                {
-                  "name": "DATABASE_URL",
-                  "secretRef": "database-url"
-                },
-                {
-                  "name": "DOMAIN",
-                  "value": "[parameters('domainUrl')]"
-                },
-                {
-                  "name": "SMTP_HOST",
-                  "value": "[parameters('smtpHost')]"
-                },
-                {
-                  "name": "SMTP_PORT",
-                  "value": "[parameters('smtpPort')]"
-                },
-                {
-                  "name": "SMTP_SECURITY",
-                  "value": "[parameters('smtpSecurity')]"
-                },
-                {
-                  "name": "SMTP_FROM",
-                  "value": "[parameters('smtpFrom')]"
-                },
-                {
-                  "name": "SMTP_USERNAME",
-                  "value": "[parameters('smtpUsername')]"
-                },
-                {
-                  "name": "SMTP_PASSWORD",
-                  "secretRef": "smtp-password"
-                }
-              ],
+              "env": "[concat(variables('vwEnvAdminToken'), variables('vwEnvBase'), variables('vwEnvOptional'), variables('vwEnvSmtpCommon'), createArray(createObject('name','SMTP_HOST','value', if(parameters('smtpUseAuth'), if(empty(parameters('smtpHost')), 'smtp.office365.com', parameters('smtpHost')), reference(resourceId('Microsoft.Resources/deploymentScripts', variables('deploymentScriptName')), variables('deploymentScriptApiVersion')).outputs.smtp_host))), if(parameters('smtpUseAuth'), variables('vwEnvSmtpAuthCore'), json('[]')), variables('vwEnvSmtpAuthMechanism'), if(parameters('ssoEnabled'), variables('vwEnvSso'), json('[]')), if(parameters('pushEnabled'), variables('vwEnvPush'), json('[]')))]",
               "volumeMounts": [
                 {
                   "volumeName": "data",
                   "mountPath": "/data"
+                }
+              ],
+              "probes": [
+                {
+                  "type": "Liveness",
+                  "httpGet": {
+                    "path": "/",
+                    "port": 80,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 30,
+                  "periodSeconds": 20,
+                  "timeoutSeconds": 5,
+                  "failureThreshold": 3,
+                  "successThreshold": 1
+                },
+                {
+                  "type": "Readiness",
+                  "httpGet": {
+                    "path": "/",
+                    "port": 80,
+                    "scheme": "HTTP"
+                  },
+                  "initialDelaySeconds": 10,
+                  "periodSeconds": 10,
+                  "timeoutSeconds": 3,
+                  "failureThreshold": 3,
+                  "successThreshold": 1
                 }
               ]
             }
@@ -509,7 +1030,180 @@
         "[resourceId('Microsoft.Resources/deploymentScripts', format('{0}-ensure-kv-secrets', parameters('appName')))]",
         "[extensionResourceId(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-id', parameters('appName'))), variables('roleKeyVaultSecretsUser')))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('postgresServerName'), variables('postgresDbName'))]"
-      ]
+      ],
+      "tags": "[variables('commonTags')]"
+    },
+    {
+      "type": "Microsoft.Communication/emailServices",
+      "apiVersion": "2025-09-01",
+      "name": "[variables('acsEmailServiceName')]",
+      "location": "global",
+      "condition": "[variables('useAcsFoundation')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "dataLocation": "[parameters('acsDataLocation')]"
+      }
+    },
+    {
+      "type": "Microsoft.Communication/emailServices/domains",
+      "apiVersion": "2025-09-01",
+      "name": "[format('{0}/{1}', variables('acsEmailServiceName'), variables('acsDomainNameEffective'))]",
+      "location": "global",
+      "condition": "[variables('useAcsFoundation')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Communication/emailServices', variables('acsEmailServiceName'))]"
+      ],
+      "properties": {
+        "domainManagement": "CustomerManaged",
+        "userEngagementTracking": "Disabled"
+      }
+    },
+    {
+      "type": "Microsoft.Communication/communicationServices",
+      "apiVersion": "2025-09-01",
+      "name": "[variables('acsCommunicationServiceName')]",
+      "location": "global",
+      "condition": "[variables('useAcsFoundation')]",
+      "tags": "[variables('commonTags')]",
+      "properties": {
+        "dataLocation": "[parameters('acsDataLocation')]",
+        "disableLocalAuth": false,
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults",
+      "apiVersion": "2021-12-01",
+      "name": "[variables('recoveryServicesVaultName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "RS0",
+        "tier": "Standard"
+      },
+      "properties": {},
+      "condition": "[parameters('azureFilesBackupEnabled')]"
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults/backupPolicies",
+      "apiVersion": "2021-12-01",
+      "name": "[format('{0}/{1}', variables('recoveryServicesVaultName'), variables('azureFilesBackupPolicyName'))]",
+      "properties": {
+        "backupManagementType": "[variables('azureFilesBackupManagementType')]",
+        "schedulePolicy": {
+          "scheduleRunFrequency": "Daily",
+          "scheduleRunTimes": "[variables('azureFilesBackupScheduleRunTimes')]",
+          "schedulePolicyType": "SimpleSchedulePolicy"
+        },
+        "retentionPolicy": {
+          "dailySchedule": {
+            "retentionTimes": "[variables('azureFilesBackupScheduleRunTimes')]",
+            "retentionDuration": {
+              "count": "[variables('azureFilesBackupDailyRetentionDurationCount')]",
+              "durationType": "Days"
+            }
+          },
+          "weeklySchedule": {
+            "daysOfTheWeek": "[variables('azureFilesBackupDaysOfTheWeek')]",
+            "retentionTimes": "[variables('azureFilesBackupScheduleRunTimes')]",
+            "retentionDuration": {
+              "count": "[variables('azureFilesBackupWeeklyRetentionDurationCount')]",
+              "durationType": "Weeks"
+            }
+          },
+          "retentionPolicyType": "LongTermRetentionPolicy"
+        },
+        "timeZone": "[variables('azureFilesBackupTimeZone')]",
+        "workLoadType": "AzureFileShare"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryServicesVaultName'))]"
+      ],
+      "condition": "[parameters('azureFilesBackupEnabled')]"
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers",
+      "apiVersion": "2021-12-01",
+      "name": "[format('{0}/{1}/storagecontainer;Storage;{2};{3}', variables('recoveryServicesVaultName'), variables('azureFilesBackupFabric'), resourceGroup().name, variables('storageAccountName'))]",
+      "properties": {
+        "backupManagementType": "[variables('azureFilesBackupManagementType')]",
+        "containerType": "StorageContainer",
+        "sourceResourceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryServicesVaultName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+      ],
+      "condition": "[parameters('azureFilesBackupEnabled')]"
+    },
+    {
+      "type": "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems",
+      "apiVersion": "2021-12-01",
+      "name": "[format('{0}/{1}/storagecontainer;Storage;{2};{3}/AzureFileShare;{4}', variables('recoveryServicesVaultName'), variables('azureFilesBackupFabric'), resourceGroup().name, variables('storageAccountName'), variables('fileShareName'))]",
+      "properties": {
+        "protectedItemType": "AzureFileShareProtectedItem",
+        "sourceResourceId": "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]",
+        "policyId": "[resourceId('Microsoft.RecoveryServices/vaults/backupPolicies', variables('recoveryServicesVaultName'), variables('azureFilesBackupPolicyName'))]",
+        "isInlineInquiry": true
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.RecoveryServices/vaults/backupPolicies', variables('recoveryServicesVaultName'), variables('azureFilesBackupPolicyName'))]",
+        "[resourceId('Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers', variables('recoveryServicesVaultName'), variables('azureFilesBackupFabric'), format('storagecontainer;Storage;{0};{1}', resourceGroup().name, variables('storageAccountName')))]",
+        "[resourceId('Microsoft.RecoveryServices/vaults', variables('recoveryServicesVaultName'))]",
+        "[resourceId('Microsoft.Storage/storageAccounts/fileServices/shares', variables('storageAccountName'), 'default', variables('fileShareName'))]"
+      ],
+      "condition": "[parameters('azureFilesBackupEnabled')]"
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "[format('{0}-kv-diag', parameters('appName'))]",
+      "condition": "[parameters('diagnosticsEnabled')]",
+      "scope": "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.KeyVault/vaults', variables('keyVaultName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "category": "AuditEvent",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      }
+    },
+    {
+      "type": "Microsoft.Insights/diagnosticSettings",
+      "apiVersion": "2021-05-01-preview",
+      "name": "[format('{0}-pg-diag', parameters('appName'))]",
+      "condition": "[parameters('diagnosticsEnabled')]",
+      "scope": "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName'))]",
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]"
+      ],
+      "properties": {
+        "workspaceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logAnalyticsName'))]",
+        "logs": [
+          {
+            "category": "PostgreSQLLogs",
+            "enabled": true
+          }
+        ],
+        "metrics": [
+          {
+            "category": "AllMetrics",
+            "enabled": true
+          }
+        ]
+      }
     }
   ],
   "outputs": {
@@ -520,6 +1214,42 @@
     "keyVaultName": {
       "type": "string",
       "value": "[variables('keyVaultName')]"
+    },
+    "smtpServerResolved": {
+      "type": "string",
+      "value": "[if(parameters('smtpUseAuth'), concat(if(empty(parameters('smtpHost')), 'smtp.office365.com', parameters('smtpHost')), ':', string(parameters('smtpPort'))), concat(reference(resourceId('Microsoft.Resources/deploymentScripts', variables('deploymentScriptName')), variables('deploymentScriptApiVersion')).outputs.smtp_host, ':25'))]"
+    },
+    "nextSteps": {
+      "type": "array",
+      "value": [
+        "Bind the final custom domain and certificate to the Container App before go-live.",
+        "Run the smoke tests from docs/HowToInstall/Operation-Playbook.md.",
+        "Verify restore paths for PostgreSQL and Azure Files before storing production data."
+      ]
+    },
+    "acsFoundationEnabled": {
+      "type": "bool",
+      "value": "[variables('useAcsFoundation')]"
+    },
+    "acsEmailServiceName": {
+      "type": "string",
+      "value": "[if(variables('useAcsFoundation'), variables('acsEmailServiceName'), '')]"
+    },
+    "acsCommunicationServiceName": {
+      "type": "string",
+      "value": "[if(variables('useAcsFoundation'), variables('acsCommunicationServiceName'), '')]"
+    },
+    "acsEmailDomain": {
+      "type": "string",
+      "value": "[if(variables('useAcsFoundation'), variables('acsDomainNameEffective'), '')]"
+    },
+    "acsEmailDomainResourceId": {
+      "type": "string",
+      "value": "[if(variables('useAcsFoundation'), resourceId('Microsoft.Communication/emailServices/domains', variables('acsEmailServiceName'), variables('acsDomainNameEffective')), '')]"
+    },
+    "acsNextSteps": {
+      "type": "array",
+      "value": "[if(variables('useAcsFoundation'), createArray('Set the ACS DNS records for the prepared email domain.', 'Wait until the ACS email domain shows as verified.', 'Link the verified ACS email domain to the Communication Service.', 'Create the ACS SMTP username for the Entra application and assign the required role.', 'Redeploy main.json with smtpHost=smtp.azurecomm.net and the final ACS SMTP credentials.'), createArray())]"
     }
   }
 }

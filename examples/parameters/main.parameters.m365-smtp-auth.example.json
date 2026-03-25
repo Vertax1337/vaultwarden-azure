@@ -1,0 +1,36 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "domainUrl": {
+      "value": "https://vault.example.de"
+    },
+    "mailRootDomain": {
+      "value": "example.de"
+    },
+    "smtpUseAuth": {
+      "value": true
+    },
+    "smtpFrom": {
+      "value": "vaultwarden@example.de"
+    },
+    "smtpFromName": {
+      "value": "Vaultwarden"
+    },
+    "smtpHost": {
+      "value": "smtp.office365.com"
+    },
+    "smtpPort": {
+      "value": "587"
+    },
+    "smtpSecurity": {
+      "value": "starttls"
+    },
+    "smtpUsername": {
+      "value": "vaultwarden@example.de"
+    },
+    "smtpPassword": {
+      "value": "REPLACE_WITH_REAL_SECRET"
+    }
+  }
+}
