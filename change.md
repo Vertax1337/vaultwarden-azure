@@ -153,3 +153,49 @@ Ein realer Deploy-Lauf schlug beim Installieren der `rdbms-connect`-Extension fe
 ### Test / Validierung
 - Vollständiger Repo-Testlauf mit bestehenden Tests.
 - Die `ensure_pip`-Funktion ist im Deployment Script statisch prüfbar.
+
+## Schritt 2a – PostgreSQL-SQL-Pfad: `az postgres flexible-server execute` durch `psql` ersetzen
+
+### Problem / Ursache
+Die Schritte 1c und 1d versuchten, das Problem um `az postgres flexible-server execute` + `rdbms-connect`-Extension + `pip`-Installation robuster zu machen. In der Praxis bleibt dieser Pfad aber grundsätzlich unzuverlässig:
+- Die `rdbms-connect`-Extension benötigt `pip` zur Installation ihrer Python-Abhängigkeit `psycopg[binary]`.
+- Die AzureCLI-Deployment-Script-Container (CBL-Mariner/Azure-Linux) liefern weder `pip` noch `ensurepip` zuverlässig aus.
+- Auch das nachträgliche Bootstrap über Paketmanager (`tdnf`, `apk`, `apt-get`) schlägt je nach Container-Image fehl.
+- Reale Fehlerbilder:
+  - `The command requires the extension rdbms-connect`
+  - `Pip failed with status code 1`
+  - `/usr/bin/python3: No module named pip`
+
+### Betroffene Dateien
+- `main.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+- Die gesamte `rdbms-connect`-/`pip`-basierte Toolchain wurde aus dem Deployment Script entfernt:
+  - `ensure_pip()` – entfernt
+  - `configure_az_extension_installation()` – entfernt
+  - `ensure_rdbms_connect_extension()` – entfernt
+  - `PG_CLI_BASE` (Array mit `az postgres flexible-server execute ...`) – entfernt
+  - Alle Aufrufe von `"${PG_CLI_BASE[@]}"` – ersetzt durch `run_psql`
+- Ersetzt durch Standard-PostgreSQL-Tooling (`psql`):
+  - Neue Funktion `ensure_psql()`: installiert `postgresql-client` über den im Container verfügbaren Paketmanager (`apk`, `tdnf` oder `apt-get`). Das ist ein einfaches Paket ohne Python-/pip-Abhängigkeit.
+  - Neue Funktion `build_psql_env()`: setzt Standard-PostgreSQL-Umgebungsvariablen (`PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE`) aus den bereits vorhandenen ARM-Environment-Variablen.
+  - Neue Funktion `run_psql()`: kapselt den `psql`-Aufruf mit `--no-password --set=ON_ERROR_STOP=1` für konsistente Fehlerbehandlung.
+- Der Connectivity-Check (`SELECT 1`) nutzt jetzt `run_psql postgres -c "SELECT 1"` statt `az postgres flexible-server execute`.
+- Die SQL-Provisioning-Schritte (`bootstrap-admin.sql`, `bootstrap-db.sql`) nutzen jetzt `run_psql` mit `-f`.
+- Die Diagnose-Helfer (`print_pg_connectivity_diagnostics`) referenzieren jetzt `psql exit code` / `psql stdout` / `psql stderr` statt `execute exit code`.
+- Die Azure-CLI-Leseoperationen (`az postgres flexible-server show/wait`, `firewall-rule list`, `db list`) bleiben unverändert – sie benötigen keine Extension.
+
+### Relevante Nebenwirkungen / Risiken
+- Die Änderung bleibt lokal im Deployment Script in `main.json` und greift nicht in zentrale PowerShell-Shared-Logic ein.
+- `psql` ist ein stabiles, weit verbreitetes Standard-Tool. Die AzureCLI-Container basieren auf CBL-Mariner/Azure-Linux (`tdnf`) oder Alpine (`apk`) – beide bieten `postgresql-client` als Paket an.
+- Kein Python-/pip-/`rdbms-connect`-Bootstrap mehr erforderlich – die gesamte Fehlerkategorie entfällt.
+- Wizard-, Button-, GenerateOnly-, Redeploy-, Repair- und Update-Pfade bleiben funktional unverändert, da sie dasselbe ARM-Template und damit dasselbe Deployment Script nutzen.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf: 53/53 Tests grün.
+- Zwei bestehende Tests aktualisiert:
+  - `test_main_json_bootstraps_rdbms_connect_extension_explicitly` → `test_main_json_uses_psql_instead_of_rdbms_connect`: prüft, dass `ensure_psql`, `build_psql_env`, `run_psql` vorhanden sind und kein `rdbms-connect`-/`PG_CLI_BASE`-/`ensure_pip`-Pfad mehr existiert.
+  - `test_main_json_connectivity_loop_captures_real_execute_exit_code` → `test_main_json_connectivity_loop_uses_psql`: prüft `run_psql`-basierte Aufrufe für Connectivity-Check und SQL-Provisioning mit Exitcode-Erfassung.
+- Bestehender Diagnose-Test (`test_deployment_script_has_pg_diagnostic_helpers`) auf `psql exit code` aktualisiert.
