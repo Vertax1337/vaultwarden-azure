@@ -362,9 +362,150 @@ function New-RandomPlaintextSecret {
 }
 
 function Test-AzCliPresent {
-    if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-        throw 'Azure CLI (az) wurde nicht gefunden. Bitte installieren: https://aka.ms/installazurecliwindows'
+    <#
+    .SYNOPSIS
+        Returns $true if Azure CLI (az) is on PATH, $false otherwise.
+    #>
+    return [bool](Get-Command az -ErrorAction SilentlyContinue)
+}
+
+function Update-PathFromRegistry {
+    <#
+    .SYNOPSIS
+        Refreshes the current session PATH from the Windows registry.
+    .DESCRIPTION
+        After an MSI/winget install the new PATH entry is only visible to new
+        processes. This function re-reads Machine and User PATH from the
+        registry and merges them into the current session so that freshly
+        installed tools become available without restarting PowerShell.
+        On non-Windows platforms this is a no-op.
+    #>
+    if ($env:OS -ne 'Windows_NT') { return }
+    $machinePath = [System.Environment]::GetEnvironmentVariable('PATH', [System.EnvironmentVariableTarget]::Machine)
+    $userPath    = [System.Environment]::GetEnvironmentVariable('PATH', [System.EnvironmentVariableTarget]::User)
+    $env:PATH    = '{0};{1}' -f $machinePath, $userPath
+}
+
+function Install-AzCli {
+    <#
+    .SYNOPSIS
+        Attempts to install Azure CLI automatically.
+    .DESCRIPTION
+        Platform-aware auto-install:
+          Windows  – winget (preferred) or MSI via msiexec
+          Linux    – Microsoft install script (curl)
+          macOS    – Homebrew
+        On Windows the install may require elevation. If the current session
+        is not elevated the function will try to spawn an elevated process.
+        After installation the session PATH is refreshed so that az is
+        immediately available.
+    .OUTPUTS
+        Returns $true if az became available after install, $false otherwise.
+    #>
+    [CmdletBinding()]
+    param()
+
+    Write-Step 'Azure CLI (az) nicht gefunden. Automatische Installation wird versucht...'
+
+    $isWindows = ($env:OS -eq 'Windows_NT')
+    # PS7+ sets $IsLinux / $IsMacOS; PS5.1 on Windows does not, so fall back.
+    $isLinux = if (Get-Variable -Name IsLinux -ValueOnly -ErrorAction SilentlyContinue) { $IsLinux } else { $false }
+    $isMacOS = if (Get-Variable -Name IsMacOS -ValueOnly -ErrorAction SilentlyContinue) { $IsMacOS } else { $false }
+
+    if ($isWindows) {
+        # ---- Windows: prefer winget, fall back to MSI ----
+        $winget = Get-Command winget -ErrorAction SilentlyContinue
+        if ($winget) {
+            Write-Step 'Installiere Azure CLI via winget...'
+            $wingetOutput = & winget install -e --id Microsoft.AzureCLI --accept-source-agreements --accept-package-agreements 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning ('winget-Installation fehlgeschlagen (Exit-Code {0}): {1}' -f $LASTEXITCODE, ($wingetOutput | Out-String))
+            }
+        }
+        else {
+            Write-Step 'winget nicht verfuegbar. Installiere Azure CLI via MSI...'
+            $msiUrl  = 'https://aka.ms/installazurecliwindows'
+            $msiPath = Join-Path ([System.IO.Path]::GetTempPath()) 'AzureCLI.msi'
+            try {
+                # Use .NET WebClient for PS5.1 compat (Invoke-WebRequest on PS5.1 is slow/different)
+                $wc = New-Object System.Net.WebClient
+                $wc.DownloadFile($msiUrl, $msiPath)
+            }
+            catch {
+                Write-Warning ('Download der Azure CLI MSI fehlgeschlagen: {0}' -f $_)
+                return $false
+            }
+            Write-Step 'MSI-Installation wird gestartet (erfordert ggf. Elevation)...'
+            $installArgs = '/i', $msiPath, '/quiet', '/norestart'
+            $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $installArgs -Wait -PassThru
+            if ($proc.ExitCode -ne 0) {
+                Write-Warning ('MSI-Installation beendet mit Exit-Code {0}. Versuche erneut mit Elevation...' -f $proc.ExitCode)
+                try {
+                    $proc = Start-Process -FilePath 'msiexec.exe' -ArgumentList $installArgs -Verb RunAs -Wait -PassThru
+                }
+                catch {
+                    Write-Warning ('Elevated MSI-Installation fehlgeschlagen: {0}' -f $_)
+                    return $false
+                }
+                if ($proc.ExitCode -ne 0) {
+                    Write-Warning ('Elevated MSI-Installation beendet mit Exit-Code {0}.' -f $proc.ExitCode)
+                    return $false
+                }
+            }
+            Remove-Item -LiteralPath $msiPath -Force -ErrorAction SilentlyContinue
+        }
+        # Refresh PATH so the current session sees the new install
+        Update-PathFromRegistry
     }
+    elseif ($isLinux) {
+        Write-Step 'Installiere Azure CLI via Microsoft-Installskript...'
+        $curlCmd = Get-Command curl -ErrorAction SilentlyContinue
+        if (-not $curlCmd) {
+            Write-Warning 'curl wurde nicht gefunden. Azure CLI kann nicht automatisch installiert werden.'
+            return $false
+        }
+        try {
+            $installOutput = & bash -c 'curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash' 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning ('Linux-Installskript beendet mit Exit-Code {0}: {1}' -f $LASTEXITCODE, ($installOutput | Out-String))
+                return $false
+            }
+        }
+        catch {
+            Write-Warning ('Linux-Installation fehlgeschlagen: {0}' -f $_)
+            return $false
+        }
+    }
+    elseif ($isMacOS) {
+        Write-Step 'Installiere Azure CLI via Homebrew...'
+        $brewCmd = Get-Command brew -ErrorAction SilentlyContinue
+        if (-not $brewCmd) {
+            Write-Warning 'Homebrew (brew) wurde nicht gefunden. Azure CLI kann nicht automatisch installiert werden.'
+            return $false
+        }
+        try {
+            $brewOutput = & brew install azure-cli 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Warning ('Homebrew-Installation beendet mit Exit-Code {0}: {1}' -f $LASTEXITCODE, ($brewOutput | Out-String))
+                return $false
+            }
+        }
+        catch {
+            Write-Warning ('Homebrew-Installation fehlgeschlagen: {0}' -f $_)
+            return $false
+        }
+    }
+    else {
+        Write-Warning 'Unbekannte Plattform. Automatische Azure CLI-Installation nicht moeglich.'
+        return $false
+    }
+
+    # Verify az is now available
+    if (Test-AzCliPresent) {
+        Write-Step 'Azure CLI erfolgreich installiert.'
+        return $true
+    }
+    return $false
 }
 
 function Ensure-AzCliReady {
@@ -373,13 +514,23 @@ function Ensure-AzCliReady {
         Ensures Azure CLI is installed and the user is logged in.
     .DESCRIPTION
         All local deployment scripts use Azure CLI (az) as the single toolchain.
-        This function verifies that az is available and the user has an active login.
-        If no login is found, it starts an interactive az login.
+        1. Checks if az is on PATH.
+        2. If missing, attempts automatic installation via Install-AzCli.
+        3. If still missing, throws with a clear manual-install message.
+        4. Unless -SkipLogin is set, verifies an active Azure login and
+           starts az login interactively if needed.
     #>
     [CmdletBinding()]
     param([switch]$SkipLogin)
 
-    Test-AzCliPresent
+    if (-not (Test-AzCliPresent)) {
+        $installed = Install-AzCli
+        if (-not $installed) {
+            throw ('Azure CLI (az) konnte nicht automatisch installiert werden. ' +
+                   'Bitte manuell installieren: https://learn.microsoft.com/cli/azure/install-azure-cli ' +
+                   'und danach eine neue PowerShell-Session starten.')
+        }
+    }
 
     if (-not $SkipLogin) {
         # Check if already logged in by querying the current account.

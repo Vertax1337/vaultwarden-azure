@@ -7,6 +7,27 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 ---
 
 
+## Revision 14 – 2026-03-26
+
+### Scripts / Toolchain
+
+| Änderung | Detail |
+|---|---|
+| `Install-AzCli` – neu | Automatische Azure CLI-Installation wenn `az` nicht gefunden wird. Plattformspezifisch: Windows (winget/MSI mit Elevation-Fallback), Linux (Microsoft-Installskript), macOS (Homebrew). |
+| `Update-PathFromRegistry` – neu | Aktualisiert die aktuelle Session-PATH aus der Windows-Registry nach einer MSI/winget-Installation, damit `az` ohne Neustart der PowerShell-Session verfügbar ist. No-op auf Linux/macOS. |
+| `Test-AzCliPresent` – geändert | Gibt jetzt `$true`/`$false` zurück statt direkt zu werfen. Ermöglicht bedingte Logik in `Ensure-AzCliReady`. |
+| `Ensure-AzCliReady` – erweitert | Versucht bei fehlendem `az` automatisch `Install-AzCli`. Erst wenn die Auto-Installation fehlschlägt, wird mit klarer Fehlermeldung und manuellem Installationslink abgebrochen. |
+
+### Tests
+
+| Änderung | Detail |
+|---|---|
+| 7 neue Tests | `test_common_lib_has_install_az_cli`, `test_common_lib_has_update_path_from_registry`, `test_ensure_az_cli_ready_calls_install_on_missing`, `test_install_az_cli_supports_windows_linux_macos`, `test_test_az_cli_present_returns_bool`, `test_install_az_cli_returns_true_when_az_present`, `test_ensure_az_cli_ready_skip_login` |
+| Testanzahl | 28 → 35 |
+
+---
+
+
 ## Revision 13 – 2026-03-26
 
 ### Parameter

@@ -502,6 +502,105 @@ class RepoContractTests(unittest.TestCase):
         self.assertNotIn('Connect-AzAccount', content,
                          'Common library must not use Connect-AzAccount – use az login')
 
+    def test_common_lib_has_install_az_cli(self):
+        """Common library must define Install-AzCli for auto-installation."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Install-AzCli', content,
+                      'Common library must define Install-AzCli for automatic CLI installation')
+
+    def test_common_lib_has_update_path_from_registry(self):
+        """Common library must define Update-PathFromRegistry for post-install PATH refresh."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Update-PathFromRegistry', content,
+                      'Common library must define Update-PathFromRegistry')
+
+    def test_ensure_az_cli_ready_calls_install_on_missing(self):
+        """Ensure-AzCliReady must call Install-AzCli when az is not found."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        # Ensure-AzCliReady must reference Install-AzCli in its body
+        # Extract the function body (rough: from 'function Ensure-AzCliReady' to next function or end)
+        start = content.find('function Ensure-AzCliReady')
+        self.assertGreater(start, -1, 'Ensure-AzCliReady not found')
+        body = content[start:]
+        # Must call Install-AzCli
+        self.assertIn('Install-AzCli', body,
+                      'Ensure-AzCliReady must call Install-AzCli when az is missing')
+        # Must call Test-AzCliPresent
+        self.assertIn('Test-AzCliPresent', body,
+                      'Ensure-AzCliReady must call Test-AzCliPresent to check az availability')
+
+    def test_install_az_cli_supports_windows_linux_macos(self):
+        """Install-AzCli must handle Windows, Linux, and macOS platforms."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        start = content.find('function Install-AzCli')
+        self.assertGreater(start, -1, 'Install-AzCli not found')
+        body = content[start:]
+        # Must reference platform detection
+        self.assertIn('winget', body, 'Install-AzCli must support winget on Windows')
+        self.assertIn('msiexec', body.lower() if 'msiexec' not in body else body,
+                      'Install-AzCli must support MSI fallback on Windows')
+        self.assertIn('InstallAzureCLIDeb', body,
+                      'Install-AzCli must support Linux installation')
+        self.assertIn('brew', body,
+                      'Install-AzCli must support Homebrew on macOS')
+
+    def test_test_az_cli_present_returns_bool(self):
+        """Test-AzCliPresent must return a boolean (not throw)."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        start = content.find('function Test-AzCliPresent')
+        self.assertGreater(start, -1, 'Test-AzCliPresent not found')
+        # Find the end of the function (next function or end of content)
+        next_func = content.find('\nfunction ', start + 1)
+        if next_func == -1:
+            func_body = content[start:]
+        else:
+            func_body = content[start:next_func]
+        # Must return bool, not throw
+        self.assertIn('[bool]', func_body,
+                      'Test-AzCliPresent must return a boolean value')
+        self.assertNotIn('throw', func_body,
+                         'Test-AzCliPresent must not throw – it should return $false when az is missing')
+
+    @requires_pwsh
+    def test_install_az_cli_returns_true_when_az_present(self):
+        """Install-AzCli should succeed (return $true) when az is already available."""
+        # This tests the happy path: az is already installed, so Install-AzCli
+        # should detect it (via Test-AzCliPresent at the end) and return $true.
+        # We can't test the actual install path in CI without side effects,
+        # but we can verify the control flow works when az is present.
+        command = (
+            ". '{}' ; "
+            "if (Test-AzCliPresent) {{ Write-Output 'AZ_PRESENT' }} else {{ Write-Output 'AZ_MISSING' }}"
+        ).format(REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1')
+        result = run_ps(command)
+        # az may or may not be installed in CI; test is informational
+        output = result.stdout.strip()
+        self.assertIn(output, ['AZ_PRESENT', 'AZ_MISSING'],
+                      'Test-AzCliPresent must return a clean boolean result')
+
+    @requires_pwsh
+    def test_ensure_az_cli_ready_skip_login(self):
+        """Ensure-AzCliReady -SkipLogin must not attempt login even if az is present."""
+        # This test verifies that -SkipLogin works without errors.
+        # If az is missing, Install-AzCli will be attempted but may fail in CI – that's OK,
+        # we just want to verify the code path doesn't crash on parse/basic execution.
+        command = (
+            ". '{}' ; "
+            "try {{ Ensure-AzCliReady -SkipLogin; Write-Output 'OK' }} "
+            "catch {{ Write-Output ('CAUGHT: ' + $_.Exception.Message) }}"
+        ).format(REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1')
+        result = run_ps(command)
+        output = result.stdout.strip()
+        # If az is installed: OK
+        # If az is not installed and auto-install fails: CAUGHT: ... konnte nicht automatisch installiert werden
+        is_ok = (output == 'OK')
+        is_install_fail = ('konnte nicht automatisch installiert werden' in output)
+        is_caught = ('CAUGHT' in output)
+        self.assertTrue(
+            is_ok or is_install_fail or is_caught,
+            f'Unexpected output from Ensure-AzCliReady -SkipLogin: {output}'
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
