@@ -821,5 +821,23 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('Ensure-ResourceGroupExists -ResourceGroupName $ResourceGroupName -Location $Location', script_text)
         self.assertIn('location = @{ value = $Location }', script_text)
 
+
+    def test_main_json_bootstraps_rdbms_connect_extension_explicitly(self):
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        self.assertIn('ensure_rdbms_connect_extension()', script)
+        self.assertIn('az extension add --name rdbms-connect --allow-preview true --only-show-errors', script)
+        self.assertIn('extension.dynamic_install_allow_preview=true', script)
+        self.assertIn('AZURE_EXTENSION_DIR', script)
+
+    def test_main_json_connectivity_loop_captures_real_execute_exit_code(self):
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        self.assertIn('"${PG_CLI_BASE[@]}" -d postgres -q "SELECT 1" 1>"$PG_EXEC_STDOUT" 2>"$PG_EXEC_STDERR"', script)
+        self.assertIn('PG_EXEC_EXIT=$?', script)
+        self.assertIn('if [ "$PG_EXEC_EXIT" -eq 0 ]; then', script)
+        self.assertIn('ERROR: PostgreSQL bootstrap-admin.sql failed', script)
+        self.assertIn('ERROR: PostgreSQL bootstrap-db.sql failed', script)
+
 if __name__ == '__main__':
     unittest.main()

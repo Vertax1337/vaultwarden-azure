@@ -90,3 +90,35 @@ Nach dem ersten Fix für Problem 1 zeigte der reale Azure-Lauf, dass das Deploym
   - `roleReader` ist vorhanden
   - genau eine PostgreSQL-Reader-Role-Assignment-Resource existiert
   - das Deployment Script davon abhängt
+
+## Schritt 1c – Problem 1: `rdbms-connect`-Extension explizit bootstrappen und Execute-Exitcodes korrekt erfassen
+
+### Problem / Ursache
+Ein realer Deploy-Lauf zeigte, dass PostgreSQL bereits `Ready` war, der Connectivity-Check aber trotzdem wiederholt scheiterte. Die Diagnose machte sichtbar, dass `az postgres flexible-server execute` versucht hat, die Azure-CLI-Erweiterung `rdbms-connect` dynamisch zu installieren und dabei mit `Pip failed with status code 1` scheiterte. Zusätzlich wurde der Exitcode des Execute-Aufrufs im bisherigen Loop irreführend als `0` geloggt.
+
+### Betroffene Dateien
+- `main.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+- Vor dem PostgreSQL-Connectivity- und SQL-Provisioning-Pfad wird die Azure-CLI-Erweiterung `rdbms-connect` jetzt explizit vorbereitet:
+  - `extension.use_dynamic_install=yes_without_prompt`
+  - `extension.dynamic_install_allow_preview=true`
+  - explizites `az extension add --name rdbms-connect --allow-preview true --only-show-errors`
+- Der Erweiterungspfad wird auf ein beschreibbares temporäres Verzeichnis (`AZURE_EXTENSION_DIR=/tmp/az-extensions`) gesetzt, um Seiteneffekte aus Benutzer-/Home-Verzeichnissen zu vermeiden.
+- Wenn die Extension-Installation fehlschlägt, bricht das Deployment Script jetzt früh und mit konkreter Diagnose für die Extension-Installation ab, statt 600 Sekunden lang einen Connectivity-Fehler vorzutäuschen.
+- Der PostgreSQL-Connectivity-Loop erfasst den echten Exitcode des `execute`-Aufrufs jetzt korrekt, statt ihn über den `if ...; then`-Pfad verfälscht zu loggen.
+- Dasselbe gilt für die beiden SQL-Provisioning-Schritte (`bootstrap-admin.sql`, `bootstrap-db.sql`): deren Exitcodes werden jetzt korrekt erfasst und diagnostiziert.
+
+### Relevante Nebenwirkungen / Risiken
+- Die Änderung bleibt lokal im Deployment Script in `main.json` und greift nicht in zentrale PowerShell-Shared-Logic ein.
+- Der Fix setzt weiter auf `az postgres flexible-server execute`; er ersetzt die Methode nicht, sondern macht deren Vorbereitung und Fehlerbilder robuster.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf mit `pwsh`.
+- Zusätzliche statische Tests prüfen:
+  - expliziten Bootstrap der `rdbms-connect`-Extension
+  - Preview-/Dynamic-Install-Konfiguration
+  - korrektes Erfassen der Execute-Exitcodes
+  - korrekte Diagnosepfade für die SQL-Provisioning-Schritte
