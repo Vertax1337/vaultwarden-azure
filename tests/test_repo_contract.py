@@ -30,10 +30,11 @@ class RepoContractTests(unittest.TestCase):
     def test_deploy_to_azure_wrapper_exists_and_exposes_many_parameters(self):
         data = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
         params = data['parameters']
-        self.assertGreaterEqual(len(params), 35)
-        for key in ['appName', 'domainUrl', 'mailRootDomain', 'smtpUseAuth', 'storageAccountSku', 'postgresSkuName', 'dbPassword']:
+        self.assertGreaterEqual(len(params), 57)
+        for key in ['appName', 'domainUrl', 'mailRootDomain', 'smtpUseAuth', 'storageAccountSku', 'postgresSkuName', 'dbPassword', 'azureFilesBackupEnabled', 'smtpAuthMechanism', 'customHostname', 'edgeMode', 'enableIngressIpRestrictions', 'ingressAllowedCidrs']:
             self.assertIn(key, params)
         self.assertIn('main.json', data['parameters']['mainTemplateUri']['defaultValue'])
+        self.assertEqual(data['parameters']['dbPassword']['defaultValue'], '[concat(toUpper(newGuid()), newGuid())]')
 
     def test_powershell_scripts_parse(self):
         scripts = [
@@ -82,14 +83,17 @@ class RepoContractTests(unittest.TestCase):
             self.assertTrue(current_config_path.exists())
             self.assertTrue(current_params_path.exists())
             self.assertTrue(current_wrapper_path.exists())
-            config = json.loads(config_path.read_text(encoding='utf-8'))
+            config_text = config_path.read_text(encoding='utf-8')
+            config = json.loads(config_text)
             params = json.loads(params_path.read_text(encoding='utf-8'))
             current_wrapper = json.loads(current_wrapper_path.read_text(encoding='utf-8'))
             self.assertEqual(config['customerNumber'], '4711')
+            self.assertNotIn('\"password\":', config_text)
+            self.assertNotIn('dbPassword', config_text)
             self.assertEqual(config['customerCode'], 'vault-kunde-de')
             self.assertEqual(config['domain']['hostname'], 'vault.kunde.de')
             self.assertEqual(config['edge']['mode'], 'cloudflare-managed')
-            self.assertEqual(config['azure']['resourceGroupName'], 'rg-vault-prod-gwc')
+            self.assertEqual(config['azure']['resourceGroupName'], 'rg-kunde-vault-prod-gwc')
             self.assertEqual(params['parameters']['edgeMode']['value'], 'cloudflare-managed')
             self.assertEqual(params['parameters']['customHostname']['value'], 'vault.kunde.de')
             self.assertEqual(config['azure']['advancedArmParameters']['invitationOrgName'], 'kunde.de')
@@ -102,6 +106,9 @@ class RepoContractTests(unittest.TestCase):
             self.assertEqual(params['parameters']['ssoClientId']['value'], 'client-id')
             self.assertTrue(params['parameters']['pushEnabled']['value'])
             self.assertEqual(params['parameters']['postgresStorageGB']['value'], 64)
+            self.assertNotIn('smtpPassword', params['parameters'])
+            self.assertNotIn('ssoClientSecret', params['parameters'])
+            self.assertNotIn('pushInstallationKey', params['parameters'])
             self.assertEqual(current_wrapper['parameters']['appName']['defaultValue'], 'vaultkunde')
             self.assertEqual(current_wrapper['parameters']['domainUrl']['defaultValue'], 'https://vault.kunde.de')
             self.assertEqual(current_wrapper['parameters']['mailRootDomain']['defaultValue'], 'kunde.de')
@@ -110,6 +117,7 @@ class RepoContractTests(unittest.TestCase):
             self.assertEqual(current_wrapper['parameters']['smtpPassword']['defaultValue'], '')
             self.assertEqual(current_wrapper['parameters']['ssoClientSecret']['defaultValue'], '')
             self.assertEqual(current_wrapper['parameters']['pushInstallationKey']['defaultValue'], '')
+            self.assertEqual(current_wrapper['parameters']['dbPassword']['defaultValue'], '[concat(toUpper(newGuid()), newGuid())]')
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
@@ -129,7 +137,7 @@ class RepoContractTests(unittest.TestCase):
             self.assertEqual(config['edge']['mode'], 'basic')
             self.assertFalse(config['edge']['lockOriginToCloudflare'])
             self.assertEqual(config['customerNumber'], '0815')
-            self.assertEqual(config['azure']['resourceGroupName'], 'rg-vault-test-gwc')
+            self.assertEqual(config['azure']['resourceGroupName'], 'rg-basic-vault-test-gwc')
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
@@ -191,10 +199,10 @@ class RepoContractTests(unittest.TestCase):
     def test_region_helper_uses_caf_like_default_rg_name(self):
         command = (
             ". '{}' ; "
-            "Get-DefaultResourceGroupName -Environment 'prod' -Location 'germanywestcentral'"
+            "Get-DefaultResourceGroupName -Environment 'prod' -Location 'germanywestcentral' -VaultwardenDomain 'vault.thermosun.de'"
         ).format(REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Common.ps1')
         result = run_ps(command)
-        self.assertEqual(result.stdout.strip(), 'rg-vault-prod-gwc')
+        self.assertEqual(result.stdout.strip(), 'rg-thermosun-vault-prod-gwc')
 
     def test_readme_button_points_to_current_wrapper(self):
         readme = (REPO_ROOT / 'Readme.md').read_text(encoding='utf-8')

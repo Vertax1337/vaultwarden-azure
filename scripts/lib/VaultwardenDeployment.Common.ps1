@@ -207,15 +207,29 @@ function Get-RegionCode {
     return $abbr.ToLowerInvariant()
 }
 
+function Get-CustomerSlugFromVaultwardenDomain {
+    param([Parameter(Mandatory)][string]$VaultwardenDomain)
+    $hostname = $VaultwardenDomain.Trim().ToLowerInvariant()
+    if ([string]::IsNullOrWhiteSpace($hostname)) { return 'vaultwarden' }
+    $zoneName = Get-DefaultZoneFromHostname -Hostname $hostname
+    $zoneLabels = @($zoneName -split '\.')
+    if ($zoneLabels.Count -gt 0 -and -not [string]::IsNullOrWhiteSpace($zoneLabels[0])) {
+        return Convert-DomainToSlug -Domain $zoneLabels[0]
+    }
+    return Convert-DomainToSlug -Domain $hostname
+}
+
 function Get-DefaultResourceGroupName {
     param(
         [Parameter(Mandatory)][string]$Environment,
-        [Parameter(Mandatory)][string]$Location
+        [Parameter(Mandatory)][string]$Location,
+        [string]$VaultwardenDomain
     )
     $envPart = ($Environment -replace '[^a-zA-Z0-9]', '').ToLowerInvariant()
     if ([string]::IsNullOrWhiteSpace($envPart)) { $envPart = 'prod' }
     $regionPart = Get-RegionCode -Location $Location
-    return ('rg-vault-{0}-{1}' -f $envPart, $regionPart)
+    $customerPart = if ([string]::IsNullOrWhiteSpace($VaultwardenDomain)) { 'vaultwarden' } else { Get-CustomerSlugFromVaultwardenDomain -VaultwardenDomain $VaultwardenDomain }
+    return ('rg-{0}-vault-{1}-{2}' -f $customerPart, $envPart, $regionPart)
 }
 
 function Get-CustomerPaths {

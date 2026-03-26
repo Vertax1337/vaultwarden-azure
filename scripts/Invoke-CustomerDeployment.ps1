@@ -320,7 +320,7 @@ function New-CustomerConfigInteractive {
     $customerCode = Convert-DomainToSlug -Domain $vaultwardenDomain
     $location = Read-TextWithDefault -Label 'Azure Region' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.location } else { 'germanywestcentral' })) -Required
     $environment = Read-TextWithDefault -Label 'Environment (prod/test/dev)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.environment } else { 'prod' })) -Required
-    $resourceGroupDefault = if ($ExistingConfig) { $ExistingConfig.azure.resourceGroupName } else { Get-DefaultResourceGroupName -Environment $environment -Location $location }
+    $resourceGroupDefault = if ($ExistingConfig) { $ExistingConfig.azure.resourceGroupName } else { Get-DefaultResourceGroupName -Environment $environment -Location $location -VaultwardenDomain $vaultwardenDomain }
     $resourceGroupName = Read-TextWithDefault -Label 'Resource Group' -Default ([string]$resourceGroupDefault) -Required
 
     $currentMode = if ($ExistingConfig) { $ExistingConfig.edge.mode } else { 'cloudflare-managed' }
@@ -388,7 +388,8 @@ function New-CustomerAzureParameters {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
         [Parameter(Mandatory)][string]$OutputPath,
-        [hashtable]$SecureArmParameters
+        [hashtable]$SecureArmParameters,
+        [switch]$IncludeSecureParameters
     )
 
     $params = [ordered]@{
@@ -415,10 +416,12 @@ function New-CustomerAzureParameters {
         $params.parameters.smtpPort = @{ value = $Config.smtp.port }
         $params.parameters.smtpSecurity = @{ value = $Config.smtp.security }
         $params.parameters.smtpUsername = @{ value = $Config.smtp.username }
-        if (-not $SecureArmParameters -or -not $SecureArmParameters.ContainsKey('smtpPassword')) {
-            throw 'SMTP Auth ist aktiviert, aber es wurde kein SMTP-Passwort übergeben.'
+        if ($IncludeSecureParameters) {
+            if (-not $SecureArmParameters -or -not $SecureArmParameters.ContainsKey('smtpPassword')) {
+                throw 'SMTP Auth ist aktiviert, aber es wurde kein SMTP-Passwort übergeben.'
+            }
+            $params.parameters.smtpPassword = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.smtpPassword) }
         }
-        $params.parameters.smtpPassword = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.smtpPassword) }
     }
 
     if ($Config.azure.advancedArmParameters) {
@@ -427,7 +430,7 @@ function New-CustomerAzureParameters {
             $params.parameters[$key] = @{ value = $overrides[$key] }
         }
     }
-    if ($SecureArmParameters) {
+    if ($IncludeSecureParameters -and $SecureArmParameters) {
         if ($SecureArmParameters.ContainsKey('ssoClientSecret')) {
             $params.parameters.ssoClientSecret = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.ssoClientSecret) }
         }
@@ -603,7 +606,7 @@ elseif (-not $config) {
     if (-not $CloudflareZone) { $CloudflareZone = Get-DefaultZoneFromHostname -Hostname $VaultwardenDomain }
     if (-not $MailRootDomain) { $MailRootDomain = $CloudflareZone }
     $customerCode = Convert-DomainToSlug -Domain $VaultwardenDomain
-    if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location }
+    if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location -VaultwardenDomain $VaultwardenDomain }
     $effectiveSmtpUseAuth = $SmtpUseAuth.IsPresent
     $effectiveEnableWaf = if ($Mode -eq 'cloudflare-managed') { $EnableWaf.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableWaf')) } else { $false }
     $effectiveEnableRateLimit = if ($Mode -eq 'cloudflare-managed') { $EnableRateLimit.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableRateLimit')) } else { $false }
@@ -641,7 +644,22 @@ if ($GenerateOnly) {
     return
 }
 
-$result = & (Join-Path $PSScriptRoot 'Deploy-AzureStack.ps1') -ResourceGroupName $config.azure.resourceGroupName -TemplateFile $templateFile -ParametersFile $paths.AzureParametersPath -OutputPath $paths.DeployOutputPath
+$deploymentParametersPath = $paths.AzureParametersPath
+$tempDeploymentParametersPath = $null
+try {
+    if ($secureArmParameters -and $secureArmParameters.Count -gt 0) {
+        $tempDeploymentParametersPath = Join-Path ([System.IO.Path]::GetTempPath()) ('vaultwarden-arm-params-' + [guid]::NewGuid().ToString('N') + '.json')
+        New-CustomerAzureParameters -Config $config -OutputPath $tempDeploymentParametersPath -SecureArmParameters $secureArmParameters -IncludeSecureParameters | Out-Null
+        $deploymentParametersPath = $tempDeploymentParametersPath
+    }
+
+    $result = & (Join-Path $PSScriptRoot 'Deploy-AzureStack.ps1') -ResourceGroupName $config.azure.resourceGroupName -TemplateFile $templateFile -ParametersFile $deploymentParametersPath -OutputPath $paths.DeployOutputPath
+}
+finally {
+    if ($tempDeploymentParametersPath -and (Test-Path -LiteralPath $tempDeploymentParametersPath)) {
+        Remove-Item -LiteralPath $tempDeploymentParametersPath -Force -ErrorAction SilentlyContinue
+    }
+}
 
 if ($config.edge.mode -eq 'basic') {
     Write-Step 'Basic-Modus abgeschlossen. Kein Cloudflare-Postdeploy ausgeführt.'
