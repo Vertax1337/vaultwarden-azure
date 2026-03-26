@@ -536,22 +536,31 @@ function Ensure-AzCliReady {
         # Check if already logged in by querying the current account.
         # stderr is suppressed because az account show outputs an error message when not logged in,
         # which we handle below by prompting for az login.
-        $accountJson = az account show -o json 2>$null
+        $accountJson = $null
+        try {
+            $accountJson = az account show -o json 2>$null
+        } catch { }
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
             Write-Step 'Kein Azure-Login gefunden. Starte az login...'
             az login
             if ($LASTEXITCODE -ne 0) {
                 throw 'Azure-Login fehlgeschlagen. Bitte manuell az login ausfuehren.'
             }
-        }
-        else {
-            if ($PSVersionTable.PSVersion.Major -ge 6) {
-                $account = $accountJson | ConvertFrom-Json -Depth 10
-            } else {
-                $account = $accountJson | ConvertFrom-Json
+            # Verify login succeeded and display account info
+            $accountJson = $null
+            try {
+                $accountJson = az account show -o json 2>$null
+            } catch { }
+            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
+                throw 'Azure-Login konnte nicht verifiziert werden. Bitte manuell az login ausfuehren und erneut starten.'
             }
-            Write-Step ('Azure-Login aktiv: {0} (Subscription: {1})' -f $account.user.name, $account.name)
         }
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $account = $accountJson | ConvertFrom-Json -Depth 10
+        } else {
+            $account = $accountJson | ConvertFrom-Json
+        }
+        Write-Step ('Azure-Login aktiv: {0} (Subscription: {1})' -f $account.user.name, $account.name)
     }
 }
 

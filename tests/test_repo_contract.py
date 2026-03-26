@@ -26,6 +26,7 @@ for _candidate in _pwsh_candidates:
 
 _PWSH_AVAILABLE = PWSH is not None
 _CURRENT_WRAPPER_BACKUP: typing.Optional[dict] = None
+_CURRENT_DIR_BACKUPS: typing.Dict[str, str] = {}
 
 
 def _load_current_wrapper_backup() -> typing.Optional[dict]:
@@ -39,12 +40,30 @@ def _load_current_wrapper_backup() -> typing.Optional[dict]:
     return _CURRENT_WRAPPER_BACKUP
 
 
+def _load_current_dir_backups() -> None:
+    """Load all tracked files in current/ to restore after destructive tests."""
+    global _CURRENT_DIR_BACKUPS
+    if _CURRENT_DIR_BACKUPS:
+        return
+    current_dir = REPO_ROOT / 'current'
+    for name in ('deployment.config.json', 'README.md'):
+        fpath = current_dir / name
+        if fpath.exists():
+            _CURRENT_DIR_BACKUPS[name] = fpath.read_text(encoding='utf-8')
+
+
 def _restore_current_wrapper() -> None:
-    """Restore the current wrapper from in-memory backup (no git required)."""
-    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
-    if not path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+    """Restore the current directory from in-memory backup (no git required)."""
+    current_dir = REPO_ROOT / 'current'
+    wrapper_path = current_dir / 'main.deploytoazure.json'
+    if not wrapper_path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
+        current_dir.mkdir(parents=True, exist_ok=True)
+        wrapper_path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+    for name, content in _CURRENT_DIR_BACKUPS.items():
+        fpath = current_dir / name
+        if not fpath.exists():
+            current_dir.mkdir(parents=True, exist_ok=True)
+            fpath.write_text(content, encoding='utf-8')
 
 
 def requires_pwsh(fn):
@@ -63,6 +82,7 @@ def run_ps(command: str, env: typing.Optional[typing.Dict[str, str]] = None) -> 
 
 # Load backup at import time so it is available before any test modifies current/
 _load_current_wrapper_backup()
+_load_current_dir_backups()
 
 
 class RepoContractTests(unittest.TestCase):
@@ -600,6 +620,127 @@ class RepoContractTests(unittest.TestCase):
             is_ok or is_install_fail or is_caught,
             f'Unexpected output from Ensure-AzCliReady -SkipLogin: {output}'
         )
+
+    def test_firewall_rule_has_no_condition(self):
+        """PostgreSQL AllowAzure firewall rule must be unconditional in the standard path."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        firewall_rules = [
+            r for r in data['resources']
+            if r.get('type') == 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules'
+        ]
+        self.assertGreater(len(firewall_rules), 0, 'No PostgreSQL firewall rule resource found')
+        for rule in firewall_rules:
+            self.assertNotIn('condition', rule, 'Firewall rule must not have a condition (always deployed)')
+
+    def test_deployment_script_depends_on_firewall_rule(self):
+        """The deployment script must depend on the PostgreSQL firewall rule via a standard JSON array."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_scripts = [
+            r for r in data['resources']
+            if r.get('type') == 'Microsoft.Resources/deploymentScripts'
+        ]
+        self.assertGreater(len(deploy_scripts), 0, 'No deployment script resource found')
+        for script_res in deploy_scripts:
+            deps = script_res.get('dependsOn', [])
+            # dependsOn must be a standard JSON array, not a dynamic ARM expression string
+            self.assertIsInstance(deps, list,
+                                 'dependsOn must be a JSON array, not a dynamic concat/if expression')
+            # Must include the firewall rule dependency
+            deps_str = json.dumps(deps)
+            self.assertIn('firewallRules', deps_str,
+                          'Deployment script must depend on PostgreSQL firewall rule')
+
+    def test_allow_azure_services_always_true_in_defaults(self):
+        """allowAzureServicesToPostgres must default to true in all templates and wizard defaults."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        self.assertTrue(main['parameters']['allowAzureServicesToPostgres']['defaultValue'],
+                        'allowAzureServicesToPostgres must default to true in main.json')
+        wrapper = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        self.assertTrue(wrapper['parameters']['allowAzureServicesToPostgres']['defaultValue'],
+                        'allowAzureServicesToPostgres must default to true in wrapper')
+
+    @requires_pwsh
+    def test_wizard_does_not_prompt_allow_azure_or_insecure_http(self):
+        """Wizard must not interactively prompt for allowAzureServicesToPostgres or allowInsecureHttp."""
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8', errors='replace')
+        # These prompts should have been removed
+        self.assertNotIn("'Allow Azure services to Postgres?'", content,
+                         'Wizard must not prompt for allowAzureServicesToPostgres')
+        self.assertNotIn("'Unsicheres HTTP erlauben?'", content,
+                         'Wizard must not prompt for allowInsecureHttp')
+
+    @requires_pwsh
+    def test_domain_lowercasing_in_generate_only(self):
+        """Domain inputs with mixed case must be normalized to lowercase in generated files."""
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-case-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            if current_root.exists():
+                shutil.rmtree(current_root, ignore_errors=True)
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            command = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            command += " -CustomerNumber '7777' -VaultwardenDomain 'Vault.50er-Jahre-Museum.DE'"
+            command += " -CloudflareZone '50er-Jahre-Museum.DE'"
+            command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            command += " -MailRootDomain '50er-Jahre-Museum.DE'"
+            command += " -SmtpFrom 'vaultwarden@50er-Jahre-Museum.DE'"
+            run_ps(command)
+            # Find the generated customer directory (slug should be lowercase)
+            customer_dirs = [d for d in customers_root.iterdir() if d.is_dir()]
+            self.assertEqual(len(customer_dirs), 1, 'Expected exactly one customer directory')
+            config = json.loads((customer_dirs[0] / 'deployment.config.json').read_text(encoding='utf-8'))
+            # All domain values must be lowercase
+            self.assertEqual(config['domain']['hostname'], 'vault.50er-jahre-museum.de')
+            self.assertEqual(config['domain']['zoneName'], '50er-jahre-museum.de')
+            self.assertEqual(config['domain']['url'], 'https://vault.50er-jahre-museum.de')
+            self.assertEqual(config['smtp']['mailRootDomain'], '50er-jahre-museum.de')
+            # Customer code must be lowercase slug
+            self.assertRegex(config['customerCode'], r'^[a-z0-9-]+$')
+            # allowAzureServicesToPostgres must be true
+            self.assertTrue(config['azure']['advancedArmParameters']['allowAzureServicesToPostgres'])
+            # allowInsecureHttp must be true
+            self.assertTrue(config['azure']['advancedArmParameters']['allowInsecureHttp'])
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_rg_default_derived_from_various_domains(self):
+        """Resource group name must be dynamically derived from the Vaultwarden domain."""
+        test_cases = [
+            ('vault.thermosun.de', 'prod', 'germanywestcentral', 'rg-thermosun-vault-prod-gwc'),
+            ('vault.example.com', 'test', 'westeurope', 'rg-example-vault-test-weu'),
+            ('vault.50er-jahre-museum.de', 'prod', 'germanywestcentral', 'rg-50er-jahre-museum-vault-prod-gwc'),
+        ]
+        for domain, env, location, expected_rg in test_cases:
+            command = (
+                ". '{}' ; "
+                "Get-DefaultResourceGroupName -Environment '{}' -Location '{}' -VaultwardenDomain '{}'"
+            ).format(
+                REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Common.ps1',
+                env, location, domain
+            )
+            result = run_ps(command)
+            actual_rg = result.stdout.strip()
+            self.assertEqual(actual_rg, expected_rg,
+                             f'RG name for {domain}/{env}/{location}: expected {expected_rg}, got {actual_rg}')
+
+    def test_ensure_az_cli_ready_verifies_after_login(self):
+        """Ensure-AzCliReady must verify login after az login by calling az account show again."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        start = content.find('function Ensure-AzCliReady')
+        self.assertGreater(start, -1)
+        body = content[start:]
+        # After az login, the function must call az account show again to verify
+        az_login_pos = body.find('az login')
+        self.assertGreater(az_login_pos, -1, 'Ensure-AzCliReady must call az login')
+        after_login = body[az_login_pos:]
+        # Should have a second az account show after az login
+        second_account_show = after_login.find('az account show')
+        self.assertGreater(second_account_show, -1,
+                           'Ensure-AzCliReady must verify login by calling az account show after az login')
 
 
 if __name__ == '__main__':

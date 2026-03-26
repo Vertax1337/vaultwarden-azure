@@ -7,6 +7,35 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 ---
 
 
+## Revision 15 – 2026-03-26
+
+### Template / ARM
+
+| Änderung | Detail |
+|---|---|
+| PostgreSQL Firewall-Regel (`AllowAzure`) | `condition` entfernt – die Firewall-Regel wird jetzt immer deployed. Im aktuellen Standardpfad (ACA ohne VNet/NAT) ist `allowAzureServicesToPostgres = true` Pflicht, damit PostgreSQL erreichbar ist. |
+| Deployment-Script `dependsOn` | Fragile `concat(createArray(...), if(...))` Konstruktion durch ein sauberes JSON-Array ersetzt. Verhindert ARM-Deserialisierungsfehler und macht Abhängigkeiten lesbar. |
+| `allowAzureServicesToPostgres` | Parameter bleibt vorhanden (Abwärtskompatibilität), Default weiterhin `true`. Beschreibung aktualisiert: Firewall-Regel wird immer deployed. |
+
+### Scripts / Wizard
+
+| Änderung | Detail |
+|---|---|
+| `allowAzureServicesToPostgres` | Interaktive Abfrage entfernt. Intern immer `true`. Parameter `DisallowAzureServicesToPostgres` aus dem Wizard entfernt. |
+| `allowInsecureHttp` | Interaktive Abfrage entfernt. Intern immer `true` (ACA terminiert TLS am Edge). |
+| Domain-Normalisierung | Alle Domain-/Hostname-Eingaben (Vaultwarden-Domäne, Cloudflare Zone, Mail Root Domain) werden frühzeitig auf Lowercase normalisiert. Betrifft interaktiven und CLI-Pfad sowie `New-CustomerConfigObject`. |
+| `Ensure-AzCliReady` | Login-Verifikation verbessert: Nach `az login` wird `az account show` erneut aufgerufen, um den Login zu verifizieren und Account-Info anzuzeigen. Kein harter Abbruch mehr bei normalem „nicht eingeloggt"-Zustand. |
+
+### Tests
+
+| Änderung | Detail |
+|---|---|
+| 7 neue Tests | `test_firewall_rule_has_no_condition`, `test_deployment_script_depends_on_firewall_rule`, `test_allow_azure_services_always_true_in_defaults`, `test_wizard_does_not_prompt_allow_azure_or_insecure_http`, `test_domain_lowercasing_in_generate_only`, `test_rg_default_derived_from_various_domains`, `test_ensure_az_cli_ready_verifies_after_login` |
+| Testanzahl | 35 → 42 |
+
+---
+
+
 ## Revision 14 – 2026-03-26
 
 ### Scripts / Toolchain
