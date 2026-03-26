@@ -1,4 +1,6 @@
-﻿[CmdletBinding()]
+﻿# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+[CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$ResourceGroupName,
     [Parameter(Mandatory)][string]$TemplateFile,

@@ -1,6 +1,8 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-RepoRoot {
     param([string]$StartPath = $PSScriptRoot)
     $current = Resolve-Path $StartPath
@@ -95,6 +97,8 @@ function Read-ChoiceWithDefault {
     }
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Save-JsonUtf8 {
     param(
         [Parameter(Mandatory)]$Data,
@@ -107,6 +111,8 @@ function Save-JsonUtf8 {
     [System.IO.File]::WriteAllText($Path, $json + [Environment]::NewLine, [System.Text.UTF8Encoding]::new($false))
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Read-JsonFile {
     param([Parameter(Mandatory)][string]$Path)
     $json = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
@@ -116,6 +122,8 @@ function Read-JsonFile {
     return $json | ConvertFrom-Json
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function ConvertTo-HashtableDeep {
     param([Parameter(Mandatory)]$InputObject)
 
@@ -144,6 +152,8 @@ function ConvertTo-HashtableDeep {
     return $InputObject
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Convert-DomainToSlug {
     param([Parameter(Mandatory)][string]$Domain)
     $slug = ($Domain.ToLowerInvariant() -replace '[^a-z0-9]+', '-')
@@ -163,6 +173,8 @@ function Convert-SlugToAppName {
     return 'vault'
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-DefaultZoneFromHostname {
     param([Parameter(Mandatory)][string]$Hostname)
     $labels = @($Hostname -split '\.')
@@ -170,6 +182,8 @@ function Get-DefaultZoneFromHostname {
     return (($labels | Select-Object -Skip 1) -join '.').ToLowerInvariant()
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-RegionCode {
     param([Parameter(Mandatory)][string]$Location)
     $normalized = ($Location -replace '[^a-zA-Z0-9]', '').ToLowerInvariant()
@@ -220,6 +234,8 @@ function Get-CustomerSlugFromVaultwardenDomain {
     return Convert-DomainToSlug -Domain $hostname
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-DefaultResourceGroupName {
     param(
         [Parameter(Mandatory)][string]$Environment,
@@ -233,6 +249,8 @@ function Get-DefaultResourceGroupName {
     return ('rg-{0}-vault-{1}-{2}' -f $customerPart, $envPart, $regionPart)
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-CustomerPaths {
     param(
         [string]$RepoRoot,
@@ -551,6 +569,8 @@ function Get-AzCurrentAccount {
     return ($result.StdOut | ConvertFrom-Json)
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Ensure-AzCliReady {
     <#
     .SYNOPSIS
@@ -594,6 +614,8 @@ function Ensure-AzCliReady {
 }
 
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Ensure-ResourceGroupExists {
     [CmdletBinding()]
     param(

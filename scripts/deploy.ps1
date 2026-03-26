@@ -1,4 +1,6 @@
-﻿[CmdletBinding()]
+﻿# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ResourceGroupName,
   [string]$Location = 'germanywestcentral',

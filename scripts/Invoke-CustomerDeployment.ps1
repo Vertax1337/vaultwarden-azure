@@ -1,4 +1,6 @@
-﻿[CmdletBinding()]
+﻿# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+[CmdletBinding()]
 param(
     [Alias('CustomerCode')][string]$CustomerNumber,
     [Alias('Hostname')][string]$VaultwardenDomain,

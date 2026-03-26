@@ -469,6 +469,12 @@ class RepoContractTests(unittest.TestCase):
                 else:
                     self.assertNotIn(pattern, text, f'Potential secret ({pattern}) found in {config_path}')
 
+    def test_shared_logic_comment_present_in_common_library(self):
+        """Shared helper library must mark sensitive shared logic explicitly."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.', content)
+        self.assertIn('# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.', content)
+
     def test_toolchain_no_az_powershell_module_usage(self):
         """Deployment scripts must use Azure CLI exclusively – no Az PowerShell module calls."""
         az_ps_patterns = [
@@ -649,6 +655,22 @@ class RepoContractTests(unittest.TestCase):
             deps_str = json.dumps(deps)
             self.assertIn('firewallRules', deps_str,
                           'Deployment script must depend on PostgreSQL firewall rule')
+
+    def test_deployment_script_waits_for_ready_state_before_connectivity(self):
+        """Deployment script must wait for PostgreSQL provisioning and Ready state before execute()."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_script = next(r for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        script = deploy_script['properties']['scriptContent']
+        self.assertIn('az postgres flexible-server wait', script)
+        self.assertIn('--created', script)
+        self.assertIn('--query state -o tsv', script)
+        self.assertIn('PostgreSQL state is Ready', script)
+
+    def test_deployment_script_timeout_allows_extended_pg_wait(self):
+        """Deployment script timeout must be long enough for extended PostgreSQL readiness wait."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_script = next(r for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        self.assertEqual(deploy_script['properties']['timeout'], 'PT1H')
 
     def test_allow_azure_services_always_true_in_defaults(self):
         """allowAzureServicesToPostgres must default to true in all templates and wizard defaults."""
