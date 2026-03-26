@@ -1,6 +1,7 @@
 ﻿[CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ResourceGroupName,
+  [string]$Location = 'germanywestcentral',
   [string]$DomainUrl,
   [bool]$SmtpUseAuth = $true,
   [string]$MailRootDomain = '',
@@ -20,6 +21,7 @@ param(
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
 Ensure-AzCliReady
+Ensure-ResourceGroupExists -ResourceGroupName $ResourceGroupName -Location $Location
 
 if ([string]::IsNullOrWhiteSpace($DomainUrl)) {
   $DomainUrl = Read-Host 'Domain URL (z.B. https://vault.example.com)'
@@ -51,6 +53,7 @@ try {
     '$schema' = 'https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#'
     contentVersion = '1.0.0.0'
     parameters = [ordered]@{
+      location = @{ value = $Location }
       environment = @{ value = $Environment }
       bsseRef = @{ value = $BsseRef }
       domainUrl = @{ value = $DomainUrl }

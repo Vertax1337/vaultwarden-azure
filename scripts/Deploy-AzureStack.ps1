@@ -10,6 +10,16 @@ param(
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
 Ensure-AzCliReady
 
+$parameterDocument = Read-JsonFile -Path $ParametersFile
+$location = $null
+if ($parameterDocument -and $parameterDocument.parameters -and $parameterDocument.parameters.location) {
+    $location = [string]$parameterDocument.parameters.location.value
+}
+if ([string]::IsNullOrWhiteSpace($location)) {
+    throw 'ParametersFile enthaelt keinen gueltigen location-Wert.'
+}
+Ensure-ResourceGroupExists -ResourceGroupName $ResourceGroupName -Location $location
+
 Write-Step ("Azure-Deployment starte: {0}" -f $DeploymentName)
 $deployArgs = @(
     'deployment','group','create',

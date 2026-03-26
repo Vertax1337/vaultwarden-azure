@@ -750,5 +750,24 @@ class RepoContractTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), 'vault')
 
 
+    def test_main_json_key_vault_name_no_oversize_substring(self):
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        key_vault_expr = data['variables']['keyVaultName']
+        self.assertNotIn("substring(uniqueString(resourceGroup().id, parameters('appName')), 0, 20)", key_vault_expr)
+        self.assertIn("uniqueString(resourceGroup().id, parameters('appName'))", key_vault_expr)
+
+    @requires_pwsh
+    def test_deploy_azure_stack_creates_resource_group_before_group_deploy(self):
+        script_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        self.assertIn('Ensure-ResourceGroupExists -ResourceGroupName $ResourceGroupName -Location $location', script_text)
+        self.assertIn('Read-JsonFile -Path $ParametersFile', script_text)
+
+    @requires_pwsh
+    def test_direct_deploy_script_ensures_resource_group_and_location_parameter(self):
+        script_text = (REPO_ROOT / 'scripts' / 'deploy.ps1').read_text(encoding='utf-8')
+        self.assertIn("[string]$Location = 'germanywestcentral'", script_text)
+        self.assertIn('Ensure-ResourceGroupExists -ResourceGroupName $ResourceGroupName -Location $Location', script_text)
+        self.assertIn('location = @{ value = $Location }', script_text)
+
 if __name__ == '__main__':
     unittest.main()

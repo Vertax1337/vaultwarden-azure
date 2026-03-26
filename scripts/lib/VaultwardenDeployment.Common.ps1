@@ -593,6 +593,31 @@ function Ensure-AzCliReady {
     }
 }
 
+
+function Ensure-ResourceGroupExists {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroupName,
+        [Parameter(Mandatory)][string]$Location
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Location)) {
+        throw 'Location darf nicht leer sein, wenn die Resource Group erstellt werden soll.'
+    }
+
+    $show = Invoke-AzCapture -Arguments @('group','show','--name',$ResourceGroupName,'--only-show-errors','-o','json')
+    if ($show.ExitCode -eq 0) {
+        return
+    }
+
+    Write-Step ("Resource Group '{0}' nicht gefunden. Erstelle sie in '{1}'..." -f $ResourceGroupName, $Location)
+    $create = Invoke-AzCapture -Arguments @('group','create','--name',$ResourceGroupName,'--location',$Location,'--only-show-errors','-o','json')
+    if ($create.ExitCode -ne 0) {
+        $detail = if ($create.StdErr) { $create.StdErr } elseif ($create.StdOut) { $create.StdOut } else { 'Unbekannter Fehler' }
+        throw ("Resource Group '{0}' konnte nicht erstellt werden: {1}" -f $ResourceGroupName, $detail.Trim())
+    }
+    Write-Step ("Resource Group '{0}' ist bereit." -f $ResourceGroupName)
+}
 function Test-OpenSslPresent {
     if (-not (Get-Command openssl -ErrorAction SilentlyContinue)) {
         throw 'openssl wurde nicht gefunden.'
