@@ -126,10 +126,12 @@ DNS-Verifikation, Domain-Linking und SMTP-Username bleiben manuelle Post-Deploy-
 
 > **`/data/config.json` kann ENV-Variablen überlagern.** Vaultwarden speichert Admin-UI-Änderungen persistent in `/data/config.json` auf dem Azure-Files-Share. Diese Werte haben bei nachfolgenden Container-Starts **Vorrang vor ENV-Variablen**. Admin-Panel nach Bootstrap deaktivieren (`adminPanelEnabled=false`) und sicherstellen, dass kein persistierter `admin_token` zurückbleibt.
 
-- **Admin-Panel-Lifecycle:** Erstdeployment mit `adminPanelEnabled=true`; nach Bootstrap/Tests Redeploy mit `adminPanelEnabled=false`.
+- **Admin-Panel-Lifecycle:** Erstdeployment mit `adminPanelEnabled=true`; nach Bootstrap/Tests Redeploy mit `adminPanelEnabled=false`. **Achtung:** Falls der `admin_token` bereits in `/data/config.json` persistiert wurde, muss er dort manuell entfernt werden (Azure Files Share → `vaultwarden/config.json` → Schlüssel `admin_token` löschen), sonst bleibt das Admin-Panel trotz `adminPanelEnabled=false` aktiv.
+- **`signupsDomainsWhitelist`:** Dieser Parameter erlaubt Self-Registrierung für die angegebenen Domains **auch wenn `SIGNUPS_ALLOWED=false`** (hardcoded). Das ist gewolltes Vaultwarden-Verhalten, aber ein häufiger Irrtum. Nur setzen, wenn Self-Registrierung für bestimmte Domains bewusst gewünscht ist.
 - **SSO:** `ssoOnly=true` erfordert `ssoEnabled=true` und deaktiviert den Master-Passwort-Login vollständig. SSO vorher gründlich testen.
 - **Push:** Erfordert Bitwarden Installation ID + Key von https://bitwarden.com/host/. Ohne Push funktionieren Clients, aber ohne Echtzeit-Sync.
-- **Gehärtete Defaults:** HTTP deaktiviert, Image gepinnt, Signups aus, Passwort-Hints aus, SSRF-Schutz aktiv. Details in [README.HARDENED.md](./README.HARDENED.md).
+- **Gehärtete Defaults:** HTTP deaktiviert, Image gepinnt, Signups aus, Passwort-Hints aus, SSRF-Schutz aktiv, `IP_HEADER=X-Forwarded-For` gesetzt. Details in [HARDENING.md](./HARDENING.md).
+- **Key Vault Purge Protection:** Der Key Vault wird mit Soft Delete (90 Tage) und Purge Protection deployt. Nach Löschung einer Resource Group bleibt der Key-Vault-Name 90 Tage reserviert. Vor einem erneuten Deployment in eine neue RG muss der gelöschte Key Vault manuell gepurgt werden (`az keyvault purge --name <kvName>`) oder ein anderer `appName`-Wert verwendet werden.
 
 ---
 
@@ -158,6 +160,63 @@ DNS-Verifikation, Domain-Linking und SMTP-Username bleiben manuelle Post-Deploy-
 
 ---
 
+## Go-Live-Checkliste
+
+Vor dem produktiven Einsatz müssen folgende Punkte abgearbeitet sein:
+
+### Pflicht (vor Go-Live)
+
+- [ ] Deployment erfolgreich, Container App erreichbar über ACA-FQDN
+- [ ] `domainUrl` zeigt auf die korrekte öffentliche URL (`https://...`)
+- [ ] Custom Domain + TLS-Zertifikat an Container App gebunden (→ [Playbook §6](./docs/HowToInstall/Operation-Playbook.md))
+- [ ] SMTP-Mailversand getestet (Einladungsmail oder Admin-Test-Mail)
+- [ ] Ersten Admin-Benutzer über Einladung angelegt und angemeldet
+- [ ] Admin-Panel deaktiviert: Redeploy mit `adminPanelEnabled=false`
+- [ ] Prüfen, ob `/data/config.json` auf Azure Files einen persistierten `admin_token` enthält – falls ja, entfernen
+- [ ] Backup verifiziert: Azure Files Backup-Job läuft, PostgreSQL PITR aktiv
+- [ ] `signupsDomainsWhitelist` bewusst gesetzt oder leer (= keine Self-Registrierung)
+- [ ] `orgCreationUsers` auf Admin-Benutzer eingeschränkt oder leer gelassen (= alle)
+- [ ] DNS-Einträge für Mail (SPF, DKIM) korrekt gesetzt
+- [ ] Key Vault Diagnostic Settings aktiv (Log Analytics)
+
+### Empfohlen (zeitnah nach Go-Live)
+
+- [ ] SSO konfiguriert und getestet (falls gewünscht)
+- [ ] Push Notifications konfiguriert (falls gewünscht)
+- [ ] Restore-Drill durchgeführt: Azure Files Restore + PostgreSQL PITR
+- [ ] Monitoring/Alerting auf Container-Neustart und PostgreSQL-Metriken eingerichtet
+- [ ] Vaultwarden-Image-Version-Strategie dokumentiert (wann/wie aktualisieren)
+
+---
+
+## Betriebs-Checkliste (laufender Betrieb)
+
+| Intervall | Aufgabe |
+|---|---|
+| **Wöchentlich** | Azure Files Backup-Status prüfen |
+| **Monatlich** | Vaultwarden-Releases auf neue Versionen prüfen; bei Sicherheits-Patches zeitnah aktualisieren |
+| **Monatlich** | Key Vault Audit-Logs auf unerwartete Zugriffe prüfen |
+| **Quartalsweise** | Restore-Drill: Azure Files + PostgreSQL PITR testen |
+| **Quartalsweise** | SMTP-Funktion testen (Test-Einladung senden) |
+| **Bei Bedarf** | TLS-Zertifikat erneuern (falls nicht automatisch über Cloudflare/Let's Encrypt) |
+| **Bei Bedarf** | PostgreSQL-Administratorkennwort rotieren (betrifft nur Bootstrap, nicht den App-User) |
+
+Detaillierte Anleitungen: [Operations Playbook](./docs/HowToInstall/Operation-Playbook.md)
+
+---
+
+## Bekannte Einschränkungen und Caveats
+
+| Einschränkung | Auswirkung | Mitigation |
+|---|---|---|
+| Key Vault Purge Protection (90 Tage) | Nach RG-Löschung ist der KV-Name 90 Tage reserviert; erneutes Deployment schlägt fehl | `az keyvault purge --name <kvName>` vor erneutem Deployment oder anderen `appName` verwenden |
+| `dbPassword` regeneriert sich bei jedem Deployment | ARM-Funktion `newGuid()` erzeugt neuen Wert; wird nur bei Erstanlage des PostgreSQL-Servers verwendet | Sicher bei Redeployments – PostgreSQL ignoriert das Passwort bei bestehenden Servern |
+| `signupsDomainsWhitelist` umgeht `SIGNUPS_ALLOWED=false` | Eingetragene Domains können sich selbst registrieren | Nur bewusst setzen; leer lassen wenn keine Self-Registrierung gewünscht |
+| Azure Files ist kein transaktionaler Store | Backup-Zeitpunkt `/data` kann von PostgreSQL-PITR abweichen | Restore-Drills durchführen; Datenbank ist die autoritative Quelle |
+| Einzelnes Replikat | Kurzer Ausfall bei Container-Restart oder Deployment | Probes sorgen für automatischen Restart; für KMU-Größe akzeptabel |
+
+---
+
 ## Dokumentation
 
 | Dokument | Inhalt |
@@ -167,7 +226,7 @@ DNS-Verifikation, Domain-Linking und SMTP-Username bleiben manuelle Post-Deploy-
 | [Parameter-Referenz](./docs/reference/parameters.md) | Vollständige Parameterliste mit ENV-Mapping |
 | [Vaultwarden – How to Use (BSSE)](./docs/HowToUse/HowToUse.pdf) | Endbenutzer-Anleitung |
 | [Changelog `main.json`](./docs/changes.md) | Revisioniertes Änderungsprotokoll |
-| [Gehärtete Defaults](./README.HARDENED.md) | Produktionsgehärtete Standardwerte im Template |
+| [Gehärtete Defaults](./HARDENING.md) | Produktionsgehärtete Standardwerte im Template |
 | [Quellen](./docs/reference/sources.md) | Geprüfte Quellenlinks (ACS, M365, Bitwarden/Vaultwarden) |
 | [Beispiel-Parameterdateien](./examples/parameters/) | Szenariospezifische Vorlagen (M365, SSO, Push, ACS) |
 
@@ -206,7 +265,7 @@ Alle Dateien enthalten **nur Platzhalterwerte** und müssen vor dem produktiven 
 | `docs/reference/` | Parameter-Referenz und Quellen |
 | `docs/changes.md` | Changelog für `main.json` |
 | `examples/parameters/` | Parameterdatei-Vorlagen für typische Szenarien |
-| `README.HARDENED.md` | Gehärtete Defaults |
+| `HARDENING.md` | Gehärtete Defaults |
 
 ---
 

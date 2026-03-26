@@ -14,7 +14,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
-Test-AzCliPresent
+Ensure-AzCliReady -SkipLogin
 Test-OpenSslPresent
 
 if (-not $CertificateName) {

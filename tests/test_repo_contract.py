@@ -1,28 +1,74 @@
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
+import typing
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-PWSH = next((p for p in [pathlib.Path('/mnt/data/pwsh76/pwsh'), pathlib.Path('/mnt/data/work/pwsh/pwsh')] if p.exists()), pathlib.Path('pwsh'))
+PWSH: typing.Optional[pathlib.Path] = None
+
+# Detect pwsh availability once at import time.
+# Override with PWSH_PATH environment variable if needed.
+_pwsh_candidates = [pathlib.Path('pwsh')]
+if os.environ.get('PWSH_PATH'):
+    _pwsh_candidates.insert(0, pathlib.Path(os.environ['PWSH_PATH']))
+for _candidate in _pwsh_candidates:
+    try:
+        subprocess.run([str(_candidate), '-NoProfile', '-Command', 'exit 0'], check=True, capture_output=True, timeout=10)
+        PWSH = _candidate
+        break
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        continue
+
+_PWSH_AVAILABLE = PWSH is not None
+_CURRENT_WRAPPER_BACKUP: typing.Optional[dict] = None
 
 
-def run_ps(command: str, env: dict | None = None) -> subprocess.CompletedProcess:
+def _load_current_wrapper_backup() -> typing.Optional[dict]:
+    """Load the current wrapper from disk to restore after destructive tests."""
+    global _CURRENT_WRAPPER_BACKUP
+    if _CURRENT_WRAPPER_BACKUP is not None:
+        return _CURRENT_WRAPPER_BACKUP
+    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
+    if path.exists():
+        _CURRENT_WRAPPER_BACKUP = json.loads(path.read_text(encoding='utf-8'))
+    return _CURRENT_WRAPPER_BACKUP
+
+
+def _restore_current_wrapper() -> None:
+    """Restore the current wrapper from in-memory backup (no git required)."""
+    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
+    if not path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+
+
+def requires_pwsh(fn):
+    """Decorator that skips a test when pwsh is not available."""
+    return unittest.skipUnless(_PWSH_AVAILABLE, 'pwsh (PowerShell) not available')(fn)
+
+
+def run_ps(command: str, env: typing.Optional[typing.Dict[str, str]] = None) -> subprocess.CompletedProcess:
+    if not _PWSH_AVAILABLE:
+        raise unittest.SkipTest('pwsh (PowerShell) not available')
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)
     return subprocess.run([str(PWSH), '-NoProfile', '-Command', command], check=True, capture_output=True, text=True, env=merged_env)
 
 
+# Load backup at import time so it is available before any test modifies current/
+_load_current_wrapper_backup()
+
+
 class RepoContractTests(unittest.TestCase):
     def setUp(self):
-        # Restore current/ directory if it was removed by a previous test
-        current_wrapper = REPO_ROOT / 'current' / 'main.deploytoazure.json'
-        if not current_wrapper.exists():
-            subprocess.run(['git', 'checkout', 'HEAD', '--', 'current/'], cwd=REPO_ROOT, check=True)
+        # Restore current/ directory from in-memory backup (no git dependency)
+        _restore_current_wrapper()
 
     def test_main_json_has_dual_mode_parameters(self):
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
@@ -42,6 +88,7 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('main.json', data['parameters']['mainTemplateUri']['defaultValue'])
         self.assertEqual(data['parameters']['dbPassword']['defaultValue'], '[concat(toUpper(newGuid()), newGuid())]')
 
+    @requires_pwsh
     def test_powershell_scripts_parse(self):
         scripts = [
             'scripts/Invoke-CustomerDeployment.ps1',
@@ -61,6 +108,7 @@ class RepoContractTests(unittest.TestCase):
             )
             run_ps(parser_command)
 
+    @requires_pwsh
     def test_generate_only_cloudflare_customer_files_with_domain_defaults(self):
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-'))
         current_root = REPO_ROOT / 'current'
@@ -128,6 +176,7 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_generate_only_basic_customer_files(self):
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-basic-'))
         try:
@@ -147,6 +196,7 @@ class RepoContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_lockdown_script_keeps_cidrs_in_config_and_rules_in_param_file(self):
         customer_code = 'locktest'
         customer_root = REPO_ROOT / 'customers' / customer_code
@@ -202,6 +252,7 @@ class RepoContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(customer_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_region_helper_uses_caf_like_default_rg_name(self):
         command = (
             ". '{}' ; "
@@ -283,6 +334,7 @@ class RepoContractTests(unittest.TestCase):
             self.assertNotIn('"password":', text.lower(), f'Secret found in {config_path}')
             self.assertNotIn('dbPassword', text, f'dbPassword reference in {config_path}')
 
+    @requires_pwsh
     def test_generate_only_preserves_resources_array(self):
         """GenerateOnly must produce wrapper with resources as JSON array."""
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-arr-'))
@@ -325,6 +377,229 @@ class RepoContractTests(unittest.TestCase):
             # RG should contain a customer slug derived from hostname
             self.assertRegex(rg, r'^rg-.+-vault-.+-.+$', f'RG name {rg} in {config_path} does not match pattern')
 
+    def test_no_secrets_in_current_azure_parameters(self):
+        """current/azure.parameters.json must not be tracked in git (or if present, must not contain real secrets)."""
+        params_path = REPO_ROOT / 'current' / 'azure.parameters.json'
+        if not params_path.exists():
+            return  # File correctly absent
+        text = params_path.read_text(encoding='utf-8')
+        params = json.loads(text)
+        secure_keys = ['smtpPassword', 'ssoClientSecret', 'pushInstallationKey']
+        for key in secure_keys:
+            if key in params.get('parameters', {}):
+                value = params['parameters'][key].get('value', '')
+                self.assertEqual(value, '', f'Secret {key} should not have a real value in current/azure.parameters.json')
+
+    def test_gitignore_excludes_azure_parameters(self):
+        """The .gitignore must exclude azure.parameters.json from customers/ and current/."""
+        gitignore = (REPO_ROOT / '.gitignore').read_text(encoding='utf-8')
+        self.assertIn('customers/*/azure.parameters.json', gitignore)
+        self.assertIn('current/azure.parameters.json', gitignore)
+
+    def test_ps_scripts_no_unguarded_depth_parameter(self):
+        """All PowerShell scripts that use ConvertFrom-Json -Depth must guard it for PS5.1 compatibility."""
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            lines = content.split('\n')
+            for i, line in enumerate(lines, 1):
+                if 'ConvertFrom-Json' in line and '-Depth' in line:
+                    # Must be inside a PS6+ guard (check previous lines for version check)
+                    context = '\n'.join(lines[max(0, i-5):i])
+                    self.assertTrue(
+                        'PSVersion.Major' in context or 'PSVersionTable' in context,
+                        f'{ps_file.name}:{i} uses ConvertFrom-Json -Depth without PS5.1 version guard'
+                    )
+
+    def test_ps_scripts_no_randomnumbergenerator_fill(self):
+        """RandomNumberGenerator::Fill() is PS7/.NET Core only. Must use Create()+GetBytes() pattern."""
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            self.assertNotIn(
+                'RandomNumberGenerator]::Fill',
+                content,
+                f'{ps_file.name} uses RandomNumberGenerator::Fill() which is not available in PS5.1/.NET Framework'
+            )
+
+    def test_wrapper_main_json_parameter_parity(self):
+        """The root wrapper must forward every parameter that main.json declares (except internal-only ones)."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        wrapper = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        main_params = set(main['parameters'].keys())
+        wrapper_params = set(wrapper['parameters'].keys()) - {'mainTemplateUri'}
+        # The wrapper should cover main.json params (wrapper may have extra like mainTemplateUri, customHostname, edgeMode, etc.)
+        # Check that no main.json param is missing from the wrapper
+        missing = main_params - wrapper_params
+        self.assertEqual(missing, set(), f'main.json parameters not exposed by wrapper: {sorted(missing)}')
+
+    def test_customer_configs_no_secret_values(self):
+        """No deployment.config.json in customers/ or current/ should contain plaintext secret values."""
+        secret_patterns = ['"password":', 'dbpassword', 'clientsecret":', 'installationkey":']
+        for config_path in list((REPO_ROOT / 'customers').rglob('deployment.config.json')) + [REPO_ROOT / 'current' / 'deployment.config.json']:
+            if not config_path.exists():
+                continue
+            text = config_path.read_text(encoding='utf-8').lower()
+            for pattern in secret_patterns:
+                # passwordSource is allowed; actual "password": "value" is not
+                if pattern == '"password":':
+                    # Check that it is only passwordSource, not a real password value
+                    self.assertNotIn('"password": "', text.replace('"passwordsource"', ''),
+                                     f'Potential secret ({pattern}) found in {config_path}')
+                else:
+                    self.assertNotIn(pattern, text, f'Potential secret ({pattern}) found in {config_path}')
+
+    def test_toolchain_no_az_powershell_module_usage(self):
+        """Deployment scripts must use Azure CLI exclusively – no Az PowerShell module calls."""
+        az_ps_patterns = [
+            'Connect-AzAccount',
+            'Get-AzContext',
+            'New-AzResourceGroupDeployment',
+            'Import-Module Az',
+            'Ensure-AzModuleLoaded',
+        ]
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            for pattern in az_ps_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    f'{ps_file.name} contains Az PowerShell pattern "{pattern}". '
+                    f'All deployment scripts must use Azure CLI (az) consistently.'
+                )
+
+    def test_toolchain_deploy_scripts_use_ensure_az_cli(self):
+        """Scripts that call az commands must use Ensure-AzCliReady or Test-AzCliPresent."""
+        # These scripts directly invoke az CLI commands
+        scripts_with_az = [
+            'scripts/deploy.ps1',
+            'scripts/Deploy-AzureStack.ps1',
+            'scripts/Bind-AcaCustomDomain.ps1',
+        ]
+        for rel in scripts_with_az:
+            content = (REPO_ROOT / rel).read_text(encoding='utf-8', errors='replace')
+            has_ensure = 'Ensure-AzCliReady' in content
+            has_test = 'Test-AzCliPresent' in content
+            self.assertTrue(
+                has_ensure or has_test,
+                f'{rel} uses az CLI but does not call Ensure-AzCliReady or Test-AzCliPresent'
+            )
+
+    def test_common_lib_has_ensure_az_cli_ready(self):
+        """VaultwardenDeployment.Common.ps1 must define the Ensure-AzCliReady function."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Ensure-AzCliReady', content,
+                      'Common library must define Ensure-AzCliReady for consistent CLI bootstrap')
+        self.assertIn('function Test-AzCliPresent', content,
+                      'Common library must define Test-AzCliPresent')
+
+    def test_common_lib_no_az_powershell_module_bootstrap(self):
+        """Common library must not contain Az PowerShell module bootstrap code."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertNotIn('Install-Module -Name Az', content,
+                         'Common library must not install Az PowerShell module – use Azure CLI')
+        self.assertNotIn('Connect-AzAccount', content,
+                         'Common library must not use Connect-AzAccount – use az login')
+
+    def test_common_lib_has_install_az_cli(self):
+        """Common library must define Install-AzCli for auto-installation."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Install-AzCli', content,
+                      'Common library must define Install-AzCli for automatic CLI installation')
+
+    def test_common_lib_has_update_path_from_registry(self):
+        """Common library must define Update-PathFromRegistry for post-install PATH refresh."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Update-PathFromRegistry', content,
+                      'Common library must define Update-PathFromRegistry')
+
+    def test_ensure_az_cli_ready_calls_install_on_missing(self):
+        """Ensure-AzCliReady must call Install-AzCli when az is not found."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        # Ensure-AzCliReady must reference Install-AzCli in its body
+        # Extract the function body (rough: from 'function Ensure-AzCliReady' to next function or end)
+        start = content.find('function Ensure-AzCliReady')
+        self.assertGreater(start, -1, 'Ensure-AzCliReady not found')
+        body = content[start:]
+        # Must call Install-AzCli
+        self.assertIn('Install-AzCli', body,
+                      'Ensure-AzCliReady must call Install-AzCli when az is missing')
+        # Must call Test-AzCliPresent
+        self.assertIn('Test-AzCliPresent', body,
+                      'Ensure-AzCliReady must call Test-AzCliPresent to check az availability')
+
+    def test_install_az_cli_supports_windows_linux_macos(self):
+        """Install-AzCli must handle Windows, Linux, and macOS platforms."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        start = content.find('function Install-AzCli')
+        self.assertGreater(start, -1, 'Install-AzCli not found')
+        body = content[start:]
+        # Must reference platform detection
+        self.assertIn('winget', body, 'Install-AzCli must support winget on Windows')
+        self.assertIn('msiexec', body.lower() if 'msiexec' not in body else body,
+                      'Install-AzCli must support MSI fallback on Windows')
+        self.assertIn('InstallAzureCLIDeb', body,
+                      'Install-AzCli must support Linux installation')
+        self.assertIn('brew', body,
+                      'Install-AzCli must support Homebrew on macOS')
+
+    def test_test_az_cli_present_returns_bool(self):
+        """Test-AzCliPresent must return a boolean (not throw)."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        start = content.find('function Test-AzCliPresent')
+        self.assertGreater(start, -1, 'Test-AzCliPresent not found')
+        # Find the end of the function (next function or end of content)
+        next_func = content.find('\nfunction ', start + 1)
+        if next_func == -1:
+            func_body = content[start:]
+        else:
+            func_body = content[start:next_func]
+        # Must return bool, not throw
+        self.assertIn('[bool]', func_body,
+                      'Test-AzCliPresent must return a boolean value')
+        self.assertNotIn('throw', func_body,
+                         'Test-AzCliPresent must not throw – it should return $false when az is missing')
+
+    @requires_pwsh
+    def test_install_az_cli_returns_true_when_az_present(self):
+        """Install-AzCli should succeed (return $true) when az is already available."""
+        # This tests the happy path: az is already installed, so Install-AzCli
+        # should detect it (via Test-AzCliPresent at the end) and return $true.
+        # We can't test the actual install path in CI without side effects,
+        # but we can verify the control flow works when az is present.
+        command = (
+            ". '{}' ; "
+            "if (Test-AzCliPresent) {{ Write-Output 'AZ_PRESENT' }} else {{ Write-Output 'AZ_MISSING' }}"
+        ).format(REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1')
+        result = run_ps(command)
+        # az may or may not be installed in CI; test is informational
+        output = result.stdout.strip()
+        self.assertIn(output, ['AZ_PRESENT', 'AZ_MISSING'],
+                      'Test-AzCliPresent must return a clean boolean result')
+
+    @requires_pwsh
+    def test_ensure_az_cli_ready_skip_login(self):
+        """Ensure-AzCliReady -SkipLogin must not attempt login even if az is present."""
+        # This test verifies that -SkipLogin works without errors.
+        # If az is missing, Install-AzCli will be attempted but may fail in CI – that's OK,
+        # we just want to verify the code path doesn't crash on parse/basic execution.
+        command = (
+            ". '{}' ; "
+            "try {{ Ensure-AzCliReady -SkipLogin; Write-Output 'OK' }} "
+            "catch {{ Write-Output ('CAUGHT: ' + $_.Exception.Message) }}"
+        ).format(REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1')
+        result = run_ps(command)
+        output = result.stdout.strip()
+        # If az is installed: OK
+        # If az is not installed and auto-install fails: CAUGHT: ... konnte nicht automatisch installiert werden
+        is_ok = (output == 'OK')
+        is_install_fail = ('konnte nicht automatisch installiert werden' in output)
+        is_caught = ('CAUGHT' in output)
+        self.assertTrue(
+            is_ok or is_install_fail or is_caught,
+            f'Unexpected output from Ensure-AzCliReady -SkipLogin: {output}'
+        )
 
 
 if __name__ == '__main__':

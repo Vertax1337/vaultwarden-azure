@@ -402,6 +402,18 @@
                 "description": "PostgreSQL SKU name"
             }
         },
+        "postgresVersion": {
+            "type": "string",
+            "defaultValue": "16",
+            "allowedValues": [
+                "15",
+                "16",
+                "17"
+            ],
+            "metadata": {
+                "description": "PostgreSQL major version. New deployments should use the latest supported version. Existing servers cannot be downgraded."
+            }
+        },
         "postgresStorageGB": {
             "type": "int",
             "defaultValue": 32,
@@ -604,6 +616,9 @@
                     },
                     "postgresSkuName": {
                         "value": "[parameters('postgresSkuName')]"
+                    },
+                    "postgresVersion": {
+                        "value": "[parameters('postgresVersion')]"
                     },
                     "postgresStorageGB": {
                         "value": "[parameters('postgresStorageGB')]"

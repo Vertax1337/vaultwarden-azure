@@ -8,7 +8,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
-Test-AzCliPresent
+Ensure-AzCliReady
 
 Write-Step ("Azure-Deployment starte: {0}" -f $DeploymentName)
 $deployArgs = @(

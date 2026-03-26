@@ -9,17 +9,21 @@ Das aktuelle `main.json`-Template enthält folgende produktionsgehärtete Defaul
 - Self-Registrierung deaktiviert (`SIGNUPS_ALLOWED=false`)
 - Passwort-Hints deaktiviert (`SHOW_PASSWORD_HINT=false`)
 - SSRF-Schutz aktiviert (`HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS=true`)
+- Client-IP-Header explizit gesetzt (`IP_HEADER=X-Forwarded-For`) für korrekte Rate-Limiting- und Audit-Funktionalität hinter ACA-Ingress
 - Key-Vault-Purge-Protection aktiviert
 - TLS 1.2 Minimum auf dem Storage Account
+- Storage Account defaultToOAuthAuthentication aktiviert
 - Diagnostic Settings für Key Vault und PostgreSQL aktiviert
 - Azure-Files-Backup standardmäßig aktiv
 - PostgreSQL-Tier wird automatisch aus dem SKU-Namenspräfix abgeleitet
+- PostgreSQL-Version parametrierbar (Default: 16)
 
 ## Produktionsempfehlungen
 - `allowInsecureHttp`: `false`
 - `allowAzureServicesToPostgres`: `true` (erforderlich für Consumption-Plan-ACA; siehe [Härtungsstufen](./Readme.md#härtungsstufen) für Alternativen)
 - `vaultwardenImage`: gepinnt lassen; bewusst im Wartungsfenster aktualisieren
 - `adminPanelEnabled`: nach Bootstrap auf `false` setzen
+- `signupsDomainsWhitelist`: **Achtung:** Wirkt auch bei `SIGNUPS_ALLOWED=false` – eingetragene Domains können sich selbst registrieren
 
 ## Hinweis zur Outbound-IP
 Mit einem Consumption Container App Environment sind Outbound-IPs dynamisch. Wenn du den PostgreSQL-Zugriff auf bestimmte IPs einschränken willst, brauchst du ein VNet-integriertes Environment mit NAT Gateway (Härtungsstufe 1). Siehe den Abschnitt [Härtungsstufen](./Readme.md#härtungsstufen) in der Haupt-README.

@@ -19,7 +19,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
-Test-AzCliPresent
+Ensure-AzCliReady
 
 if ([string]::IsNullOrWhiteSpace($DomainUrl)) {
   $DomainUrl = Read-Host 'Domain URL (z.B. https://vault.example.com)'
