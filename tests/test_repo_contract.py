@@ -449,6 +449,59 @@ class RepoContractTests(unittest.TestCase):
                 else:
                     self.assertNotIn(pattern, text, f'Potential secret ({pattern}) found in {config_path}')
 
+    def test_toolchain_no_az_powershell_module_usage(self):
+        """Deployment scripts must use Azure CLI exclusively – no Az PowerShell module calls."""
+        az_ps_patterns = [
+            'Connect-AzAccount',
+            'Get-AzContext',
+            'New-AzResourceGroupDeployment',
+            'Import-Module Az',
+            'Ensure-AzModuleLoaded',
+        ]
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            for pattern in az_ps_patterns:
+                self.assertNotIn(
+                    pattern,
+                    content,
+                    f'{ps_file.name} contains Az PowerShell pattern "{pattern}". '
+                    f'All deployment scripts must use Azure CLI (az) consistently.'
+                )
+
+    def test_toolchain_deploy_scripts_use_ensure_az_cli(self):
+        """Scripts that call az commands must use Ensure-AzCliReady or Test-AzCliPresent."""
+        # These scripts directly invoke az CLI commands
+        scripts_with_az = [
+            'scripts/deploy.ps1',
+            'scripts/Deploy-AzureStack.ps1',
+            'scripts/Bind-AcaCustomDomain.ps1',
+        ]
+        for rel in scripts_with_az:
+            content = (REPO_ROOT / rel).read_text(encoding='utf-8', errors='replace')
+            has_ensure = 'Ensure-AzCliReady' in content
+            has_test = 'Test-AzCliPresent' in content
+            self.assertTrue(
+                has_ensure or has_test,
+                f'{rel} uses az CLI but does not call Ensure-AzCliReady or Test-AzCliPresent'
+            )
+
+    def test_common_lib_has_ensure_az_cli_ready(self):
+        """VaultwardenDeployment.Common.ps1 must define the Ensure-AzCliReady function."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertIn('function Ensure-AzCliReady', content,
+                      'Common library must define Ensure-AzCliReady for consistent CLI bootstrap')
+        self.assertIn('function Test-AzCliPresent', content,
+                      'Common library must define Test-AzCliPresent')
+
+    def test_common_lib_no_az_powershell_module_bootstrap(self):
+        """Common library must not contain Az PowerShell module bootstrap code."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
+        self.assertNotIn('Install-Module -Name Az', content,
+                         'Common library must not install Az PowerShell module – use Azure CLI')
+        self.assertNotIn('Connect-AzAccount', content,
+                         'Common library must not use Connect-AzAccount – use az login')
+
 
 if __name__ == '__main__':
     unittest.main()

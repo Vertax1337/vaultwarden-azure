@@ -363,70 +363,41 @@ function New-RandomPlaintextSecret {
 
 function Test-AzCliPresent {
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
-        throw 'Azure CLI (az) wurde nicht gefunden.'
+        throw 'Azure CLI (az) wurde nicht gefunden. Bitte installieren: https://aka.ms/installazurecliwindows'
     }
 }
 
-function Ensure-AzModuleLoaded {
+function Ensure-AzCliReady {
+    <#
+    .SYNOPSIS
+        Ensures Azure CLI is installed and the user is logged in.
+    .DESCRIPTION
+        All local deployment scripts use Azure CLI (az) as the single toolchain.
+        This function verifies that az is available and the user has an active login.
+        If no login is found, it starts an interactive az login.
+    #>
     [CmdletBinding()]
     param([switch]$SkipLogin)
 
-    # Check if Az module is already available
-    $azModule = Get-Module -Name Az.Accounts -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
-    if (-not $azModule) {
-        Write-Step 'Az PowerShell-Modul nicht gefunden. Installation wird versucht...'
-
-        # Check if we can install modules (PSGallery must be trusted or we force it)
-        $isElevated = $false
-        if ($PSVersionTable.PSVersion.Major -ge 6) {
-            # PowerShell 7+: check IsElevated
-            $isElevated = (-not $IsWindows) -or ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        }
-        else {
-            # Windows PowerShell 5.1
-            $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-        }
-
-        if (-not $isElevated -and ($env:OS -eq 'Windows_NT')) {
-            Write-Warning 'Die PowerShell-Session ist nicht elevated. Für die Installation von Az wird eine erhöhte Session benötigt.'
-            Write-Host 'Starte erhöhte PowerShell-Session für die Az-Installation...'
-            $installCmd = "Install-Module -Name Az -Scope AllUsers -Repository PSGallery -Force -AllowClobber"
-            $psExe = if ($PSVersionTable.PSVersion.Major -ge 6 -and (Get-Command pwsh -ErrorAction SilentlyContinue)) { 'pwsh.exe' } else { 'powershell.exe' }
-            $proc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile -Command `"Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $installCmd`"" -Verb RunAs -Wait -PassThru
-            if ($proc.ExitCode -ne 0) {
-                throw 'Az-Modul-Installation in erhöhter Session fehlgeschlagen. Bitte manuell installieren: Install-Module -Name Az'
-            }
-        }
-        else {
-            try {
-                Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -Force -AllowClobber -ErrorAction Stop
-            }
-            catch {
-                throw "Az-Modul konnte nicht installiert werden: $_`nBitte manuell installieren: Install-Module -Name Az -Scope CurrentUser"
-            }
-        }
-
-        $azModule = Get-Module -Name Az.Accounts -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $azModule) {
-            throw 'Az-Modul wurde installiert, ist aber nicht verfügbar. Bitte PowerShell-Session neu starten.'
-        }
-        Write-Step 'Az PowerShell-Modul erfolgreich installiert.'
-    }
-
-    # Import Az.Accounts if not already loaded
-    if (-not (Get-Module -Name Az.Accounts -ErrorAction SilentlyContinue)) {
-        Import-Module Az.Accounts -ErrorAction Stop
-    }
+    Test-AzCliPresent
 
     if (-not $SkipLogin) {
-        # Check if already logged in
-        $context = Get-AzContext -ErrorAction SilentlyContinue
-        if (-not $context -or -not $context.Account) {
-            Write-Step 'Kein Azure-Login gefunden. Starte Connect-AzAccount...'
-            Connect-AzAccount -ErrorAction Stop
+        # Check if already logged in by querying the current account
+        $accountJson = az account show -o json 2>$null
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
+            Write-Step 'Kein Azure-Login gefunden. Starte az login...'
+            az login
+            if ($LASTEXITCODE -ne 0) {
+                throw 'Azure-Login fehlgeschlagen. Bitte manuell az login ausfuehren.'
+            }
         }
         else {
-            Write-Step ('Azure-Login aktiv: {0} ({1})' -f $context.Account.Id, $context.Subscription.Name)
+            if ($PSVersionTable.PSVersion.Major -ge 6) {
+                $account = $accountJson | ConvertFrom-Json -Depth 10
+            } else {
+                $account = $accountJson | ConvertFrom-Json
+            }
+            Write-Step ('Azure-Login aktiv: {0} (Subscription: {1})' -f $account.user.name, $account.name)
         }
     }
 }
