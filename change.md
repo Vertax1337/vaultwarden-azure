@@ -122,3 +122,34 @@ Ein realer Deploy-Lauf zeigte, dass PostgreSQL bereits `Ready` war, der Connecti
   - Preview-/Dynamic-Install-Konfiguration
   - korrektes Erfassen der Execute-Exitcodes
   - korrekte Diagnosepfade für die SQL-Provisioning-Schritte
+
+## Schritt 1d – Problem 1: `pip` im Deployment-Script-Container bootstrappen
+
+### Problem / Ursache
+Ein realer Deploy-Lauf schlug beim Installieren der `rdbms-connect`-Extension fehl, weil der AzureCLI-Deployment-Script-Container kein `pip` mitbringt. Die Extension-Installation (`az extension add --name rdbms-connect`) benötigt `pip` intern, um ihre Python-Abhängigkeiten (u.a. `psycopg[binary]`) zu installieren. Der Fehler war:
+```
+[vault-ensure-kv-secrets] Installing Python package psycopg[binary]...
+[vault-ensure-kv-secrets] ERROR: Failed to install Python package psycopg[binary]
+[vault-ensure-kv-secrets] python package install stderr: /usr/bin/python3: No module named pip
+```
+
+### Betroffene Dateien
+- `main.json`
+- `change.md`
+
+### Umgesetzter Fix
+- Neue Funktion `ensure_pip()` im Deployment Script ergänzt, die `pip` vor der Extension-Installation sicherstellt:
+  1. Prüft ob `python3 -m pip` bereits verfügbar ist.
+  2. Falls nicht: versucht `python3 -m ensurepip --default-pip` (Python-Standardbibliothek).
+  3. Falls `ensurepip` fehlt: versucht den System-Paketmanager (`apk`, `tdnf` oder `apt-get`).
+  4. Falls nichts funktioniert: gibt Warnung aus und fährt trotzdem fort (Extension-Installationsfehlschlag wird weiterhin über den bestehenden `ensure_rdbms_connect_extension()`-Pfad abgefangen).
+- Die Funktion `configure_az_extension_installation()` ruft `ensure_pip || true` auf, bevor die Azure-CLI-Extension-Konfiguration gesetzt wird.
+
+### Relevante Nebenwirkungen / Risiken
+- Geringe zusätzliche Deployment-Dauer (wenige Sekunden) durch die pip-Bootstrapping-Logik.
+- Die Änderung bleibt lokal im Deployment Script in `main.json` und greift nicht in zentrale PowerShell-Shared-Logic ein.
+- Wenn `pip` weder über `ensurepip` noch über den Paketmanager installiert werden kann, wird eine Warnung ausgegeben. Die Extension-Installation schlägt dann über den bestehenden Fehler-/Diagnosepfad fehl.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf mit bestehenden Tests.
+- Die `ensure_pip`-Funktion ist im Deployment Script statisch prüfbar.
