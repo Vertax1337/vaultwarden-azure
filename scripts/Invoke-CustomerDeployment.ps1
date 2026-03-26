@@ -69,7 +69,7 @@ function New-EmptyAdvancedArmParameters {
         signupsDomainsWhitelist = ''
         orgCreationUsers = ''
         diagnosticsEnabled = $true
-        allowInsecureHttp = $false
+        allowInsecureHttp = $true
         ssoEnabled = $false
         ssoOnly = $false
         ssoAuthority = ''
@@ -349,9 +349,12 @@ function New-CustomerConfigInteractive {
     }
 
     $advancedArm = if ($ExistingConfig) { ConvertTo-HashtableDeep -InputObject $ExistingConfig.azure.advancedArmParameters } else { New-EmptyAdvancedArmParameters }
-    $advancedArm.ssoEnabled = Read-BooleanWithDefault -Label 'SSO aktivieren?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoEnabled' -Default $true))
-    $advancedArm.pushEnabled = Read-BooleanWithDefault -Label 'Push aktivieren?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'pushEnabled' -Default $true))
-    $advancedArm.acsDeployFoundation = Read-BooleanWithDefault -Label 'ACS Foundation deployen?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'acsDeployFoundation' -Default $true))
+    $ssoDefault = if ($ExistingConfig) { [bool]$advancedArm.ssoEnabled } else { $true }
+    $advancedArm.ssoEnabled = Read-BooleanWithDefault -Label 'SSO aktivieren?' -Default $ssoDefault
+    $pushDefault = if ($ExistingConfig) { [bool]$advancedArm.pushEnabled } else { $true }
+    $advancedArm.pushEnabled = Read-BooleanWithDefault -Label 'Push aktivieren?' -Default $pushDefault
+    $acsDefault = if ($ExistingConfig) { [bool]$advancedArm.acsDeployFoundation } else { $true }
+    $advancedArm.acsDeployFoundation = Read-BooleanWithDefault -Label 'ACS Foundation deployen?' -Default $acsDefault
 
     $existingOrAdvancedDefault = ($null -ne $ExistingConfig) -or $advancedArm.ssoEnabled -or $advancedArm.pushEnabled -or $advancedArm.acsDeployFoundation
     $editAdvanced = Read-BooleanWithDefault -Label 'Erweiterte Template-Optionen bearbeiten?' -Default $existingOrAdvancedDefault

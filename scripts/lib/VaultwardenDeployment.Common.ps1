@@ -135,11 +135,11 @@ function ConvertTo-HashtableDeep {
         return $hash
     }
     if ($InputObject -is [System.Collections.IEnumerable] -and -not ($InputObject -is [string])) {
-        $list = @()
+        $list = [System.Collections.ArrayList]::new()
         foreach ($item in $InputObject) {
-            $list += ,(ConvertTo-HashtableDeep -InputObject $item)
+            $list.Add((ConvertTo-HashtableDeep -InputObject $item)) | Out-Null
         }
-        return $list
+        return ,$list.ToArray()
     }
     return $InputObject
 }
