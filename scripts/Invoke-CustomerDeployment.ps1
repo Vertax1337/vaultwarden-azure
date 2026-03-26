@@ -49,8 +49,7 @@ param(
     [string]$StorageAccountSku,
     [string]$PostgresSkuName,
     [int]$PostgresStorageGB,
-    [int]$PostgresBackupRetentionDays,
-    [switch]$DisallowAzureServicesToPostgres
+    [int]$PostgresBackupRetentionDays
 )
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
@@ -111,6 +110,11 @@ function New-CustomerConfigObject {
         [hashtable]$AdvancedArmParameters,
         [hashtable]$Secrets
     )
+
+    # Normalize domain inputs to lowercase
+    $VaultwardenDomain = $VaultwardenDomain.Trim().ToLowerInvariant()
+    $ZoneName = $ZoneName.Trim().ToLowerInvariant()
+    $MailRootDomain = $MailRootDomain.Trim().ToLowerInvariant()
 
     if (-not (Test-ValidHostnameInZone -Hostname $VaultwardenDomain -ZoneName $ZoneName)) {
         throw "Vaultwarden-Domäne '$VaultwardenDomain' passt nicht zur Zone '$ZoneName'."
@@ -233,12 +237,14 @@ function New-AdvancedArmParametersInteractive {
     $advanced.signupsDomainsWhitelist = Read-TextWithDefault -Label 'Signups Domains Whitelist' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'signupsDomainsWhitelist' -Default (Get-SuggestedSignupsDomainsWhitelist -ZoneName $ZoneName)))
     $advanced.orgCreationUsers = Read-TextWithDefault -Label 'Org Creation Users' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'orgCreationUsers' -Default ''))
     $advanced.diagnosticsEnabled = Read-BooleanWithDefault -Label 'Diagnostics aktiv?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advanced -Name 'diagnosticsEnabled' -Default $true))
-    $advanced.allowInsecureHttp = Read-BooleanWithDefault -Label 'Unsicheres HTTP erlauben?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advanced -Name 'allowInsecureHttp' -Default $true))
+    # allowInsecureHttp is always true (ACA handles TLS at the edge)
+    $advanced.allowInsecureHttp = $true
     $advanced.storageAccountSku = Read-TextWithDefault -Label 'Storage Account SKU' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'storageAccountSku' -Default 'Standard_LRS')) -Required
     $advanced.postgresSkuName = Read-TextWithDefault -Label 'PostgreSQL SKU' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'postgresSkuName' -Default 'Standard_B1ms')) -Required
     $advanced.postgresStorageGB = [int](Read-TextWithDefault -Label 'PostgreSQL Storage GB' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'postgresStorageGB' -Default '32')) -Required)
     $advanced.postgresBackupRetentionDays = [int](Read-TextWithDefault -Label 'PostgreSQL Backup Retention Days' -Default ([string](Get-AdvancedParameterValue -Advanced $advanced -Name 'postgresBackupRetentionDays' -Default '14')) -Required)
-    $advanced.allowAzureServicesToPostgres = Read-BooleanWithDefault -Label 'Allow Azure services to Postgres?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advanced -Name 'allowAzureServicesToPostgres' -Default $true))
+    # allowAzureServicesToPostgres is always true in the standard path (no VNet/NAT)
+    $advanced.allowAzureServicesToPostgres = $true
 
     if ($advanced.ssoEnabled) {
         $advanced.ssoOnly = Read-BooleanWithDefault -Label 'SSO Only aktivieren?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advanced -Name 'ssoOnly' -Default $false))
@@ -312,8 +318,8 @@ function New-CustomerConfigInteractive {
 
     $customerNumber = Read-TextWithDefault -Label 'Kunden-Nr.' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.customerNumber } else { '' })) -Required
     $defaultDomain = if ($ExistingConfig) { $ExistingConfig.domain.hostname } else { 'vault.example.com' }
-    $vaultwardenDomain = Read-TextWithDefault -Label 'Vaultwarden-Domäne' -Default $defaultDomain -Required
-    $zoneName = Read-TextWithDefault -Label 'Cloudflare Zone' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.domain.zoneName } else { Get-DefaultZoneFromHostname -Hostname $vaultwardenDomain })) -Required
+    $vaultwardenDomain = (Read-TextWithDefault -Label 'Vaultwarden-Domäne' -Default $defaultDomain -Required).Trim().ToLowerInvariant()
+    $zoneName = (Read-TextWithDefault -Label 'Cloudflare Zone' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.domain.zoneName } else { Get-DefaultZoneFromHostname -Hostname $vaultwardenDomain })) -Required).Trim().ToLowerInvariant()
     if (-not (Test-ValidHostnameInZone -Hostname $vaultwardenDomain -ZoneName $zoneName)) {
         throw "Vaultwarden-Domäne '$vaultwardenDomain' passt nicht zur Zone '$zoneName'."
     }
@@ -326,7 +332,7 @@ function New-CustomerConfigInteractive {
     $currentMode = if ($ExistingConfig) { $ExistingConfig.edge.mode } else { 'cloudflare-managed' }
     $useCloudflare = Read-BooleanWithDefault -Label 'Cloudflare-managed Production Mode verwenden?' -Default ($currentMode -eq 'cloudflare-managed')
     $mode = if ($useCloudflare) { 'cloudflare-managed' } else { 'basic' }
-    $mailRootDomain = Read-TextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required
+    $mailRootDomain = (Read-TextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required).Trim().ToLowerInvariant()
     $smtpUseAuthValue = Read-BooleanWithDefault -Label 'SMTP Auth verwenden?' -Default ([bool]$(if ($ExistingConfig) { $ExistingConfig.smtp.useAuth } else { $true }))
     $smtpFrom = Read-TextWithDefault -Label 'SMTP From' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from } else { 'vaultwarden@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
@@ -537,12 +543,13 @@ function Build-AdvancedArmParametersFromCli {
     if ($script:InvocationBoundParameters.ContainsKey('OrgCreationUsers')) { $advanced.orgCreationUsers = $OrgCreationUsers }
     if ($DisableDiagnostics) { $advanced.diagnosticsEnabled = $false }
     elseif ($DiagnosticsEnabled) { $advanced.diagnosticsEnabled = $true }
-    if ($AllowInsecureHttp) { $advanced.allowInsecureHttp = $true }
+    # allowInsecureHttp and allowAzureServicesToPostgres are always true in the standard path
+    $advanced.allowInsecureHttp = $true
+    $advanced.allowAzureServicesToPostgres = $true
     if ($script:InvocationBoundParameters.ContainsKey('StorageAccountSku')) { $advanced.storageAccountSku = $StorageAccountSku }
     if ($script:InvocationBoundParameters.ContainsKey('PostgresSkuName')) { $advanced.postgresSkuName = $PostgresSkuName }
     if ($script:InvocationBoundParameters.ContainsKey('PostgresStorageGB')) { $advanced.postgresStorageGB = $PostgresStorageGB }
     if ($script:InvocationBoundParameters.ContainsKey('PostgresBackupRetentionDays')) { $advanced.postgresBackupRetentionDays = $PostgresBackupRetentionDays }
-    if ($DisallowAzureServicesToPostgres) { $advanced.allowAzureServicesToPostgres = $false }
     if ($SsoEnabled) { $advanced.ssoEnabled = $true }
     if ($SsoOnly) { $advanced.ssoOnly = $true }
     if ($script:InvocationBoundParameters.ContainsKey('SsoAuthority')) { $advanced.ssoAuthority = $SsoAuthority }
@@ -606,8 +613,12 @@ elseif (-not $config) {
     if (-not $CustomerNumber) { throw 'Kunden-Nr. ist erforderlich.' }
     if (-not $Mode) { $Mode = 'cloudflare-managed' }
     if (-not $VaultwardenDomain) { throw 'Vaultwarden-Domäne ist erforderlich.' }
+    # Normalize domain inputs to lowercase
+    $VaultwardenDomain = $VaultwardenDomain.Trim().ToLowerInvariant()
     if (-not $CloudflareZone) { $CloudflareZone = Get-DefaultZoneFromHostname -Hostname $VaultwardenDomain }
+    $CloudflareZone = $CloudflareZone.Trim().ToLowerInvariant()
     if (-not $MailRootDomain) { $MailRootDomain = $CloudflareZone }
+    $MailRootDomain = $MailRootDomain.Trim().ToLowerInvariant()
     $customerCode = Convert-DomainToSlug -Domain $VaultwardenDomain
     if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location -VaultwardenDomain $VaultwardenDomain }
     $effectiveSmtpUseAuth = $SmtpUseAuth.IsPresent
