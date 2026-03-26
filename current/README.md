@@ -1,10 +1,10 @@
 # current
 
-Diese Dateien sind die **aktive Deploy-to-Azure-Kopie** für vault.50er-jahre-museum.de.
+Diese Dateien sind die **aktive Deploy-to-Azure-Kopie** für vault.mytest.de.
 
-- Quelle: `customers/vault-50er-jahre-museum-de/...`
-- Aktive Vaultwarden-Domäne: vault.50er-jahre-museum.de
-- Resource Group Default: rg-musef-vault-prod-neu
+- Quelle: `customers/vault-mytest-de/...`
+- Aktive Vaultwarden-Domäne: vault.mytest.de
+- Resource Group Default: rg-mytest-vault-prod-gwc
 
 Verwendung:
 - Der Deploy-to-Azure-Button zeigt auf `current/main.deploytoazure.json`.

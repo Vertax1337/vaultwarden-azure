@@ -338,15 +338,27 @@ function New-CustomerConfigInteractive {
     $smtpUseAuthValue = Read-BooleanWithDefault -Label 'SMTP Auth verwenden?' -Default ([bool]$(if ($ExistingConfig) { $ExistingConfig.smtp.useAuth } else { $true }))
     $smtpFrom = Read-TextWithDefault -Label 'SMTP From' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from } else { 'vaultwarden@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
+    # SMTP Auth: SMTP Host is NOT prompted in the main wizard flow.
+    # The default (smtp.office365.com) is used unless the existing config already has a custom host.
+    # To override, supply -SmtpHost via CLI or edit the deployment.config.json manually.
+    # Direct Send: SMTP Host (MX endpoint) is always prompted explicitly - it is mandatory and cannot be defaulted.
     $smtpHostValue = ''
     $smtpPortValue = ''
     $smtpSecurityValue = 'starttls'
     $smtpUsernameValue = ''
     if ($smtpUseAuthValue) {
-        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { 'smtp.office365.com' })) -Required
+        # SMTP Auth: silently preserve existing host or default to smtp.office365.com.
+        # No interactive prompt for host in the main wizard path.
+        $existingSmtpHost = if ($ExistingConfig) { [string]$ExistingConfig.smtp.host } else { '' }
+        $smtpHostValue = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
         $smtpPortValue = Read-TextWithDefault -Label 'SMTP Port' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.port } else { '587' })) -Required
         $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
         $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required
+    }
+    else {
+        # Direct Send: MX lookup is not supported at deployment time (Azure DeploymentScript lacks dig/nslookup).
+        # The MX endpoint must be provided explicitly here and will be written directly to the parameter file.
+        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z.B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
     }
 
     $enableWafValue = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableWaf } else { $true }
@@ -433,6 +445,14 @@ function New-CustomerAzureParameters {
             }
             $params.parameters.smtpPassword = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.smtpPassword) }
         }
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($Config.smtp.host)) {
+        # Direct Send: write smtpHost so the deployment script receives SMTP_HOST_INPUT.
+        # MX lookup is not performed at runtime; the host must be pre-resolved and stored here.
+        $params.parameters.smtpHost = @{ value = $Config.smtp.host }
+    }
+    else {
+        throw 'Direct Send (smtpUseAuth=false) erfordert einen expliziten smtpHost-Wert. Gib den MX-Endpunkt deiner Mail-Domain an.'
     }
 
     if ($Config.azure.advancedArmParameters) {
@@ -624,6 +644,10 @@ elseif (-not $config) {
     $customerCode = Convert-DomainToSlug -Domain $VaultwardenDomain
     if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location -VaultwardenDomain $VaultwardenDomain }
     $effectiveSmtpUseAuth = $SmtpUseAuth.IsPresent
+    # Early validation for CLI/NonInteractive path: Direct Send requires explicit smtpHost
+    if (-not $effectiveSmtpUseAuth -and [string]::IsNullOrWhiteSpace($SmtpHost)) {
+        throw 'Direct Send (SmtpUseAuth nicht gesetzt) erfordert einen expliziten -SmtpHost-Parameter (MX-Endpunkt). MX-Lookup wird zur Deployment-Zeit nicht unterstützt.'
+    }
     $effectiveEnableWaf = if ($Mode -eq 'cloudflare-managed') { $EnableWaf.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableWaf')) } else { $false }
     $effectiveEnableRateLimit = if ($Mode -eq 'cloudflare-managed') { $EnableRateLimit.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableRateLimit')) } else { $false }
     $advanced = Build-AdvancedArmParametersFromCli -ExistingAdvanced (New-EmptyAdvancedArmParameters) -ZoneName $CloudflareZone
