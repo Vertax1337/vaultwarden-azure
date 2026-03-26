@@ -475,18 +475,18 @@ function New-CurrentReadmeContent {
 @"
 # current
 
-Diese Dateien sind die **aktive Deploy-to-Azure-Kopie** für `$($Config.domain.hostname)`.
+Diese Dateien sind die **aktive Deploy-to-Azure-Kopie** für $($Config.domain.hostname).
 
-- Quelle: `customers/$($Config.customerCode)/...`
-- Aktive Vaultwarden-Domäne: `$($Config.domain.hostname)`
-- Resource Group Default: `$($Config.azure.resourceGroupName)`
+- Quelle: ``customers/$($Config.customerCode)/...``
+- Aktive Vaultwarden-Domäne: $($Config.domain.hostname)
+- Resource Group Default: $($Config.azure.resourceGroupName)
 
 Verwendung:
-- Der Deploy-to-Azure-Button zeigt auf `current/main.deploytoazure.json`.
-- `current/azure.parameters.json` ist die dazugehörige aktive Parameterkopie.
+- Der Deploy-to-Azure-Button zeigt auf ``current/main.deploytoazure.json``.
+- ``current/azure.parameters.json`` ist die dazugehörige aktive Parameterkopie.
 
 Achtung:
-- `current/azure.parameters.json` kann sensible Klartextwerte enthalten, wenn sie bei der Generierung übergeben wurden.
+- ``current/azure.parameters.json`` kann sensible Klartextwerte enthalten, wenn sie bei der Generierung übergeben wurden.
 - Vor einem Push ins Git bitte prüfen, ob Secrets enthalten sind.
 "@
 }
