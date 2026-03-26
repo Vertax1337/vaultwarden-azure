@@ -99,6 +99,22 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('containerAppEnvironmentName', outputs)
         self.assertIn('containerAppName', outputs)
 
+    def test_main_json_assigns_reader_role_to_kv_writer_on_postgres(self):
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        self.assertIn('roleReader', data['variables'])
+        resources = data['resources']
+        role_assignments = [r for r in resources if r.get('type') == 'Microsoft.Authorization/roleAssignments']
+        postgres_reader = [
+            r for r in role_assignments
+            if r.get('scope') == "[format('Microsoft.DBforPostgreSQL/flexibleServers/{0}', variables('postgresServerName'))]"
+            and r.get('properties', {}).get('roleDefinitionId') == "[variables('roleReader')]"
+        ]
+        self.assertEqual(len(postgres_reader), 1, 'Expected exactly one PostgreSQL Reader role assignment for kv-writer identity')
+
+        deployment_script = next(r for r in resources if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        expected_dep = "[extensionResourceId(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName')), 'Microsoft.Authorization/roleAssignments', guid(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('postgresServerName')), resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', format('{0}-kv-writer-id', parameters('appName'))), variables('roleReader')))]"
+        self.assertIn(expected_dep, deployment_script['dependsOn'])
+
     def test_deploy_to_azure_wrapper_exists_and_exposes_many_parameters(self):
         data = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
         params = data['parameters']

@@ -62,3 +62,31 @@ Nach Schritt 1 war der PostgreSQL-Readiness-Pfad robuster, aber ein Fehlschlag l
 ### Test / Validierung
 - Repo-Testlauf mit `pwsh`: alle Tests grün.
 - Zusätzliche statische Tests prüfen, dass die PostgreSQL-Diagnose-Helfer und die erweiterten Diagnoseausgaben im Deployment Script vorhanden sind.
+
+## Schritt 1b – Problem 1: DeploymentScript-Identität bekommt PostgreSQL-Leserechte
+
+### Problem / Ursache
+Nach dem ersten Fix für Problem 1 zeigte der reale Azure-Lauf, dass das Deployment Script `vault-ensure-kv-secrets` zwar Key Vault erreichen konnte, aber beim Warten auf PostgreSQL mit `AuthorizationFailed` auf `Microsoft.DBforPostgreSQL/flexibleServers/read` scheiterte. Ursache war, dass die `kv-writer-id`-Identity zwar Key Vault-Rollen hatte, aber keine Azure-RBAC-Leserechte auf dem PostgreSQL Flexible Server.
+
+### Betroffene Dateien
+- `main.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+- Neue Variable `roleReader` für die Azure Built-in Role **Reader** ergänzt.
+- Neue Role Assignment Resource auf Scope `Microsoft.DBforPostgreSQL/flexibleServers/{postgresServerName}` für die User Assigned Identity `{appName}-kv-writer-id` ergänzt.
+- Das Deployment Script hängt jetzt zusätzlich von dieser PostgreSQL-Reader-Rollenzuweisung ab.
+- Dadurch können die im Deployment Script verwendeten Leseoperationen (`wait`, `show`, `firewall-rule list`, `db list`) auf dem PostgreSQL-Server ausgeführt werden.
+
+### Relevante Nebenwirkungen / Risiken
+- Die Änderung betrifft die zentrale ARM-Hauptvorlage `main.json`, aber nur im PostgreSQL-/DeploymentScript-Pfad.
+- Es wurde bewusst **kein** breiterer Scope wie Resource Group Reader vergeben, sondern minimal-invasiv Reader direkt auf dem PostgreSQL-Server.
+- Andere Wizard-/Button-Pfade bleiben unverändert; sie profitieren nur von der zusätzlichen Berechtigung für denselben DeploymentScript-Pfad.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf mit `pwsh`: 51/51 Tests grün.
+- Neuer statischer Test prüft:
+  - `roleReader` ist vorhanden
+  - genau eine PostgreSQL-Reader-Role-Assignment-Resource existiert
+  - das Deployment Script davon abhängt

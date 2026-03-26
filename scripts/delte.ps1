@@ -1,184 +1,145 @@
 param(
-    [string]$SubscriptionId = "26a416bd-13ec-4bc0-9cb2-c398a83f0482",
-    [int]$DeleteTimeoutSeconds = 900,
-    [int]$PollIntervalSeconds = 10
+    [string]$SubscriptionId = '26a416bd-13ec-4bc0-9cb2-c398a83f0482'
 )
 
 $ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
-function Write-Info {
-    param([string]$Message)
-    Write-Host $Message -ForegroundColor Cyan
-}
 
 function Write-Step {
-    param([string]$Message)
-    Write-Host "`n$Message" -ForegroundColor Yellow
+    param([string]$Text)
+    Write-Host "`n$Text" -ForegroundColor Yellow
 }
 
-function Write-Ok {
-    param([string]$Message)
-    Write-Host $Message -ForegroundColor Green
-}
-
-function Write-WarnMsg {
-    param([string]$Message)
-    Write-Host $Message -ForegroundColor DarkYellow
-}
-
-function Write-Fail {
-    param([string]$Message)
-    Write-Host $Message -ForegroundColor Red
-}
-
-function Split-Lines {
-    param([AllowNull()][string]$Text)
-    if ([string]::IsNullOrWhiteSpace($Text)) { return @() }
-    return @($Text -split "`r?`n" | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
-}
-
-function Invoke-AzText {
+function Invoke-Az {
     param(
-        [Parameter(Mandatory)][string[]]$Arguments,
-        [switch]$IgnoreExitCode
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args,
+        [switch]$AllowFailure
     )
 
-    $output = & az @Arguments 2>&1
-    $exitCode = $LASTEXITCODE
-    $text = ($output | Out-String).TrimEnd()
-
-    if (-not $IgnoreExitCode -and $exitCode -ne 0) {
-        throw "az $($Arguments -join ' ') fehlgeschlagen:`n$text"
-    }
-
-    return $text
-}
-
-function Invoke-AzTsv {
-    param(
-        [Parameter(Mandatory)][string[]]$Arguments,
-        [switch]$IgnoreExitCode
-    )
-
-    $text = Invoke-AzText -Arguments $Arguments -IgnoreExitCode:$IgnoreExitCode
-    return @(Split-Lines -Text $text)
-}
-
-function Invoke-AzJson {
-    param(
-        [Parameter(Mandatory)][string[]]$Arguments,
-        [switch]$IgnoreExitCode
-    )
-
-    $text = Invoke-AzText -Arguments $Arguments -IgnoreExitCode:$IgnoreExitCode
-    if ([string]::IsNullOrWhiteSpace($text)) { return @() }
+    $allArgs = @($Args) + @('--only-show-errors')
+    $previousErrorActionPreference = $ErrorActionPreference
 
     try {
-        $parsed = $text | ConvertFrom-Json
+        $ErrorActionPreference = 'Continue'
+        $raw = & az @allArgs 2>&1
+        $exitCode = $LASTEXITCODE
     }
-    catch {
-        if ($IgnoreExitCode) { return @() }
-        throw
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
     }
 
-    if ($null -eq $parsed) { return @() }
-    return @($parsed)
+    $lines = @($raw | ForEach-Object { "$_".TrimEnd() })
+
+    if (($exitCode -ne 0) -and (-not $AllowFailure)) {
+        $joined = ($lines -join "`n")
+        throw "az $($allArgs -join ' ') failed with exit code $exitCode`n$joined"
+    }
+
+    return [pscustomobject]@{
+        ExitCode = $exitCode
+        Output   = $lines
+    }
 }
 
-function Remove-LockById {
-    param([Parameter(Mandatory)][string]$LockId)
+function Get-AzTsvLines {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args,
+        [switch]$AllowFailure
+    )
 
-    if ([string]::IsNullOrWhiteSpace($LockId)) { return }
+    $result = Invoke-Az -Args (@($Args) + @('-o', 'tsv')) -AllowFailure:$AllowFailure
+    if ($result.ExitCode -ne 0) {
+        return @()
+    }
 
-    Write-Host "  Entferne Lock: $LockId"
-    try {
-        Invoke-AzText -Arguments @('lock', 'delete', '--ids', $LockId, '--only-show-errors') -IgnoreExitCode | Out-Null
+    return @(
+        $result.Output |
+            ForEach-Object { "$_".Trim() } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    )
+}
+
+function Get-AzJsonArray {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string[]]$Args,
+        [switch]$AllowFailure
+    )
+
+    $result = Invoke-Az -Args (@($Args) + @('-o', 'json')) -AllowFailure:$AllowFailure
+    if ($result.ExitCode -ne 0) {
+        return @()
     }
-    catch {
-        Write-WarnMsg "    Warnung: Konnte Lock nicht löschen: $LockId"
+
+    $text = ($result.Output -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($text) -or $text -eq 'null') {
+        return @()
     }
+
+    $obj = $text | ConvertFrom-Json
+    if ($obj -is [System.Array]) {
+        return @($obj)
+    }
+
+    return @($obj)
 }
 
 function Remove-AllLocks {
-    Write-Step '[1/6] Entferne alle Locks in der Subscription ...'
-    $lockIds = Invoke-AzTsv -Arguments @('lock', 'list', '--query', '[].id', '-o', 'tsv') -IgnoreExitCode
+    Write-Step '[1/5] Entferne alle Locks in der Subscription ...'
+    $lockIds = Get-AzTsvLines -Args @('lock', 'list', '--query', '[].id') -AllowFailure
 
-    if (@($lockIds).Count -eq 0) {
+    if ($lockIds.Count -eq 0) {
         Write-Host '  Keine Locks gefunden.'
         return
     }
 
-    foreach ($lockId in @($lockIds)) {
-        Remove-LockById -LockId $lockId
-    }
-}
-
-function Get-PropertyValue {
-    param(
-        [Parameter(Mandatory)]$Object,
-        [Parameter(Mandatory)][string[]]$PropertyNames
-    )
-
-    foreach ($name in $PropertyNames) {
-        if ($Object -and $Object.PSObject -and ($Object.PSObject.Properties.Name -contains $name)) {
-            $value = $Object.$name
-            if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) {
-                return [string]$value
+    foreach ($lockId in $lockIds) {
+        Write-Host "  Entferne Lock: $lockId"
+        $result = Invoke-Az -Args @('lock', 'delete', '--ids', $lockId) -AllowFailure
+        if ($result.ExitCode -ne 0) {
+            Write-Host '    Lock konnte nicht entfernt werden, fahre fort.' -ForegroundColor DarkYellow
+            foreach ($line in $result.Output) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) {
+                    Write-Host "    $line" -ForegroundColor DarkYellow
+                }
             }
         }
     }
-
-    return $null
 }
 
-function Disable-BackupForVault {
+function Cleanup-RecoveryVault {
     param(
-        [Parameter(Mandatory)][string]$VaultRg,
-        [Parameter(Mandatory)][string]$VaultName
+        [Parameter(Mandatory = $true)]
+        [string]$VaultRg,
+        [Parameter(Mandatory = $true)]
+        [string]$VaultName,
+        [Parameter(Mandatory = $true)]
+        [string]$VaultId
     )
 
-    Write-Host "  Prüfe Azure Files Backup-Items in Vault $VaultName ..."
-    $items = Invoke-AzJson -Arguments @(
+    Write-Host "`n==== Recovery Services Vault: $VaultName (RG: $VaultRg) ====" -ForegroundColor Cyan
+
+    Write-Host '  Suche Azure Files Backup-Items ...'
+    $items = Get-AzJsonArray -Args @(
         'backup', 'item', 'list',
         '--resource-group', $VaultRg,
         '--vault-name', $VaultName,
         '--backup-management-type', 'AzureStorage',
         '--workload-type', 'AzureFileShare',
-        '-o', 'json'
-    ) -IgnoreExitCode
+        '--query', '[].{itemName:name,containerName:properties.containerName,friendlyName:properties.friendlyName}'
+    ) -AllowFailure
 
-    if (@($items).Count -eq 0) {
-        Write-Host '    Keine Azure Files Backup-Items gefunden.'
-    }
+    if ($items.Count -gt 0) {
+        foreach ($item in $items) {
+            $containerName = "$($item.containerName)".Trim()
+            $itemName = "$($item.itemName)".Trim()
+            if ([string]::IsNullOrWhiteSpace($containerName) -or [string]::IsNullOrWhiteSpace($itemName)) {
+                continue
+            }
 
-    foreach ($item in @($items)) {
-        $props = $null
-        if ($item.PSObject.Properties.Name -contains 'properties') {
-            $props = $item.properties
-        }
-
-        $containerCandidates = @(
-            Get-PropertyValue -Object $props -PropertyNames @('containerName'),
-            Get-PropertyValue -Object $item  -PropertyNames @('containerName')
-        ) | Where-Object { $_ }
-
-        $itemCandidates = @(
-            Get-PropertyValue -Object $item  -PropertyNames @('name'),
-            Get-PropertyValue -Object $props -PropertyNames @('name', 'itemName', 'friendlyName')
-        ) | Where-Object { $_ }
-
-        $containerName = $containerCandidates | Select-Object -First 1
-        $itemName = $itemCandidates | Select-Object -First 1
-
-        if (-not $containerName -or -not $itemName) {
-            Write-WarnMsg '    Warnung: Konnte Container- oder Item-Namen nicht sicher ermitteln.'
-            continue
-        }
-
-        Write-Host "    Stoppe Backup und lösche Daten: Container=$containerName | Item=$itemName"
-        try {
-            Invoke-AzText -Arguments @(
+            Write-Host "  Stoppe Backup + lösche Backup-Daten: Container='$containerName' Item='$itemName'"
+            $result = Invoke-Az -Args @(
                 'backup', 'protection', 'disable',
                 '--resource-group', $VaultRg,
                 '--vault-name', $VaultName,
@@ -187,240 +148,180 @@ function Disable-BackupForVault {
                 '--container-name', $containerName,
                 '--item-name', $itemName,
                 '--delete-backup-data', 'true',
-                '--yes',
-                '--only-show-errors'
-            ) -IgnoreExitCode | Out-Null
-        }
-        catch {
-            Write-WarnMsg "      Warnung: Backup-Disable fehlgeschlagen für $itemName"
+                '--yes'
+            ) -AllowFailure
+
+            if ($result.ExitCode -ne 0) {
+                Write-Host '    Stop Backup/Delete Backup Data fehlgeschlagen, fahre fort.' -ForegroundColor DarkYellow
+                foreach ($line in $result.Output) {
+                    if (-not [string]::IsNullOrWhiteSpace($line)) {
+                        Write-Host "    $line" -ForegroundColor DarkYellow
+                    }
+                }
+            }
         }
     }
+    else {
+        Write-Host '  Keine Azure Files Backup-Items gefunden.'
+    }
 
-    Write-Host "  Prüfe registrierte Storage-Container in Vault $VaultName ..."
-    $containers = Invoke-AzJson -Arguments @(
+    Write-Host '  Liste registrierte AzureStorage-Container ...'
+    $containers = Get-AzJsonArray -Args @(
         'backup', 'container', 'list',
         '--resource-group', $VaultRg,
         '--vault-name', $VaultName,
         '--backup-management-type', 'AzureStorage',
-        '-o', 'json'
-    ) -IgnoreExitCode
+        '--query', '[].{name:name,friendlyName:properties.friendlyName}'
+    ) -AllowFailure
 
-    if (@($containers).Count -eq 0) {
-        Write-Host '    Keine registrierten Storage-Container gefunden.'
-    }
+    if ($containers.Count -gt 0) {
+        foreach ($container in $containers) {
+            $containerName = "$($container.name)".Trim()
+            if ([string]::IsNullOrWhiteSpace($containerName)) {
+                $containerName = "$($container.friendlyName)".Trim()
+            }
+            if ([string]::IsNullOrWhiteSpace($containerName)) {
+                continue
+            }
 
-    foreach ($container in @($containers)) {
-        $props = $null
-        if ($container.PSObject.Properties.Name -contains 'properties') {
-            $props = $container.properties
-        }
-
-        $candidates = @(
-            Get-PropertyValue -Object $container -PropertyNames @('name'),
-            Get-PropertyValue -Object $props     -PropertyNames @('containerName'),
-            Get-PropertyValue -Object $props     -PropertyNames @('friendlyName')
-        ) | Where-Object { $_ }
-
-        foreach ($candidate in $candidates | Select-Object -Unique) {
-            Write-Host "    Versuche Unregister: $candidate"
-            Invoke-AzText -Arguments @(
+            Write-Host "  Unregister Container: $containerName"
+            $result = Invoke-Az -Args @(
                 'backup', 'container', 'unregister',
                 '--resource-group', $VaultRg,
                 '--vault-name', $VaultName,
                 '--backup-management-type', 'AzureStorage',
-                '--container-name', $candidate,
-                '--yes',
-                '--only-show-errors'
-            ) -IgnoreExitCode | Out-Null
+                '--container-name', $containerName,
+                '--yes'
+            ) -AllowFailure
+
+            if ($result.ExitCode -ne 0) {
+                Write-Host '    Unregister fehlgeschlagen, fahre fort.' -ForegroundColor DarkYellow
+                foreach ($line in $result.Output) {
+                    if (-not [string]::IsNullOrWhiteSpace($line)) {
+                        Write-Host "    $line" -ForegroundColor DarkYellow
+                    }
+                }
+            }
+        }
+    }
+    else {
+        Write-Host '  Keine registrierten AzureStorage-Container gefunden.'
+    }
+
+    Write-Host '  Deaktiviere Soft Delete / Hybrid Security (best effort, erst nach Container-Bereinigung) ...'
+    $softDeleteResult = Invoke-Az -Args @(
+        'backup', 'vault', 'backup-properties', 'set',
+        '--name', $VaultName,
+        '--resource-group', $VaultRg,
+        '--soft-delete-feature-state', 'Disable',
+        '--hybrid-backup-security-features', 'Disable'
+    ) -AllowFailure
+
+    if ($softDeleteResult.ExitCode -ne 0) {
+        Write-Host '    Soft Delete/Hybrid Security konnte nicht geändert werden, fahre fort.' -ForegroundColor DarkYellow
+        foreach ($line in $softDeleteResult.Output) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host "    $line" -ForegroundColor DarkYellow
+            }
         }
     }
 
-    Write-Host '  Versuche Soft Delete zu deaktivieren (Best Effort) ...'
-    Invoke-AzText -Arguments @(
-        'backup', 'vault', 'backup-properties', 'set',
-        '--resource-group', $VaultRg,
+    Write-Host '  Liste soft-deleted Container (Info) ...'
+    $softDeleted = Get-AzTsvLines -Args @(
+        'backup', 'vault', 'list-soft-deleted-containers',
         '--name', $VaultName,
-        '--soft-delete-feature-state', 'Disable',
-        '--only-show-errors'
-    ) -IgnoreExitCode | Out-Null
-}
+        '--resource-group', $VaultRg,
+        '--backup-management-type', 'AzureStorage',
+        '--query', '[].name'
+    ) -AllowFailure
 
-function Cleanup-RecoveryServicesVaults {
-    Write-Step '[2/6] Bereinige Recovery Services Vaults ...'
-
-    $vaults = Invoke-AzJson -Arguments @(
-        'resource', 'list',
-        '--resource-type', 'Microsoft.RecoveryServices/vaults',
-        '-o', 'json'
-    ) -IgnoreExitCode
-
-    if (@($vaults).Count -eq 0) {
-        Write-Host '  Keine Recovery Services Vaults gefunden.'
-        return
+    if ($softDeleted.Count -gt 0) {
+        Write-Host '  Soft-deleted Container vorhanden:' -ForegroundColor DarkYellow
+        foreach ($name in $softDeleted) {
+            Write-Host "    $name" -ForegroundColor DarkYellow
+        }
     }
 
-    foreach ($vault in @($vaults)) {
-        $vaultName = Get-PropertyValue -Object $vault -PropertyNames @('name')
-        $vaultRg = Get-PropertyValue -Object $vault -PropertyNames @('resourceGroup')
-        $vaultId = Get-PropertyValue -Object $vault -PropertyNames @('id')
+    Write-Host '  Versuche Vault-Ressource zu löschen ...'
+    $deleteResult = Invoke-Az -Args @('resource', 'delete', '--ids', $VaultId) -AllowFailure
+    if ($deleteResult.ExitCode -ne 0) {
+        Write-Host '    Vault-Löschung noch blockiert. Weiter mit RG-/Ressourcen-Löschung.' -ForegroundColor DarkYellow
+        foreach ($line in $deleteResult.Output) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host "    $line" -ForegroundColor DarkYellow
+            }
+        }
+    }
+}
 
-        if (-not $vaultName -or -not $vaultRg -or -not $vaultId) {
-            Write-WarnMsg '  Warnung: Vault-Daten unvollständig, überspringe Eintrag.'
+Write-Host 'Aktuelle Subscription setzen ...' -ForegroundColor Cyan
+$null = Invoke-Az -Args @('account', 'set', '--subscription', $SubscriptionId)
+& az account show --output table
+
+Remove-AllLocks
+
+Write-Step '[2/5] Bereinige Recovery Services Vaults ...'
+$vaults = Get-AzJsonArray -Args @(
+    'resource', 'list',
+    '--resource-type', 'Microsoft.RecoveryServices/vaults',
+    '--query', '[].{id:id,name:name,resourceGroup:resourceGroup}'
+) -AllowFailure
+
+if ($vaults.Count -eq 0) {
+    Write-Host '  Keine Recovery Services Vaults gefunden.'
+}
+else {
+    foreach ($vault in $vaults) {
+        $vaultId = "$($vault.id)".Trim()
+        $vaultName = "$($vault.name)".Trim()
+        $vaultRg = "$($vault.resourceGroup)".Trim()
+        if ([string]::IsNullOrWhiteSpace($vaultId) -or [string]::IsNullOrWhiteSpace($vaultName) -or [string]::IsNullOrWhiteSpace($vaultRg)) {
             continue
         }
 
-        Write-Host "`n==== Recovery Services Vault: $vaultName (RG: $vaultRg) ====" -ForegroundColor Cyan
-        Disable-BackupForVault -VaultRg $vaultRg -VaultName $vaultName
-
-        Write-Host '  Versuche Vault-Ressource zu löschen ...'
-        Invoke-AzText -Arguments @('resource', 'delete', '--ids', $vaultId, '--only-show-errors') -IgnoreExitCode | Out-Null
+        Cleanup-RecoveryVault -VaultRg $vaultRg -VaultName $vaultName -VaultId $vaultId
     }
 }
 
-function Queue-DeleteAllResourceGroups {
-    Write-Step '[3/6] Starte Löschung aller Resource Groups ...'
+Remove-AllLocks
 
-    $rgNames = Invoke-AzTsv -Arguments @('group', 'list', '--query', '[].name', '-o', 'tsv') -IgnoreExitCode
-    $rgNames = @($rgNames | Where-Object { $_ -and $_ -ne 'NetworkWatcherRG' })
+Write-Step '[3/5] Lösche alle Resource Groups ...'
+$rgs = Get-AzTsvLines -Args @('group', 'list', '--query', '[].name') -AllowFailure
+$failedRgs = @()
 
-    if ($rgNames.Count -eq 0) {
-        Write-Ok '  Keine Resource Groups mehr vorhanden.'
-        return @()
-    }
-
-    foreach ($rg in $rgNames) {
-        Write-Host "  Lösche RG: $rg"
-        Invoke-AzText -Arguments @('group', 'delete', '--name', $rg, '--yes', '--no-wait', '--only-show-errors') -IgnoreExitCode | Out-Null
-    }
-
-    return @($rgNames)
-}
-
-function Wait-ForRgDeletion {
-    param(
-        [Parameter(Mandatory)][string]$ResourceGroupName,
-        [int]$TimeoutSeconds = 900,
-        [int]$PollSeconds = 10
-    )
-
-    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
-
-    while ((Get-Date) -lt $deadline) {
-        $exists = (Invoke-AzText -Arguments @('group', 'exists', '--name', $ResourceGroupName, '-o', 'tsv') -IgnoreExitCode).Trim().ToLowerInvariant()
-        if ($exists -ne 'true') {
-            return $true
-        }
-        Start-Sleep -Seconds $PollSeconds
-    }
-
-    return $false
-}
-
-function Remove-ResourcesInsideRg {
-    param([Parameter(Mandatory)][string]$ResourceGroupName)
-
-    Write-Host "  Entferne Locks in RG: $ResourceGroupName"
-    $lockIds = Invoke-AzTsv -Arguments @('lock', 'list', '--resource-group', $ResourceGroupName, '--query', '[].id', '-o', 'tsv') -IgnoreExitCode
-    foreach ($lockId in @($lockIds)) {
-        Remove-LockById -LockId $lockId
-    }
-
-    $resourceIds = Invoke-AzTsv -Arguments @(
-        'resource', 'list',
-        '--resource-group', $ResourceGroupName,
-        '--query', '[].id',
-        '-o', 'tsv'
-    ) -IgnoreExitCode
-
-    foreach ($resId in @($resourceIds)) {
-        if ([string]::IsNullOrWhiteSpace($resId)) { continue }
-        Write-Host "    Lösche Ressource direkt: $resId"
-        Invoke-AzText -Arguments @('resource', 'delete', '--ids', $resId, '--only-show-errors') -IgnoreExitCode | Out-Null
-    }
-
-    Write-Host "  Versuche RG erneut zu löschen: $ResourceGroupName"
-    Invoke-AzText -Arguments @('group', 'delete', '--name', $ResourceGroupName, '--yes', '--no-wait', '--only-show-errors') -IgnoreExitCode | Out-Null
-}
-
-function Get-RgResourceSummary {
-    param([Parameter(Mandatory)][string]$ResourceGroupName)
-
-    $resources = Invoke-AzJson -Arguments @('resource', 'list', '--resource-group', $ResourceGroupName, '-o', 'json') -IgnoreExitCode
-    if (@($resources).Count -eq 0) { return @() }
-
-    return @(
-        $resources | ForEach-Object {
-            [PSCustomObject]@{
-                name = Get-PropertyValue -Object $_ -PropertyNames @('name')
-                type = Get-PropertyValue -Object $_ -PropertyNames @('type')
-                id   = Get-PropertyValue -Object $_ -PropertyNames @('id')
+foreach ($rg in $rgs) {
+    Write-Host "  Lösche RG: $rg"
+    $result = Invoke-Az -Args @('group', 'delete', '--name', $rg, '--yes') -AllowFailure
+    if ($result.ExitCode -ne 0) {
+        Write-Host "  RG-Löschung fehlgeschlagen: $rg" -ForegroundColor Red
+        foreach ($line in $result.Output) {
+            if (-not [string]::IsNullOrWhiteSpace($line)) {
+                Write-Host "    $line" -ForegroundColor Red
             }
         }
-    )
-}
-
-Write-Info 'Aktuelle Subscription setzen ...'
-Invoke-AzText -Arguments @('account', 'set', '--subscription', $SubscriptionId) | Out-Null
-$accountTable = Invoke-AzText -Arguments @('account', 'show', '--output', 'table')
-Write-Host $accountTable
-
-Remove-AllLocks
-Cleanup-RecoveryServicesVaults
-Remove-AllLocks
-
-$rgNames = Queue-DeleteAllResourceGroups
-if (@($rgNames).Count -eq 0) {
-    exit 0
-}
-
-Write-Step '[4/6] Warte auf Löschung der Resource Groups ...'
-$stillExisting = New-Object System.Collections.Generic.List[string]
-foreach ($rg in @($rgNames)) {
-    Write-Host "  Prüfe RG: $rg"
-    $deleted = Wait-ForRgDeletion -ResourceGroupName $rg -TimeoutSeconds $DeleteTimeoutSeconds -PollSeconds $PollIntervalSeconds
-    if ($deleted) {
-        Write-Ok "    OK: $rg gelöscht"
-    }
-    else {
-        Write-WarnMsg "    Noch vorhanden: $rg"
-        $stillExisting.Add($rg)
+        $failedRgs += $rg
     }
 }
 
-if ($stillExisting.Count -gt 0) {
-    Write-Step '[5/6] Aggressiver Nachgang für verbliebene Resource Groups ...'
-    foreach ($rg in $stillExisting) {
-        Remove-ResourcesInsideRg -ResourceGroupName $rg
+Write-Step '[4/5] Prüfe verbliebene Resource Groups ...'
+$remainingRgs = Get-AzTsvLines -Args @('group', 'list', '--query', '[].name') -AllowFailure
+if ($remainingRgs.Count -eq 0) {
+    Write-Host '  Keine Resource Groups mehr vorhanden.' -ForegroundColor Green
+}
+else {
+    foreach ($rg in $remainingRgs) {
+        Write-Host "  Verbleibt: $rg" -ForegroundColor DarkYellow
     }
 }
 
-Write-Step '[6/6] Abschlussprüfung ...'
-$finalRemaining = New-Object System.Collections.Generic.List[string]
-$remainingDetails = @{}
-
-foreach ($rg in @($rgNames)) {
-    $exists = (Invoke-AzText -Arguments @('group', 'exists', '--name', $rg, '-o', 'tsv') -IgnoreExitCode).Trim().ToLowerInvariant()
-    if ($exists -eq 'true') {
-        $finalRemaining.Add($rg)
-        $remainingDetails[$rg] = Get-RgResourceSummary -ResourceGroupName $rg
-    }
-}
-
-if ($finalRemaining.Count -eq 0) {
-    Write-Ok "`nAlle Resource Groups wurden gelöscht."
-    exit 0
-}
-
-Write-Fail "`nDiese Resource Groups sind noch vorhanden:"
-foreach ($rg in $finalRemaining) {
-    Write-Host " - $rg" -ForegroundColor Red
-    $details = $remainingDetails[$rg]
-    foreach ($item in @($details)) {
-        Write-Host "    * $($item.type) :: $($item.name)"
-    }
+Write-Step '[5/5] Schreibe Report ...'
+$report = [pscustomobject]@{
+    SubscriptionId     = $SubscriptionId
+    TimestampUtc       = (Get-Date).ToUniversalTime().ToString('s') + 'Z'
+    RemainingGroups    = @($remainingRgs)
+    FailedDeleteGroups = @($failedRgs)
 }
 
 $reportPath = Join-Path -Path (Get-Location) -ChildPath 'delete-report.json'
-$remainingDetails | ConvertTo-Json -Depth 20 | Set-Content -Path $reportPath -Encoding UTF8
-Write-WarnMsg "`nDetails wurden gespeichert in: $reportPath"
-exit 1
+$report | ConvertTo-Json -Depth 6 | Set-Content -Path $reportPath -Encoding UTF8
+Write-Host "  Report geschrieben: $reportPath" -ForegroundColor Cyan
