@@ -1,0 +1,1290 @@
+{
+    "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deployments/vaultwarden-20260326-235257",
+    "location":  null,
+    "name":  "vaultwarden-20260326-235257",
+    "properties":  {
+                       "correlationId":  "fbe46ce2-7455-4dfd-8ef4-80326869b371",
+                       "debugSetting":  null,
+                       "dependencies":  [
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vaultfilesvwwkoov3olkba/default",
+                                                "resourceType":  "Microsoft.Storage/storageAccounts/fileServices"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba/default",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts/fileServices"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default/shares/vaultwarden",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vaultfilesvwwkoov3olkba/default/vaultwarden",
+                                                "resourceType":  "Microsoft.Storage/storageAccounts/fileServices/shares"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vwkv7odneynjwzqja",
+                                                                      "resourceType":  "Microsoft.KeyVault/vaults"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2023-01-31",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/0cddfff7-84e1-5ad1-97a0-a31ad4ddd11d",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "0cddfff7-84e1-5ad1-97a0-a31ad4ddd11d",
+                                                "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vwkv7odneynjwzqja",
+                                                                      "resourceType":  "Microsoft.KeyVault/vaults"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2023-01-31",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/10083a27-fa79-567c-a1f0-bb80185229f8",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "10083a27-fa79-567c-a1f0-bb80185229f8",
+                                                "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2023-01-31",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/providers/Microsoft.Authorization/roleAssignments/43d7564c-3317-54eb-8ba2-3c0d7cd2da6e",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "43d7564c-3317-54eb-8ba2-3c0d7cd2da6e",
+                                                "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vwkv7odneynjwzqja",
+                                                                      "resourceType":  "Microsoft.KeyVault/vaults"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/0cddfff7-84e1-5ad1-97a0-a31ad4ddd11d",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "0cddfff7-84e1-5ad1-97a0-a31ad4ddd11d",
+                                                                      "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/databases/vaultwarden",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba/vaultwarden",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/databases"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/providers/Microsoft.Authorization/roleAssignments/43d7564c-3317-54eb-8ba2-3c0d7cd2da6e",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "43d7564c-3317-54eb-8ba2-3c0d7cd2da6e",
+                                                                      "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/firewallRules/AllowAzure",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba/AllowAzure",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2018-11-30",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-kv-writer-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deploymentScripts/vault-ensure-kv-secrets",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-ensure-kv-secrets",
+                                                "resourceType":  "Microsoft.Resources/deploymentScripts"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/firewallRules/AllowAzure",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-pg-vwwkoov3olkba/AllowAzure",
+                                                "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/databases/vaultwarden",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-pg-vwwkoov3olkba/vaultwarden",
+                                                "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/databases"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-law",
+                                                                      "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2023-09-01",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-law",
+                                                                      "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                                                  },
+                                                                  {
+                                                                      "actionName":  "listKeys",
+                                                                      "apiVersion":  "2023-09-01",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-law",
+                                                                      "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-env",
+                                                "resourceType":  "Microsoft.App/managedEnvironments"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-env",
+                                                                      "resourceType":  "Microsoft.App/managedEnvironments"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default/shares/vaultwarden",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba/default/vaultwarden",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts/fileServices/shares"
+                                                                  },
+                                                                  {
+                                                                      "actionName":  "listKeys",
+                                                                      "apiVersion":  "2023-05-01",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env/storages/vaultwarden-storage",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-env/vaultwarden-storage",
+                                                "resourceType":  "Microsoft.App/managedEnvironments/storages"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-id",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-id",
+                                                                      "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-env",
+                                                                      "resourceType":  "Microsoft.App/managedEnvironments"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env/storages/vaultwarden-storage",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-env/vaultwarden-storage",
+                                                                      "resourceType":  "Microsoft.App/managedEnvironments/storages"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deploymentScripts/vault-ensure-kv-secrets",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-ensure-kv-secrets",
+                                                                      "resourceType":  "Microsoft.Resources/deploymentScripts"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/10083a27-fa79-567c-a1f0-bb80185229f8",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "10083a27-fa79-567c-a1f0-bb80185229f8",
+                                                                      "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/databases/vaultwarden",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba/vaultwarden",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/databases"
+                                                                  },
+                                                                  {
+                                                                      "apiVersion":  "2023-08-01",
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deploymentScripts/vault-ensure-kv-secrets",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-ensure-kv-secrets",
+                                                                      "resourceType":  "Microsoft.Resources/deploymentScripts"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/containerApps/vault",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault",
+                                                "resourceType":  "Microsoft.App/containerApps"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultvwwkoo-rsv",
+                                                                      "resourceType":  "Microsoft.RecoveryServices/vaults"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupPolicies/vaultvwwkoo-afiles-daily",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vaultvwwkoo-rsv/vaultvwwkoo-afiles-daily",
+                                                "resourceType":  "Microsoft.RecoveryServices/vaults/backupPolicies"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultvwwkoo-rsv",
+                                                                      "resourceType":  "Microsoft.RecoveryServices/vaults"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupFabrics/Azure/protectionContainers/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vaultvwwkoo-rsv/Azure/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba",
+                                                "resourceType":  "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupPolicies/vaultvwwkoo-afiles-daily",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultvwwkoo-rsv/vaultvwwkoo-afiles-daily",
+                                                                      "resourceType":  "Microsoft.RecoveryServices/vaults/backupPolicies"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupFabrics/Azure/protectionContainers/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultvwwkoo-rsv/Azure/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultvwwkoo-rsv",
+                                                                      "resourceType":  "Microsoft.RecoveryServices/vaults"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default/shares/vaultwarden",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vaultfilesvwwkoov3olkba/default/vaultwarden",
+                                                                      "resourceType":  "Microsoft.Storage/storageAccounts/fileServices/shares"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupFabrics/Azure/protectionContainers/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba/protectedItems/AzureFileShare;vaultwarden",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vaultvwwkoo-rsv/Azure/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba/AzureFileShare;vaultwarden",
+                                                "resourceType":  "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vwkv7odneynjwzqja",
+                                                                      "resourceType":  "Microsoft.KeyVault/vaults"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-law",
+                                                                      "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Insights/diagnosticSettings/vault-kv-diag",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-kv-diag",
+                                                "resourceType":  "Microsoft.Insights/diagnosticSettings"
+                                            },
+                                            {
+                                                "dependsOn":  [
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-pg-vwwkoov3olkba",
+                                                                      "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                                                  },
+                                                                  {
+                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                                      "resourceGroup":  "rg-musef-prod-neu",
+                                                                      "resourceName":  "vault-law",
+                                                                      "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                                                  }
+                                                              ],
+                                                "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/providers/Microsoft.Insights/diagnosticSettings/vault-pg-diag",
+                                                "resourceGroup":  "rg-musef-prod-neu",
+                                                "resourceName":  "vault-pg-diag",
+                                                "resourceType":  "Microsoft.Insights/diagnosticSettings"
+                                            }
+                                        ],
+                       "diagnostics":  null,
+                       "duration":  "PT38M1.0147935S",
+                       "error":  null,
+                       "extensions":  [
+
+                                      ],
+                       "mode":  "Incremental",
+                       "onErrorDeployment":  null,
+                       "outputResources":  [
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/containerApps/vault",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.App/containerApps"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.App/managedEnvironments"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env/storages/vaultwarden-storage",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.App/managedEnvironments/storages"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/databases/vaultwarden",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/databases"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/firewallRules/AllowAzure",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/providers/Microsoft.Authorization/roleAssignments/43d7564c-3317-54eb-8ba2-3c0d7cd2da6e",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.DBforPostgreSQL/flexibleServers/vault-pg-vwwkoov3olkba/providers/Microsoft.Insights/diagnosticSettings/vault-pg-diag",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Insights/diagnosticSettings"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.KeyVault/vaults"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/0cddfff7-84e1-5ad1-97a0-a31ad4ddd11d",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Authorization/roleAssignments/10083a27-fa79-567c-a1f0-bb80185229f8",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Authorization/roleAssignments"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.KeyVault/vaults/vwkv7odneynjwzqja/providers/Microsoft.Insights/diagnosticSettings/vault-kv-diag",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Insights/diagnosticSettings"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-id",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.ManagedIdentity/userAssignedIdentities/vault-kv-writer-id",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.ManagedIdentity/userAssignedIdentities"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.OperationalInsights/workspaces/vault-law",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.OperationalInsights/workspaces"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.RecoveryServices/vaults"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupFabrics/Azure/protectionContainers/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupFabrics/Azure/protectionContainers/storagecontainer;Storage;rg-musef-prod-neu;vaultfilesvwwkoov3olkba/protectedItems/AzureFileShare;vaultwarden",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.RecoveryServices/vaults/vaultvwwkoo-rsv/backupPolicies/vaultvwwkoo-afiles-daily",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.RecoveryServices/vaults/backupPolicies"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deploymentScripts/vault-ensure-kv-secrets",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Resources/deploymentScripts"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Storage/storageAccounts"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Storage/storageAccounts/fileServices"
+                                               },
+                                               {
+                                                   "apiVersion":  null,
+                                                   "extension":  null,
+                                                   "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Storage/storageAccounts/vaultfilesvwwkoov3olkba/fileServices/default/shares/vaultwarden",
+                                                   "identifiers":  null,
+                                                   "resourceGroup":  "rg-musef-prod-neu",
+                                                   "resourceType":  "Microsoft.Storage/storageAccounts/fileServices/shares"
+                                               }
+                                           ],
+                       "outputs":  {
+                                       "acsCommunicationServiceName":  {
+                                                                           "type":  "String",
+                                                                           "value":  ""
+                                                                       },
+                                       "acsEmailDomain":  {
+                                                              "type":  "String",
+                                                              "value":  ""
+                                                          },
+                                       "acsEmailDomainResourceId":  {
+                                                                        "type":  "String",
+                                                                        "value":  ""
+                                                                    },
+                                       "acsEmailServiceName":  {
+                                                                   "type":  "String",
+                                                                   "value":  ""
+                                                               },
+                                       "acsFoundationEnabled":  {
+                                                                    "type":  "Bool",
+                                                                    "value":  false
+                                                                },
+                                       "acsNextSteps":  {
+                                                            "type":  "Array",
+                                                            "value":  [
+
+                                                                      ]
+                                                        },
+                                       "containerAppEnvironmentName":  {
+                                                                           "type":  "String",
+                                                                           "value":  "vault-env"
+                                                                       },
+                                       "containerAppFqdn":  {
+                                                                "type":  "String",
+                                                                "value":  "vault.agreeableground-be76f209.northeurope.azurecontainerapps.io"
+                                                            },
+                                       "containerAppName":  {
+                                                                "type":  "String",
+                                                                "value":  "vault"
+                                                            },
+                                       "customHostname":  {
+                                                              "type":  "String",
+                                                              "value":  "vault.50er-jahre-museum.de"
+                                                          },
+                                       "edgeMode":  {
+                                                        "type":  "String",
+                                                        "value":  "none"
+                                                    },
+                                       "ingressIpRestrictionsCount":  {
+                                                                          "type":  "Int",
+                                                                          "value":  0
+                                                                      },
+                                       "ingressIpRestrictionsEnabled":  {
+                                                                            "type":  "Bool",
+                                                                            "value":  false
+                                                                        },
+                                       "keyVaultName":  {
+                                                            "type":  "String",
+                                                            "value":  "vwkv7odneynjwzqja"
+                                                        },
+                                       "nextSteps":  {
+                                                         "type":  "Array",
+                                                         "value":  [
+                                                                       "Bind the final custom domain and certificate to the Container App before go-live.",
+                                                                       "Run the smoke tests from docs/HowToInstall/Operation-Playbook.md.",
+                                                                       "Verify restore paths for PostgreSQL and Azure Files before storing production data."
+                                                                   ]
+                                                     },
+                                       "smtpServerResolved":  {
+                                                                  "type":  "String",
+                                                                  "value":  "50erjahremuseum-de01be.mail.protection.outlook.com:25"
+                                                              }
+                                   },
+                       "parameters":  {
+                                          "acsDataLocation":  {
+                                                                  "type":  "String",
+                                                                  "value":  "Germany"
+                                                              },
+                                          "acsDeployFoundation":  {
+                                                                      "type":  "Bool",
+                                                                      "value":  false
+                                                                  },
+                                          "acsDomainName":  {
+                                                                "type":  "String",
+                                                                "value":  ""
+                                                            },
+                                          "adminPanelEnabled":  {
+                                                                    "type":  "Bool",
+                                                                    "value":  true
+                                                                },
+                                          "allowAzureServicesToPostgres":  {
+                                                                               "type":  "Bool",
+                                                                               "value":  true
+                                                                           },
+                                          "allowInsecureHttp":  {
+                                                                    "type":  "Bool",
+                                                                    "value":  true
+                                                                },
+                                          "appName":  {
+                                                          "type":  "String",
+                                                          "value":  "vault"
+                                                      },
+                                          "azureFilesBackupDailyRetentionDays":  {
+                                                                                     "type":  "Int",
+                                                                                     "value":  30
+                                                                                 },
+                                          "azureFilesBackupEnabled":  {
+                                                                          "type":  "Bool",
+                                                                          "value":  true
+                                                                      },
+                                          "azureFilesBackupScheduleRunTime":  {
+                                                                                  "type":  "String",
+                                                                                  "value":  "05:30"
+                                                                              },
+                                          "azureFilesBackupTimeZone":  {
+                                                                           "type":  "String",
+                                                                           "value":  "UTC"
+                                                                       },
+                                          "azureFilesBackupWeeklyDaysOfWeek":  {
+                                                                                   "type":  "Array",
+                                                                                   "value":  [
+                                                                                                 "Sunday",
+                                                                                                 "Tuesday",
+                                                                                                 "Thursday"
+                                                                                             ]
+                                                                               },
+                                          "azureFilesBackupWeeklyRetentionWeeks":  {
+                                                                                       "type":  "Int",
+                                                                                       "value":  12
+                                                                                   },
+                                          "bsseRef":  {
+                                                          "type":  "String",
+                                                          "value":  ""
+                                                      },
+                                          "cpuCores":  {
+                                                           "type":  "String",
+                                                           "value":  "0.25"
+                                                       },
+                                          "customHostname":  {
+                                                                 "type":  "String",
+                                                                 "value":  "vault.50er-jahre-museum.de"
+                                                             },
+                                          "dbAdminUser":  {
+                                                              "type":  "String",
+                                                              "value":  "vaultwarden"
+                                                          },
+                                          "dbPassword":  {
+                                                             "type":  "SecureString"
+                                                         },
+                                          "deploymentScriptForceUpdateTag":  {
+                                                                                 "type":  "String",
+                                                                                 "value":  ""
+                                                                             },
+                                          "diagnosticsEnabled":  {
+                                                                     "type":  "Bool",
+                                                                     "value":  true
+                                                                 },
+                                          "domainUrl":  {
+                                                            "type":  "String",
+                                                            "value":  "https://vault.50er-jahre-museum.de"
+                                                        },
+                                          "edgeMode":  {
+                                                           "type":  "String",
+                                                           "value":  "none"
+                                                       },
+                                          "enableIngressIpRestrictions":  {
+                                                                              "type":  "Bool",
+                                                                              "value":  false
+                                                                          },
+                                          "environment":  {
+                                                              "type":  "String",
+                                                              "value":  "prod"
+                                                          },
+                                          "heloName":  {
+                                                           "type":  "String",
+                                                           "value":  ""
+                                                       },
+                                          "ingressAllowedCidrs":  {
+                                                                      "type":  "Array",
+                                                                      "value":  [
+
+                                                                                ]
+                                                                  },
+                                          "invitationOrgName":  {
+                                                                    "type":  "String",
+                                                                    "value":  "50er-jahre-museum.de"
+                                                                },
+                                          "location":  {
+                                                           "type":  "String",
+                                                           "value":  "northeurope"
+                                                       },
+                                          "mailRootDomain":  {
+                                                                 "type":  "String",
+                                                                 "value":  "50er-jahre-museum.de"
+                                                             },
+                                          "memorySize":  {
+                                                             "type":  "String",
+                                                             "value":  "0.5"
+                                                         },
+                                          "orgCreationUsers":  {
+                                                                   "type":  "String",
+                                                                   "value":  ""
+                                                               },
+                                          "postgresBackupRetentionDays":  {
+                                                                              "type":  "Int",
+                                                                              "value":  14
+                                                                          },
+                                          "postgresSkuName":  {
+                                                                  "type":  "String",
+                                                                  "value":  "Standard_B1ms"
+                                                              },
+                                          "postgresStorageGB":  {
+                                                                    "type":  "Int",
+                                                                    "value":  32
+                                                                },
+                                          "postgresVersion":  {
+                                                                  "type":  "String",
+                                                                  "value":  "16"
+                                                              },
+                                          "pushEnabled":  {
+                                                              "type":  "Bool",
+                                                              "value":  false
+                                                          },
+                                          "pushInstallationId":  {
+                                                                     "type":  "SecureString"
+                                                                 },
+                                          "pushInstallationKey":  {
+                                                                      "type":  "SecureString"
+                                                                  },
+                                          "pushUseEuServers":  {
+                                                                   "type":  "Bool",
+                                                                   "value":  false
+                                                               },
+                                          "signupsDomainsWhitelist":  {
+                                                                          "type":  "String",
+                                                                          "value":  "50er-jahre-museum.de"
+                                                                      },
+                                          "smtpAuthMechanism":  {
+                                                                    "type":  "String",
+                                                                    "value":  ""
+                                                                },
+                                          "smtpFrom":  {
+                                                           "type":  "String",
+                                                           "value":  "vaultwarden@50er-jahre-museum.de"
+                                                       },
+                                          "smtpFromName":  {
+                                                               "type":  "String",
+                                                               "value":  "Vaultwarden"
+                                                           },
+                                          "smtpHost":  {
+                                                           "type":  "String",
+                                                           "value":  "50erjahremuseum-de01be.mail.protection.outlook.com"
+                                                       },
+                                          "smtpPassword":  {
+                                                               "type":  "SecureString"
+                                                           },
+                                          "smtpPort":  {
+                                                           "type":  "String",
+                                                           "value":  "587"
+                                                       },
+                                          "smtpSecurity":  {
+                                                               "type":  "String",
+                                                               "value":  "starttls"
+                                                           },
+                                          "smtpUseAuth":  {
+                                                              "type":  "Bool",
+                                                              "value":  false
+                                                          },
+                                          "smtpUsername":  {
+                                                               "type":  "String",
+                                                               "value":  ""
+                                                           },
+                                          "ssoAuthority":  {
+                                                               "type":  "String",
+                                                               "value":  ""
+                                                           },
+                                          "ssoClientId":  {
+                                                              "type":  "String",
+                                                              "value":  ""
+                                                          },
+                                          "ssoClientSecret":  {
+                                                                  "type":  "SecureString"
+                                                              },
+                                          "ssoEnabled":  {
+                                                             "type":  "Bool",
+                                                             "value":  false
+                                                         },
+                                          "ssoOnly":  {
+                                                          "type":  "Bool",
+                                                          "value":  false
+                                                      },
+                                          "ssoScopes":  {
+                                                            "type":  "String",
+                                                            "value":  "openid profile email offline_access User.Read"
+                                                        },
+                                          "storageAccountSku":  {
+                                                                    "type":  "String",
+                                                                    "value":  "Standard_LRS"
+                                                                },
+                                          "vaultwardenImage":  {
+                                                                   "type":  "String",
+                                                                   "value":  "vaultwarden/server:1.35.3-alpine"
+                                                               }
+                                      },
+                       "parametersLink":  null,
+                       "providers":  [
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.OperationalInsights",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "workspaces",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.Storage",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "storageAccounts",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "storageAccounts/fileServices",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "storageAccounts/fileServices/shares",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.KeyVault",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "vaults",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.ManagedIdentity",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "userAssignedIdentities",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.Authorization",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "roleAssignments",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.Resources",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "deploymentScripts",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.DBforPostgreSQL",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "flexibleServers",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "flexibleServers/firewallRules",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "flexibleServers/databases",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.App",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "managedEnvironments",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "managedEnvironments/storages",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "containerApps",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.RecoveryServices",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         "northeurope"
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "vaults",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "vaults/backupPolicies",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "vaults/backupFabrics/protectionContainers",
+                                                                       "zoneMappings":  null
+                                                                   },
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "vaults/backupFabrics/protectionContainers/protectedItems",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         },
+                                         {
+                                             "id":  null,
+                                             "namespace":  "Microsoft.Insights",
+                                             "providerAuthorizationConsentState":  null,
+                                             "registrationPolicy":  null,
+                                             "registrationState":  null,
+                                             "resourceTypes":  [
+                                                                   {
+                                                                       "aliases":  null,
+                                                                       "apiProfiles":  null,
+                                                                       "apiVersions":  null,
+                                                                       "capabilities":  null,
+                                                                       "defaultApiVersion":  null,
+                                                                       "locationMappings":  null,
+                                                                       "locations":  [
+                                                                                         null
+                                                                                     ],
+                                                                       "properties":  null,
+                                                                       "resourceType":  "diagnosticSettings",
+                                                                       "zoneMappings":  null
+                                                                   }
+                                                               ]
+                                         }
+                                     ],
+                       "provisioningState":  "Succeeded",
+                       "templateHash":  "14442573856050579418",
+                       "templateLink":  null,
+                       "timestamp":  "2026-03-26T23:31:18.728320+00:00",
+                       "validatedResources":  null,
+                       "validationLevel":  null
+                   },
+    "resourceGroup":  "rg-musef-prod-neu",
+    "tags":  null,
+    "type":  "Microsoft.Resources/deployments"
+}

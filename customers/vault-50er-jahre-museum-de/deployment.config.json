@@ -4,7 +4,7 @@
                  "mailRootDomain":  "50er-jahre-museum.de",
                  "from":  "vaultwarden@50er-jahre-museum.de",
                  "fromName":  "Vaultwarden",
-                 "host":  "",
+                 "host":  "50erjahremuseum-de01be.mail.protection.outlook.com",
                  "port":  "",
                  "security":  "starttls",
                  "username":  "",
@@ -30,7 +30,7 @@
                  "lockOriginToCloudflare":  false
              },
     "azure":  {
-                  "resourceGroupName":  "rg-museum-vault-prod-neu",
+                  "resourceGroupName":  "rg-musef-prod-neu",
                   "location":  "northeurope",
                   "environment":  "prod",
                   "appName":  "vault",
@@ -41,32 +41,32 @@
                                           ],
                   "advancedArmParameters":  {
                                                 "orgCreationUsers":  "",
-                                                "pushUseEuServers":  false,
                                                 "acsDomainName":  "",
                                                 "allowAzureServicesToPostgres":  true,
                                                 "pushInstallationId":  "",
-                                                "ssoAuthority":  "",
-                                                "diagnosticsEnabled":  true,
                                                 "storageAccountSku":  "Standard_LRS",
                                                 "postgresSkuName":  "Standard_B1ms",
-                                                "acsDataLocation":  "Germany",
+                                                "pushUseEuServers":  false,
                                                 "ssoOnly":  false,
-                                                "allowInsecureHttp":  true,
+                                                "adminPanelEnabled":  true,
                                                 "invitationOrgName":  "50er-jahre-museum.de",
                                                 "ssoClientId":  "",
+                                                "diagnosticsEnabled":  true,
+                                                "acsDataLocation":  "Germany",
                                                 "postgresBackupRetentionDays":  14,
-                                                "postgresStorageGB":  32,
                                                 "acsDeployFoundation":  false,
                                                 "ssoScopes":  "openid profile email offline_access User.Read",
                                                 "signupsDomainsWhitelist":  "50er-jahre-museum.de",
+                                                "allowInsecureHttp":  true,
                                                 "ssoEnabled":  false,
                                                 "pushEnabled":  false,
-                                                "adminPanelEnabled":  true
+                                                "ssoAuthority":  "",
+                                                "postgresStorageGB":  32
                                             }
               },
     "metadata":  {
-                     "createdAt":  "2026-03-26T15:13:05.9988772+01:00",
-                     "updatedAt":  "2026-03-26T15:13:06.0104027+01:00",
+                     "createdAt":  "2026-03-26T23:52:57.5255989+01:00",
+                     "updatedAt":  "2026-03-26T23:52:57.5401728+01:00",
                      "version":  3
                  }
 }
