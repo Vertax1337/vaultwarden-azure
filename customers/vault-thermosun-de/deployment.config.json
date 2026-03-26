@@ -1,70 +1,72 @@
 {
-    "smtp": {
-        "useAuth": false,
-        "mailRootDomain": "thermosun.de",
-        "from": "vaultwarden@thermosun.de",
-        "fromName": "Vaultwarden",
-        "host": "",
-        "port": "",
-        "security": "starttls",
-        "username": "",
-        "passwordSource": "none"
-    },
-    "customerNumber": "1309",
-    "customerCode": "vault-thermosun-de",
-    "secrets": {
-        "smtpPasswordSource": "none",
-        "cloudflareApiTokenSource": "not-required",
-        "ssoClientSecretSource": "none",
-        "pushInstallationKeySource": "none"
-    },
-    "domain": {
-        "hostname": "vault.thermosun.de",
-        "zoneName": "thermosun.de",
-        "url": "https://vault.thermosun.de"
-    },
-    "edge": {
-        "mode": "basic",
-        "enableWaf": true,
-        "enableRateLimit": true,
-        "lockOriginToCloudflare": false
-    },
-    "azure": {
-        "resourceGroupName": "rg-thermosun-vault-prod-gwc",
-        "location": "germanywestcentral",
-        "environment": "prod",
-        "appName": "vaulttherm",
-        "edgeMode": "none",
-        "enableIngressIpRestrictions": false,
-        "ingressAllowedCidrs": [],
-        "advancedArmParameters": {
-            "orgCreationUsers": "",
-            "pushUseEuServers": false,
-            "acsDomainName": "",
-            "allowAzureServicesToPostgres": true,
-            "pushInstallationId": "",
-            "ssoAuthority": "",
-            "diagnosticsEnabled": true,
-            "storageAccountSku": "Standard_LRS",
-            "postgresSkuName": "Standard_B1ms",
-            "acsDataLocation": "Germany",
-            "ssoOnly": false,
-            "allowInsecureHttp": true,
-            "invitationOrgName": "thermosun.de",
-            "ssoClientId": "",
-            "postgresBackupRetentionDays": 14,
-            "postgresStorageGB": 32,
-            "acsDeployFoundation": false,
-            "ssoScopes": "openid profile email offline_access User.Read",
-            "signupsDomainsWhitelist": "thermosun.de",
-            "ssoEnabled": false,
-            "pushEnabled": false,
-            "adminPanelEnabled": true
-        }
-    },
-    "metadata": {
-        "createdAt": "2026-03-26T00:33:35.4360464+01:00",
-        "updatedAt": "2026-03-26T00:33:35.4496545+01:00",
-        "version": 3
-    }
+    "smtp":  {
+                 "useAuth":  true,
+                 "mailRootDomain":  "thermosun.de",
+                 "from":  "vaultwarden@thermosun.de",
+                 "fromName":  "Vaultwarden",
+                 "host":  "smtp.office365.com",
+                 "port":  "587",
+                 "security":  "starttls",
+                 "username":  "vaultwarden@thermosun.de",
+                 "passwordSource":  "prompt"
+             },
+    "customerNumber":  "1309",
+    "customerCode":  "vault-thermosun-de",
+    "secrets":  {
+                    "smtpPasswordSource":  "prompt",
+                    "cloudflareApiTokenSource":  "prompt-or-env",
+                    "ssoClientSecretSource":  "none",
+                    "pushInstallationKeySource":  "none"
+                },
+    "domain":  {
+                   "hostname":  "vault.thermosun.de",
+                   "zoneName":  "thermosun.de",
+                   "url":  "https://vault.thermosun.de"
+               },
+    "edge":  {
+                 "mode":  "cloudflare-managed",
+                 "enableWaf":  true,
+                 "enableRateLimit":  true,
+                 "lockOriginToCloudflare":  true
+             },
+    "azure":  {
+                  "resourceGroupName":  "rg-thermosun-vault-prod-gwc",
+                  "location":  "germanywestcentral",
+                  "environment":  "prod",
+                  "appName":  "vaulttherm",
+                  "edgeMode":  "cloudflare-managed",
+                  "enableIngressIpRestrictions":  false,
+                  "ingressAllowedCidrs":  [
+
+                                          ],
+                  "advancedArmParameters":  {
+                                                "orgCreationUsers":  "",
+                                                "pushUseEuServers":  false,
+                                                "acsDomainName":  "",
+                                                "allowAzureServicesToPostgres":  true,
+                                                "pushInstallationId":  "",
+                                                "ssoAuthority":  "",
+                                                "diagnosticsEnabled":  true,
+                                                "storageAccountSku":  "Standard_LRS",
+                                                "postgresSkuName":  "Standard_B1ms",
+                                                "acsDataLocation":  "Germany",
+                                                "ssoOnly":  false,
+                                                "allowInsecureHttp":  true,
+                                                "invitationOrgName":  "thermosun.de",
+                                                "ssoClientId":  "",
+                                                "postgresBackupRetentionDays":  14,
+                                                "postgresStorageGB":  32,
+                                                "acsDeployFoundation":  false,
+                                                "ssoScopes":  "openid profile email offline_access User.Read",
+                                                "signupsDomainsWhitelist":  "thermosun.de",
+                                                "ssoEnabled":  false,
+                                                "pushEnabled":  false,
+                                                "adminPanelEnabled":  true
+                                            }
+              },
+    "metadata":  {
+                     "createdAt":  "2026-03-26T11:52:14.7182258+01:00",
+                     "updatedAt":  "2026-03-26T11:52:14.7363084+01:00",
+                     "version":  3
+                 }
 }

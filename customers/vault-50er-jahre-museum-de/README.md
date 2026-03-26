@@ -1,14 +1,14 @@
-# vault-thermosun-de
+# vault-50er-jahre-museum-de
 
 - Kunden-Nr.: 1309
-- Vaultwarden-Domäne: vault.thermosun.de
-- Resource Group: rg-thermosun-vault-prod-gwc
+- Vaultwarden-Domäne: vault.50er-Jahre-Museum.de
+- Resource Group: rg-50er-jahre-museum-vault-prod-gwc
 - Location: germanywestcentral
-- URL: https://vault.thermosun.de
-- Edge-Modus: cloudflare-managed
+- URL: https://vault.50er-Jahre-Museum.de
+- Edge-Modus: basic
 - WAF: True
 - Rate Limit: True
-- Origin Lockdown: True
+- Origin Lockdown: False
 
 > `deployment.config.json` ist die persistente Kundenkonfiguration.
 > `azure.parameters.json` wird pro Deployment neu generiert und kann Secrets enthalten. Deshalb ist diese Datei per `.gitignore` ausgeschlossen.
