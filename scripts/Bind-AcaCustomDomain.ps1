@@ -63,7 +63,11 @@ try {
     Write-Step 'Zertifikat wird in das ACA-Environment hochgeladen.'
     $uploadJson = az containerapp env certificate upload -g $ResourceGroupName --name $EnvironmentName --certificate-file $pfxPath --certificate-name $CertificateName --password $pfxPassword --only-show-errors -o json
     if ($LASTEXITCODE -ne 0) { throw 'Certificate upload failed.' }
-    $upload = $uploadJson | ConvertFrom-Json -Depth 20
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $upload = $uploadJson | ConvertFrom-Json -Depth 20
+    } else {
+        $upload = $uploadJson | ConvertFrom-Json
+    }
     $certificateId = if ($upload.id) { $upload.id } else { $upload.properties.id }
 
     Write-Step 'Hostname wird an das Zertifikat gebunden.'
