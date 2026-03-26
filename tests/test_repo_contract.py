@@ -697,7 +697,7 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('print_pg_firewall_diagnostics()', script)
         self.assertIn('print_pg_database_diagnostics()', script)
         self.assertIn('print_pg_connectivity_diagnostics()', script)
-        self.assertIn('execute exit code', script)
+        self.assertIn('psql exit code', script)
         self.assertIn('last connectivity stdout', script)
         self.assertIn('PostgreSQL firewall rules', script)
         self.assertIn('PostgreSQL databases', script)
@@ -822,20 +822,31 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('location = @{ value = $Location }', script_text)
 
 
-    def test_main_json_bootstraps_rdbms_connect_extension_explicitly(self):
+    def test_main_json_uses_psql_instead_of_rdbms_connect(self):
+        """Deployment script uses psql (PostgreSQL client) instead of az postgres flexible-server execute / rdbms-connect."""
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
         script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
-        self.assertIn('ensure_rdbms_connect_extension()', script)
-        self.assertIn('az extension add --name rdbms-connect --allow-preview true --only-show-errors', script)
-        self.assertIn('extension.dynamic_install_allow_preview=true', script)
-        self.assertIn('AZURE_EXTENSION_DIR', script)
+        # psql-based functions must exist
+        self.assertIn('ensure_psql()', script)
+        self.assertIn('build_psql_env', script)
+        self.assertIn('run_psql', script)
+        # rdbms-connect extension must NOT be used
+        self.assertNotIn('ensure_rdbms_connect_extension', script)
+        self.assertNotIn('az extension add --name rdbms-connect', script)
+        self.assertNotIn('configure_az_extension_installation', script)
+        self.assertNotIn('ensure_pip', script)
+        self.assertNotIn('PG_CLI_BASE', script)
+        self.assertNotIn('flexible-server execute', script)
 
-    def test_main_json_connectivity_loop_captures_real_execute_exit_code(self):
+    def test_main_json_connectivity_loop_uses_psql(self):
+        """Connectivity check and SQL execution use run_psql, capture exit codes, and report errors."""
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
         script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
-        self.assertIn('"${PG_CLI_BASE[@]}" -d postgres -q "SELECT 1" 1>"$PG_EXEC_STDOUT" 2>"$PG_EXEC_STDERR"', script)
+        self.assertIn('run_psql postgres -c "SELECT 1"', script)
         self.assertIn('PG_EXEC_EXIT=$?', script)
         self.assertIn('if [ "$PG_EXEC_EXIT" -eq 0 ]; then', script)
+        self.assertIn('run_psql postgres -f "$SQL_TMP_DIR/bootstrap-admin.sql"', script)
+        self.assertIn('run_psql "$POSTGRES_DBNAME" -f "$SQL_TMP_DIR/bootstrap-db.sql"', script)
         self.assertIn('ERROR: PostgreSQL bootstrap-admin.sql failed', script)
         self.assertIn('ERROR: PostgreSQL bootstrap-db.sql failed', script)
 
