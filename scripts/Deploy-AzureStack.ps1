@@ -25,7 +25,11 @@ $json = az @deployArgs
 if ($LASTEXITCODE -ne 0) {
     throw 'Azure deployment failed.'
 }
-$result = $json | ConvertFrom-Json -Depth 100
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+    $result = $json | ConvertFrom-Json -Depth 100
+} else {
+    $result = $json | ConvertFrom-Json
+}
 if ($OutputPath) {
     Save-JsonUtf8 -Data $result -Path $OutputPath
 }

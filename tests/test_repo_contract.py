@@ -18,6 +18,12 @@ def run_ps(command: str, env: dict | None = None) -> subprocess.CompletedProcess
 
 
 class RepoContractTests(unittest.TestCase):
+    def setUp(self):
+        # Restore current/ directory if it was removed by a previous test
+        current_wrapper = REPO_ROOT / 'current' / 'main.deploytoazure.json'
+        if not current_wrapper.exists():
+            subprocess.run(['git', 'checkout', 'HEAD', '--', 'current/'], cwd=REPO_ROOT, check=True)
+
     def test_main_json_has_dual_mode_parameters(self):
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
         self.assertIn('edgeMode', data['parameters'])
@@ -207,6 +213,117 @@ class RepoContractTests(unittest.TestCase):
     def test_readme_button_points_to_current_wrapper(self):
         readme = (REPO_ROOT / 'Readme.md').read_text(encoding='utf-8')
         self.assertIn('current%2Fmain.deploytoazure.json', readme)
+
+    def test_readme_button_uses_master_branch(self):
+        readme = (REPO_ROOT / 'Readme.md').read_text(encoding='utf-8')
+        # All Deploy-to-Azure portal links must reference the master branch
+        import re
+        portal_links = re.findall(r'https://portal\.azure\.com/[^\s\)]+', readme)
+        self.assertGreater(len(portal_links), 0, 'No Deploy-to-Azure portal links found')
+        for link in portal_links:
+            self.assertIn('master', link, f'Portal link does not reference master branch: {link}')
+            self.assertNotIn('%2Fmain%2F', link, f'Portal link references main branch instead of master: {link}')
+
+    def test_current_wrapper_parameter_coverage(self):
+        """current/main.deploytoazure.json must have all params from root wrapper."""
+        root = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        root_params = set(root['parameters'].keys())
+        current_params = set(current['parameters'].keys())
+        missing = root_params - current_params
+        self.assertEqual(missing, set(), f'current/main.deploytoazure.json is missing parameters: {sorted(missing)}')
+
+    def test_current_wrapper_dbpassword_auto_generation(self):
+        """current/main.deploytoazure.json must auto-generate dbPassword."""
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        self.assertIn('dbPassword', current['parameters'])
+        self.assertEqual(
+            current['parameters']['dbPassword']['defaultValue'],
+            '[concat(toUpper(newGuid()), newGuid())]',
+            'dbPassword must auto-generate via ARM template function'
+        )
+
+    def test_current_wrapper_resources_is_array(self):
+        """ARM template resources must be a JSON array, not a dict."""
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        self.assertIsInstance(current['resources'], list, 'resources must be an array for valid ARM template')
+        self.assertGreater(len(current['resources']), 0)
+
+    def test_current_wrapper_maintemplate_uri_uses_master(self):
+        """current wrapper must reference master branch for nested template."""
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        uri = current['parameters']['mainTemplateUri']['defaultValue']
+        self.assertIn('/master/', uri, f'mainTemplateUri must reference master branch: {uri}')
+        self.assertNotIn('/main/', uri, f'mainTemplateUri must NOT reference main branch: {uri}')
+
+    def test_current_wrapper_no_secrets_as_defaults(self):
+        """Secure parameters in current wrapper must not contain real secret values."""
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        for name, defn in current['parameters'].items():
+            ptype = defn.get('type', '').lower()
+            if ptype == 'securestring' and name != 'dbPassword':
+                default = defn.get('defaultValue', '')
+                self.assertEqual(default, '', f'Secure param {name} must have empty default, got: {default}')
+
+    def test_current_wrapper_forwards_all_params(self):
+        """current wrapper must forward all defined params to nested main.json."""
+        current = json.loads((REPO_ROOT / 'current' / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        resources = current['resources']
+        self.assertIsInstance(resources, list)
+        deployment = next(r for r in resources if r.get('type') == 'Microsoft.Resources/deployments')
+        forwarded = set(deployment['properties']['parameters'].keys())
+        defined = set(current['parameters'].keys()) - {'mainTemplateUri'}
+        not_forwarded = defined - forwarded
+        self.assertEqual(not_forwarded, set(), f'Parameters defined but not forwarded: {sorted(not_forwarded)}')
+
+    def test_customer_config_no_secrets(self):
+        """Customer deployment.config.json must not contain real secrets."""
+        for config_path in (REPO_ROOT / 'customers').rglob('deployment.config.json'):
+            text = config_path.read_text(encoding='utf-8')
+            self.assertNotIn('"password":', text.lower(), f'Secret found in {config_path}')
+            self.assertNotIn('dbPassword', text, f'dbPassword reference in {config_path}')
+
+    def test_generate_only_preserves_resources_array(self):
+        """GenerateOnly must produce wrapper with resources as JSON array."""
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-arr-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            if current_root.exists():
+                shutil.rmtree(current_root, ignore_errors=True)
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            command = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            command += " -CustomerNumber '9999' -VaultwardenDomain 'vault.arrtest.de' -CloudflareZone 'arrtest.de'"
+            command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            command += " -MailRootDomain 'arrtest.de' -SmtpFrom 'vw@arrtest.de'"
+            run_ps(command)
+            current_wrapper = json.loads((current_root / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+            self.assertIsInstance(current_wrapper['resources'], list, 'resources must be array after GenerateOnly')
+            self.assertEqual(
+                current_wrapper['parameters']['dbPassword']['defaultValue'],
+                '[concat(toUpper(newGuid()), newGuid())]'
+            )
+            # Verify parameter coverage
+            root_wrapper = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+            root_params = set(root_wrapper['parameters'].keys())
+            current_params = set(current_wrapper['parameters'].keys())
+            self.assertEqual(root_params, current_params, 'GenerateOnly wrapper must have all root wrapper params')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    def test_rg_default_in_stored_configs(self):
+        """Stored configs must use the full CAF-like RG name pattern."""
+        for config_path in list((REPO_ROOT / 'customers').rglob('deployment.config.json')) + [REPO_ROOT / 'current' / 'deployment.config.json']:
+            if not config_path.exists():
+                continue
+            config = json.loads(config_path.read_text(encoding='utf-8'))
+            rg = config['azure']['resourceGroupName']
+            hostname = config['domain']['hostname']
+            env = config['azure']['environment']
+            # RG should contain a customer slug derived from hostname
+            self.assertRegex(rg, r'^rg-.+-vault-.+-.+$', f'RG name {rg} in {config_path} does not match pattern')
 
 
 
