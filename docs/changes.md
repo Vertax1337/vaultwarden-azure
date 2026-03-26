@@ -2,7 +2,50 @@
 
 Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Template `main.json` gegenüber der ursprünglichen Baseline.
 
-> Letzte Aktualisierung: **2026-03-25**
+> Letzte Aktualisierung: **2026-03-26**
+
+---
+
+
+## Revision 13 – 2026-03-26
+
+### Parameter
+
+| Änderung | Detail |
+|---|---|
+| `postgresVersion` – neu | PostgreSQL-Majorversion parametrierbar (Default: `16`, erlaubt: `15`, `16`, `17`). Bestehende Server können nicht downgegradet werden. |
+
+### Variablen / ENV
+
+| Änderung | Detail |
+|---|---|
+| `IP_HEADER=X-Forwarded-For` in `vwEnvBase` | Korrekte Client-IP-Erkennung hinter ACA-Reverse-Proxy für Rate Limiting und Audit Logs. Ohne diesen Header sieht Vaultwarden die Proxy-IP statt der echten Client-IP. |
+
+### Ressourcen
+
+| Änderung | Detail |
+|---|---|
+| PostgreSQL Flexible Server | `version` nutzt jetzt `postgresVersion`-Parameter statt hardcoded `15` |
+| Storage Account | `defaultToOAuthAuthentication: true` hinzugefügt für sicherere Portal-Nutzung |
+
+### Dokumentation
+
+| Änderung | Detail |
+|---|---|
+| HARDENING.md | `IP_HEADER`, `defaultToOAuthAuthentication`, `postgresVersion`, `signupsDomainsWhitelist`-Warnung ergänzt |
+| Readme.md – Sicherheitshinweise | Key Vault Purge Protection Caveat, `signupsDomainsWhitelist`-Verhalten, Admin-Panel `/data/config.json`-Bereinigung, `IP_HEADER` dokumentiert |
+| Readme.md – Go-Live-Checkliste | Neue Checkliste mit Pflicht- und empfohlenen Schritten vor produktivem Einsatz |
+| Readme.md – Betriebs-Checkliste | Intervallbasierte Betriebsaufgaben (wöchentlich bis quartalsweise) |
+| Readme.md – Bekannte Einschränkungen und Caveats | Key Vault Purge, `dbPassword` newGuid, `signupsDomainsWhitelist`, Azure Files Konsistenz, Einzelreplikat |
+| Readme.md – Link-Korrektur | `README.HARDENED.md` → `HARDENING.md` (korrekter Dateiname) |
+| docs/architecture.md – Link-Korrektur | `README.HARDENED.md` → `HARDENING.md` |
+
+### Wrapper-Templates
+
+| Änderung | Detail |
+|---|---|
+| `main.deploytoazure.json` | `postgresVersion`-Parameter hinzugefügt und an `main.json` weitergeleitet |
+| `current/main.deploytoazure.json` | `postgresVersion`-Parameter hinzugefügt und an `main.json` weitergeleitet |
 
 ---
 

@@ -401,6 +401,18 @@
         "description": "PostgreSQL SKU name"
       }
     },
+    "postgresVersion": {
+      "type": "string",
+      "defaultValue": "16",
+      "allowedValues": [
+        "15",
+        "16",
+        "17"
+      ],
+      "metadata": {
+        "description": "PostgreSQL major version. New deployments should use the latest supported version. Existing servers cannot be downgraded."
+      }
+    },
     "postgresStorageGB": {
       "type": "int",
       "defaultValue": 32,
@@ -480,6 +492,10 @@
       {
         "name": "HTTP_REQUEST_BLOCK_NON_GLOBAL_IPS",
         "value": "true"
+      },
+      {
+        "name": "IP_HEADER",
+        "value": "X-Forwarded-For"
       },
       {
         "name": "INVITATIONS_ALLOWED",
@@ -661,6 +677,7 @@
       "kind": "StorageV2",
       "properties": {
         "allowBlobPublicAccess": false,
+        "defaultToOAuthAuthentication": true,
         "minimumTlsVersion": "TLS1_2",
         "supportsHttpsTrafficOnly": true
       },
@@ -926,7 +943,7 @@
       "properties": {
         "administratorLogin": "[parameters('dbAdminUser')]",
         "administratorLoginPassword": "[parameters('dbPassword')]",
-        "version": "15",
+        "version": "[parameters('postgresVersion')]",
         "storage": {
           "storageSizeGB": "[parameters('postgresStorageGB')]"
         },

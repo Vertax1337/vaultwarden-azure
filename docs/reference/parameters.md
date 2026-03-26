@@ -45,6 +45,7 @@ Diese Parameter steuern Azure-Ressourcen, Sizing, Bootstrap und Azure-Dienste.
 
 | Parameter | Beschreibung |
 |---|---|
+| `postgresVersion` | PostgreSQL-Majorversion (Default: `16`, erlaubt: `15`, `16`, `17`). Bestehende Server können nicht downgegradet werden |
 | `postgresSkuName` | PostgreSQL-SKU (Tier wird automatisch abgeleitet: `Standard_B*` = Burstable, `Standard_D*` = GeneralPurpose, `Standard_E*` = MemoryOptimized) |
 | `postgresStorageGB` | Speichergröße für PostgreSQL |
 | `postgresBackupRetentionDays` | PITR-Aufbewahrung (Tage) |
@@ -83,7 +84,7 @@ Diese Parameter werden zu Vaultwarden-ENV-Werten oder steuern Vaultwarden-nahes 
 | `signupsDomainsWhitelist` | `SIGNUPS_DOMAINS_WHITELIST` | Domain-Whitelist für Self-Service-Registrierung |
 | `orgCreationUsers` | `ORG_CREATION_USERS` | Benutzer, die Organisationen erstellen dürfen |
 
-> **Wichtig:** `SIGNUPS_DOMAINS_WHITELIST` hat spezifisches Vaultwarden-Verhalten. Wenn gesetzt, den Self-Service-Signup-Prozess bewusst testen; Domain-Whitelist und Einladungs-/Org-Flows verhalten sich anders als bei offener Registrierung.
+> **Wichtig:** `SIGNUPS_DOMAINS_WHITELIST` wirkt **auch wenn `SIGNUPS_ALLOWED=false`** (hardcoded im Template). Eingetragene Domains können sich selbst registrieren. Nur setzen, wenn Self-Registrierung für bestimmte Domains bewusst gewünscht ist.
 
 ### Mail / SMTP
 

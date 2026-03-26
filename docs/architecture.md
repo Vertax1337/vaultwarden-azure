@@ -77,8 +77,10 @@ Diese Tradeoffs sind **bewusste Architekturentscheidungen** für den KMU-Fokus d
 | Einschränkung | Auswirkung | Mitigation |
 |---|---|---|
 | ACA-Consumption-Plan hat keine feste Outbound-IP | PostgreSQL-Firewall nutzt `AllowAzureServices` (0.0.0.0-Regel) | Auf Stufe 1 upgraden für festen Egress |
-| Vaultwarden `config.json` kann ENV-Variablen überlagern | Im Admin-UI gespeicherte Einstellungen persistieren über Redeployments | Admin-Panel nach Bootstrap deaktivieren; im Runbook dokumentieren |
+| Vaultwarden `config.json` kann ENV-Variablen überlagern | Im Admin-UI gespeicherte Einstellungen persistieren über Redeployments | Admin-Panel nach Bootstrap deaktivieren; `/data/config.json` auf Azure Files prüfen und `admin_token`-Eintrag entfernen |
+| `signupsDomainsWhitelist` umgeht `SIGNUPS_ALLOWED=false` | Eingetragene Domains können sich selbst registrieren obwohl Signups global deaktiviert sind | Nur bewusst setzen; leer lassen wenn keine Self-Registrierung gewünscht |
 | Azure Files ist kein transaktionaler Store | `/data`-Backup und PostgreSQL-Backup sind möglicherweise nicht perfekt synchronisiert | Restore-Ablauf dokumentieren; Restore-Drills durchführen |
+| Key Vault Purge Protection (90 Tage) | Nach RG-Löschung ist der KV-Name 90 Tage reserviert; erneutes Deployment in neue RG schlägt fehl | `az keyvault purge --name <kvName>` vor erneutem Deployment oder anderen `appName` verwenden |
 | `allowInsecureHttp` ist standardmäßig `false`, kann aber auf `true` gesetzt werden | Exponiert Traffic im Klartext | In Produktion `false` erzwingen |
 | Deployment-Script hängt von Azure-CLI-Container-Image-Version ab | Zukünftige AzureCLI-Image-Änderungen könnten Script-Verhalten beeinflussen | `azCliVersion` ist auf `2.81.0` gepinnt |
 | PostgreSQL-Passwort wird auto-generiert wenn nicht angegeben | Beim Redeploy erhält der `dbPassword`-Parameter einen neuen `newGuid()`-Wert, aber PostgreSQL ignoriert ihn, weil der Server bereits existiert (incrementelles Deploy) | Das ist sicher für Redeployment; das Passwort wird nur bei Erstanlage gesetzt |
@@ -202,5 +204,5 @@ Für **planbare Sofortwirkung** ist trotzdem sinnvoll:
 - [Operations Playbook](./HowToInstall/Operation-Playbook.md) – Betriebshandbuch für Go-Live, Betrieb und Recovery
 - [Vaultwarden – How to Use](./HowToUse/HowToUse.pdf) – Endbenutzer-Anleitung
 - [Parameter-Referenz](./reference/parameters.md) – Vollständige Parameterliste mit ENV-Mapping
-- [Gehärtete Defaults](../README.HARDENED.md) – Produktionsgehärtete Standardwerte im Template
+- [Gehärtete Defaults](../HARDENING.md) – Produktionsgehärtete Standardwerte im Template
 
