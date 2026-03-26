@@ -674,7 +674,7 @@ class RepoContractTests(unittest.TestCase):
             # All domain values must be lowercase
             self.assertEqual(config['domain']['hostname'], 'vault.50er-jahre-museum.de')
             self.assertEqual(config['domain']['zoneName'], '50er-jahre-museum.de')
-            self.assertTrue(config['domain']['url'].startswith('https://vault.50er-jahre-museum.de'))
+            self.assertEqual(config['domain']['url'], 'https://vault.50er-jahre-museum.de')
             self.assertEqual(config['smtp']['mailRootDomain'], '50er-jahre-museum.de')
             # Customer code must be lowercase slug
             self.assertRegex(config['customerCode'], r'^[a-z0-9-]+$')
