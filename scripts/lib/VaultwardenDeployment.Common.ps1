@@ -382,7 +382,9 @@ function Ensure-AzCliReady {
     Test-AzCliPresent
 
     if (-not $SkipLogin) {
-        # Check if already logged in by querying the current account
+        # Check if already logged in by querying the current account.
+        # stderr is suppressed because az account show outputs an error message when not logged in,
+        # which we handle below by prompting for az login.
         $accountJson = az account show -o json 2>$null
         if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
             Write-Step 'Kein Azure-Login gefunden. Starte az login...'
