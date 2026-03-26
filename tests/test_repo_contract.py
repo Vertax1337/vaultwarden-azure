@@ -672,6 +672,20 @@ class RepoContractTests(unittest.TestCase):
         deploy_script = next(r for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
         self.assertEqual(deploy_script['properties']['timeout'], 'PT1H')
 
+    def test_deployment_script_has_pg_diagnostic_helpers(self):
+        """Deployment script must expose richer PostgreSQL diagnostics on connectivity failures."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_script = next(r for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        script = deploy_script['properties']['scriptContent']
+        self.assertIn('print_pg_server_diagnostics()', script)
+        self.assertIn('print_pg_firewall_diagnostics()', script)
+        self.assertIn('print_pg_database_diagnostics()', script)
+        self.assertIn('print_pg_connectivity_diagnostics()', script)
+        self.assertIn('execute exit code', script)
+        self.assertIn('last connectivity stdout', script)
+        self.assertIn('PostgreSQL firewall rules', script)
+        self.assertIn('PostgreSQL databases', script)
+
     def test_allow_azure_services_always_true_in_defaults(self):
         """allowAzureServicesToPostgres must default to true in all templates and wizard defaults."""
         main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))

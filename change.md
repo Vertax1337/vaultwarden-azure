@@ -29,3 +29,36 @@ Das Azure Deployment Script `vault-ensure-kv-secrets` hat PostgreSQL bisher nur 
 ### Test / Validierung
 - Repo-Testlauf lokal: bestehende Tests plus neue statische Tests für den Readiness-Pfad und den Shared-Logic-Kommentar.
 - Validiert wird damit die Template-/Skriptlogik, nicht ein echter Live-Azure-Deploy.
+
+## Schritt 2 – Problem 2: PostgreSQL-Fehlerursache im Deployment Script besser diagnostizieren
+
+### Problem / Ursache
+Nach Schritt 1 war der PostgreSQL-Readiness-Pfad robuster, aber ein Fehlschlag lieferte weiterhin zu wenig konkrete Diagnostik. Im realen Fehlerbild war nur sichtbar, dass PostgreSQL nach 600 Sekunden nicht erreichbar war. Für die Fehlersuche fehlten serverseitige Zustandsdaten, Firewall-Regeln, Datenbankliste sowie Exitcode/Stdout/Stderr des letzten `az postgres flexible-server execute`-Versuchs.
+
+### Betroffene Dateien
+- `main.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+- Im Deployment Script in `main.json` neue Diagnose-Helfer ergänzt:
+  - `print_pg_server_diagnostics`
+  - `print_pg_firewall_diagnostics`
+  - `print_pg_database_diagnostics`
+  - `print_pg_connectivity_diagnostics`
+- Bei PostgreSQL-Fehlschlägen werden jetzt zusätzlich ausgegeben:
+  - Server-Details (`az postgres flexible-server show`)
+  - Firewall-Regeln (`firewall-rule list`)
+  - Datenbanken (`db list`)
+  - letzter Execute-Exitcode
+  - letzter Execute-Stdout
+  - letzter Execute-Stderr
+- Die bestehende Readiness-Logik aus Schritt 1 wurde nicht funktional verändert, nur die Diagnose im Fehlerfall erweitert.
+
+### Relevante Nebenwirkungen / Risiken
+- Etwas ausführlichere Deployment-Logs im Fehlerfall.
+- Die Diagnose-Funktionen wurden lokal im Deployment Script ergänzt und nicht als neue Shared Logic in PowerShell-Skripte ausgelagert, um Seiteneffekte auf andere Pfade zu vermeiden.
+
+### Test / Validierung
+- Repo-Testlauf mit `pwsh`: alle Tests grün.
+- Zusätzliche statische Tests prüfen, dass die PostgreSQL-Diagnose-Helfer und die erweiterten Diagnoseausgaben im Deployment Script vorhanden sind.
