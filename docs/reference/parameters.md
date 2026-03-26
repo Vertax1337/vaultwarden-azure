@@ -90,12 +90,12 @@ Diese Parameter werden zu Vaultwarden-ENV-Werten oder steuern Vaultwarden-nahes 
 
 | Parameter | ENV-Variable | Beschreibung |
 |---|---|---|
-| `mailRootDomain` | – | Root-Domain für MX-Lookup (Direct Send) |
+| `mailRootDomain` | – | Root-Domain für Mailrouting und Default-Absender; bei ACS Foundation auch als Standard-Domain verwendet |
 | `smtpUseAuth` | – | SMTP-Auth aktivieren (`true` = SMTP Auth, `false` = Direct Send) |
 | `smtpFrom` | `SMTP_FROM` | Absenderadresse |
 | `smtpFromName` | `SMTP_FROM_NAME` | Absendername |
 | `heloName` | `HELO_NAME` | HELO-Name (leer = Host aus `DOMAIN`) |
-| `smtpHost` | `SMTP_HOST` | SMTP-Server (leer = `smtp.office365.com` bei Auth; MX-Lookup bei Direct Send) |
+| `smtpHost` | `SMTP_HOST` | SMTP-Server. Auth: leer = `smtp.office365.com`. Direct Send: **Pflichtfeld** – MX-Endpunkt der Mail-Domain (kein automatischer Lookup) |
 | `smtpPort` | `SMTP_PORT` | SMTP-Port |
 | `smtpSecurity` | `SMTP_SECURITY` | TLS-Modus (`starttls`, `force_tls`, `off`) |
 | `smtpUsername` | `SMTP_USERNAME` | SMTP-Benutzername |

@@ -26,7 +26,7 @@ Die vollständige Dokumentation zu SMTP Auth, Direct Send und ACS SMTP (Foundati
 | Modus | Wann nutzen | Schlüsselparameter |
 |---|---|---|
 | **SMTP Auth** (Default) | Produktiv: M365, eigener Relay, ACS nach Finalisierung | `smtpUseAuth=true`, `smtpHost`, `smtpUsername`, `smtpPassword` |
-| **Direct Send** | Nur interne Szenarien in kontrollierten M365-Umgebungen | `smtpUseAuth=false`, `mailRootDomain` |
+| **Direct Send** | Nur interne Szenarien in kontrollierten M365-Umgebungen | `smtpUseAuth=false`, `smtpHost` (MX-Endpunkt, Pflichtfeld) |
 | **ACS SMTP** | Kundeneigene Domain mit Azure Communication Services | `acsDeployFoundation=true` + manuelle ACS-Finalisierung + finaler Redeploy mit `smtpHost=smtp.azurecomm.net` |
 
 Details zu jedem Modus stehen im Playbook.

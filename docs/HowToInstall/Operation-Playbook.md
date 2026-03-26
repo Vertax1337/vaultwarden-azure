@@ -52,7 +52,7 @@ Die Lösung besteht aus fünf betrieblich relevanten Ebenen:
 Ergänzend deployt das Template:
 
 - **User Assigned Managed Identities** (App liest Secrets; Bootstrap-Script schreibt Secrets)
-- **Deployment Script** (Bootstrap: DB-App-User, Secret-Seeding, MX-Lookup)
+- **Deployment Script** (Bootstrap: DB-App-User, Secret-Seeding, SMTP-Host-Validierung)
 - **Recovery Services Vault** (Azure-Files-Backup, standardmäßig aktiv)
 - **Log Analytics + Diagnostic Settings** (Observability für Key Vault und PostgreSQL)
 
@@ -256,7 +256,8 @@ Nur nutzen, wenn bewusst gewollt.
 **Prüfpunkte:**
 
 - `smtpUseAuth = false`
-- `smtpHost` entweder explizit gesetzt oder leer zusammen mit gesetztem `mailRootDomain`
+- `smtpHost` **muss explizit gesetzt werden** (MX-Endpunkt der Mail-Domain, z.B. `mx01.example-com.mail.protection.outlook.com`)
+- Ein automatischer MX-Lookup im Deployment Script findet **nicht** statt; der Host muss vor dem Deployment bekannt sein
 - `mailRootDomain` sauber und bewusst gesetzt (keine automatische Ableitung aus `domainUrl`)
 - Template setzt für Vaultwarden in diesem Modus `SMTP_PORT=25` und `SMTP_SECURITY=starttls`
 - `SMTP_USERNAME` **darf in der App nicht vorhanden sein**

@@ -338,12 +338,19 @@ function New-CustomerConfigInteractive {
     $smtpUseAuthValue = Read-BooleanWithDefault -Label 'SMTP Auth verwenden?' -Default ([bool]$(if ($ExistingConfig) { $ExistingConfig.smtp.useAuth } else { $true }))
     $smtpFrom = Read-TextWithDefault -Label 'SMTP From' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from } else { 'vaultwarden@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
+    # SMTP Auth: SMTP Host is NOT prompted in the main wizard flow.
+    # The default (smtp.office365.com) is used unless the existing config already has a custom host.
+    # To override, supply -SmtpHost via CLI or edit the deployment.config.json manually.
+    # Direct Send: SMTP Host (MX endpoint) is always prompted explicitly - it is mandatory and cannot be defaulted.
     $smtpHostValue = ''
     $smtpPortValue = ''
     $smtpSecurityValue = 'starttls'
     $smtpUsernameValue = ''
     if ($smtpUseAuthValue) {
-        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { 'smtp.office365.com' })) -Required
+        # SMTP Auth: silently preserve existing host or default to smtp.office365.com.
+        # No interactive prompt for host in the main wizard path.
+        $existingSmtpHost = if ($ExistingConfig) { [string]$ExistingConfig.smtp.host } else { '' }
+        $smtpHostValue = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
         $smtpPortValue = Read-TextWithDefault -Label 'SMTP Port' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.port } else { '587' })) -Required
         $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
         $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required

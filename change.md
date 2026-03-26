@@ -282,3 +282,91 @@ Diese Funktion schreibt die ARM-Parameterdatei für alle Deploy-Pfade (Wizard, G
   - `test_cli_path_validates_direct_send_requires_smtp_host`: CLI-Pfad validiert smtpHost für Direct Send
 - 3 bestehende GenerateOnly-Tests aktualisiert: `-SmtpHost 'mx.*.de'` ergänzt (da Direct Send jetzt expliziten smtpHost erfordert)
 
+
+## Schritt 4 – SMTP-UX-Cleanup: Wizard vereinfachen, Doku bereinigen
+
+### Problem / Ursache
+Nach Schritt 3 war der technische Direct-Send-Pfad korrekt, aber:
+1. Der Wizard fragte `SMTP Host` auch im SMTP-Auth-Hauptpfad interaktiv ab – unnötig prominent, da `smtp.office365.com` ein sinnvoller stabiler Default ist.
+2. Dokumentation und Metadaten enthielten noch veraltete Hinweise auf automatischen MX-Lookup:
+   - `docs/reference/parameters.md`: `Root-Domain für MX-Lookup (Direct Send)` und `MX-Lookup bei Direct Send`
+   - `docs/operations/smtp-and-acs.md`: Direct-Send-Tabelleneintrag zeigte `mailRootDomain` statt `smtpHost`
+   - `docs/HowToInstall/Operation-Playbook.md`: Zeile 55 erwähnte noch MX-Lookup im Deployment Script; §7.2 beschrieb `smtpHost` als optional
+   - `main.json`: `mailRootDomain`-Parameterbeschreibung implizierte MX-Lookup für Direct Send
+
+### Betroffene Dateien
+
+#### Shared-Logic-Betroffenheit
+- `scripts/Invoke-CustomerDeployment.ps1` – Wizard-Funktion `New-CustomerConfigInteractive` (SHARED LOGIC: betrifft alle interaktiven Pfade)
+- `main.json` – ARM-Parameter-Metadaten (betrifft Deploy-to-Azure-Button, Wizard, alle Pfade)
+
+#### Alle betroffenen Pfade
+| Pfad | Betroffenheit |
+|---|---|
+| Wizard (interaktiv) | SMTP Host wird bei SMTP Auth nicht mehr im Hauptpfad abgefragt |
+| GenerateOnly / CLI | Unverändert – SmtpHost wird weiterhin via `-SmtpHost` übergeben |
+| Repair / Update | Unverändert – vorhandene Config-Werte werden gelesen |
+| Deploy-to-Azure-Button | Nur Metadaten-Text verbessert, Verhalten unverändert |
+
+#### Konkrete Dateiänderungen
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `docs/reference/parameters.md`
+- `docs/operations/smtp-and-acs.md`
+- `docs/HowToInstall/Operation-Playbook.md`
+- `main.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+
+**1. `scripts/Invoke-CustomerDeployment.ps1` – Wizard (SHARED LOGIC)**
+
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+
+Warum geändert: `New-CustomerConfigInteractive` fragte `SMTP Host` interaktiv ab, obwohl `smtp.office365.com` der stabile Default für SMTP Auth ist. Das hat den Wizard unnötig verlängert.
+
+SMTP-Auth-Pfad:
+- `SMTP Host` wird nicht mehr interaktiv abgefragt
+- Stattdessen: vorhandenen Wert aus ExistingConfig übernehmen, sonst `smtp.office365.com` als stilles Default
+- Kein funktionaler Unterschied für den Deploy-Pfad – das ARM-Template behandelt leeren/gleichen Wert identisch
+
+Direct-Send-Pfad: unverändert – expliziter Prompt für MX-Endpunkt bleibt
+
+Andere betroffene Pfade: keine – der CLI-Pfad (`-SmtpHost` via Parameter) und der Repair/Update-Pfad (liest gespeicherten Wert) sind nicht betroffen.
+
+**2. `docs/reference/parameters.md`**
+- `mailRootDomain`-Beschreibung: "Root-Domain für MX-Lookup (Direct Send)" → korrekte Beschreibung (Mailrouting + ACS Default)
+- `smtpHost`-Beschreibung: "MX-Lookup bei Direct Send" → "Pflichtfeld – MX-Endpunkt (kein automatischer Lookup)"
+
+**3. `docs/operations/smtp-and-acs.md`**
+- Direct-Send-Tabelleneintrag: `mailRootDomain` → `smtpHost (MX-Endpunkt, Pflichtfeld)`
+
+**4. `docs/HowToInstall/Operation-Playbook.md`**
+- Zeile 55: "MX-Lookup" im Deployment Script → "SMTP-Host-Validierung"
+- §7.2: `smtpHost` als Pflichtfeld dokumentiert, MX-Lookup-Hinweis entfernt
+
+**5. `main.json` – Parameter-Metadaten**
+- `mailRootDomain`-Beschreibung: Verweis auf Direct-Send-ohne-smtpHost entfernt
+- `smtpUseAuth`-Beschreibung: Ergänzung, dass Direct Send smtpHost explizit erfordert
+
+### Warum wurde `New-CustomerConfigInteractive` geändert?
+Diese Funktion ist SHARED LOGIC – sie wird für alle interaktiven Deploy-Pfade (Neues Deployment, Bearbeiten+Deployen, GenerateOnly interaktiv) genutzt. Die Änderung entfernt lediglich eine redundante Frage im SMTP-Auth-Hauptpfad; der Funktionswert (`smtp.office365.com`) bleibt korrekt. Der CLI-Pfad und alle anderen Pfade sind nicht betroffen.
+
+Geprüft für Seiteneffekte:
+- Wizard: neue Tests verifizieren, dass `Read-TextWithDefault -Label 'SMTP Host'` nicht mehr im Code vorkommt
+- Deploy-to-Azure-Button: nur Metadaten-Text, keine Logik-Änderung
+- GenerateOnly: weiterhin über `-SmtpHost` steuerbar
+- Repair/Update: lesen vorhandenen `smtp.host` aus Config → keine Änderung
+- Bestehende Kundenkonfigs: `smtp.host` bleibt im Config gespeichert, wird beim Repair/Update korrekt gelesen
+
+### Relevante Nebenwirkungen / Risiken
+- Keine funktionalen Risiken: SMTP Auth mit leerem `smtpHost` wird durch das ARM-Template korrekt auf `smtp.office365.com` aufgelöst
+- Kunden mit Custom-SMTP-Host (nicht Office365): müssen `-SmtpHost` via CLI übergeben oder deployment.config.json manuell bearbeiten
+- Doku-Änderungen sind rein redaktionell, keine Code-Auswirkungen
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf: 60/60 Tests grün (59 bestehend + 1 neuer).
+- 1 neuer Test:
+  - `test_wizard_smtp_auth_does_not_prompt_for_host_in_main_flow`: verifiziert, dass `Read-TextWithDefault -Label 'SMTP Host'` nicht mehr im Code ist, smtp.office365.com als Default vorhanden ist und der Kommentar die Design-Entscheidung dokumentiert
+- Bestehender Test `test_wizard_direct_send_prompts_for_smtp_host` angepasst: prüft jetzt auf `MX-Endpunkt` (bleibt im Direct-Send-Pfad erhalten)

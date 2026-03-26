@@ -1,70 +1,70 @@
 {
+  "domain": {
+    "hostname": "vault.mytest.de",
+    "zoneName": "mytest.de",
+    "url": "https://vault.mytest.de"
+  },
+  "customerNumber": "1111",
   "metadata": {
-    "createdAt": "2026-03-26T22:14:24.3623086+00:00",
-    "updatedAt": "2026-03-26T22:14:24.3703048+00:00",
+    "createdAt": "2026-03-26T22:37:45.0101346+00:00",
+    "updatedAt": "2026-03-26T22:37:45.0174232+00:00",
     "version": 3
   },
-  "customerCode": "vault-basic-de",
+  "smtp": {
+    "useAuth": true,
+    "mailRootDomain": "mytest.de",
+    "from": "vw@mytest.de",
+    "fromName": "Vaultwarden",
+    "host": "",
+    "port": "587",
+    "security": "starttls",
+    "username": "vw@mytest.de",
+    "passwordSource": "prompt"
+  },
   "secrets": {
-    "smtpPasswordSource": "none",
+    "smtpPasswordSource": "prompt",
     "cloudflareApiTokenSource": "not-required",
     "ssoClientSecretSource": "none",
     "pushInstallationKeySource": "none"
   },
+  "customerCode": "vault-mytest-de",
   "azure": {
-    "resourceGroupName": "rg-basic-vault-test-gwc",
+    "resourceGroupName": "rg-mytest-vault-prod-gwc",
     "location": "germanywestcentral",
-    "environment": "test",
+    "environment": "prod",
     "appName": "vault",
     "edgeMode": "none",
     "enableIngressIpRestrictions": false,
     "ingressAllowedCidrs": [],
     "advancedArmParameters": {
-      "adminPanelEnabled": true,
-      "pushUseEuServers": false,
-      "postgresSkuName": "Standard_B1ms",
-      "acsDeployFoundation": false,
-      "postgresBackupRetentionDays": 14,
-      "storageAccountSku": "Standard_LRS",
-      "acsDataLocation": "Germany",
-      "acsDomainName": "",
-      "pushInstallationId": "",
+      "allowAzureServicesToPostgres": true,
       "ssoEnabled": false,
-      "postgresStorageGB": 32,
-      "ssoAuthority": "",
-      "signupsDomainsWhitelist": "basic.de",
-      "pushEnabled": false,
-      "diagnosticsEnabled": true,
-      "ssoOnly": false,
-      "orgCreationUsers": "",
       "ssoScopes": "openid profile email offline_access User.Read",
-      "invitationOrgName": "basic.de",
-      "allowInsecureHttp": true,
+      "ssoAuthority": "",
       "ssoClientId": "",
-      "allowAzureServicesToPostgres": true
+      "postgresBackupRetentionDays": 14,
+      "invitationOrgName": "mytest.de",
+      "pushEnabled": false,
+      "acsDomainName": "",
+      "storageAccountSku": "Standard_LRS",
+      "acsDeployFoundation": false,
+      "signupsDomainsWhitelist": "mytest.de",
+      "adminPanelEnabled": true,
+      "allowInsecureHttp": true,
+      "acsDataLocation": "Germany",
+      "orgCreationUsers": "",
+      "pushInstallationId": "",
+      "ssoOnly": false,
+      "diagnosticsEnabled": true,
+      "postgresSkuName": "Standard_B1ms",
+      "postgresStorageGB": 32,
+      "pushUseEuServers": false
     }
-  },
-  "smtp": {
-    "useAuth": false,
-    "mailRootDomain": "basic.de",
-    "from": "vaultwarden@basic.de",
-    "fromName": "Vaultwarden",
-    "host": "mx.basic.de",
-    "port": "587",
-    "security": "starttls",
-    "username": "",
-    "passwordSource": "none"
   },
   "edge": {
     "mode": "basic",
     "enableWaf": false,
     "enableRateLimit": false,
     "lockOriginToCloudflare": false
-  },
-  "customerNumber": "0815",
-  "domain": {
-    "hostname": "vault.basic.de",
-    "zoneName": "basic.de",
-    "url": "https://vault.basic.de"
   }
 }

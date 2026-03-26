@@ -156,14 +156,14 @@
       "type": "string",
       "defaultValue": "",
       "metadata": {
-        "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter für Direct Send ohne expliziten smtpHost, für ACS Foundation ohne explizites acsDomainName und für den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
+        "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Wird verwendet für: ACS Foundation (als Standard-Domain wenn acsDomainName leer) und den automatischen Default-Absender wenn smtpFrom leer bleibt. Für Direct Send muss smtpHost immer explizit gesetzt werden (kein automatischer MX-Lookup). Keine Ableitung aus domainUrl."
       }
     },
     "smtpUseAuth": {
       "type": "bool",
       "defaultValue": true,
       "metadata": {
-        "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
+        "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet – smtpHost muss dann explizit angegeben werden. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
       }
     },
     "smtpFrom": {
