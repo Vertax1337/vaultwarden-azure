@@ -2,8 +2,8 @@
 
 - Kunden-Nr.: 1309
 - Vaultwarden-Domäne: vault.50er-jahre-museum.de
-- Resource Group: rg-museum-vault-prod-gwc
-- Location: germanywestcentral
+- Resource Group: rg-museum-vault-prod-neu
+- Location: northeurope
 - URL: https://vault.50er-jahre-museum.de
 - Edge-Modus: basic
 - WAF: True

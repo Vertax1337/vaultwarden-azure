@@ -4,7 +4,7 @@ Diese Dateien sind die **aktive Deploy-to-Azure-Kopie** für vault.50er-jahre-mu
 
 - Quelle: `customers/vault-50er-jahre-museum-de/...`
 - Aktive Vaultwarden-Domäne: vault.50er-jahre-museum.de
-- Resource Group Default: rg-museum-vault-prod-gwc
+- Resource Group Default: rg-museum-vault-prod-neu
 
 Verwendung:
 - Der Deploy-to-Azure-Button zeigt auf `current/main.deploytoazure.json`.

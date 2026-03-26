@@ -289,7 +289,7 @@
                                                      }
                                     },
                        "location":  {
-                                        "defaultValue":  "germanywestcentral",
+                                        "defaultValue":  "northeurope",
                                         "type":  "string",
                                         "metadata":  {
                                                          "description":  "Azure region for all resources"
