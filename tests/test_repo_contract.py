@@ -26,6 +26,7 @@ for _candidate in _pwsh_candidates:
 
 _PWSH_AVAILABLE = PWSH is not None
 _CURRENT_WRAPPER_BACKUP: typing.Optional[dict] = None
+_CURRENT_DIR_BACKUPS: typing.Dict[str, str] = {}
 
 
 def _load_current_wrapper_backup() -> typing.Optional[dict]:
@@ -39,12 +40,30 @@ def _load_current_wrapper_backup() -> typing.Optional[dict]:
     return _CURRENT_WRAPPER_BACKUP
 
 
+def _load_current_dir_backups() -> None:
+    """Load all tracked files in current/ to restore after destructive tests."""
+    global _CURRENT_DIR_BACKUPS
+    if _CURRENT_DIR_BACKUPS:
+        return
+    current_dir = REPO_ROOT / 'current'
+    for name in ('deployment.config.json', 'README.md'):
+        fpath = current_dir / name
+        if fpath.exists():
+            _CURRENT_DIR_BACKUPS[name] = fpath.read_text(encoding='utf-8')
+
+
 def _restore_current_wrapper() -> None:
-    """Restore the current wrapper from in-memory backup (no git required)."""
-    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
-    if not path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+    """Restore the current directory from in-memory backup (no git required)."""
+    current_dir = REPO_ROOT / 'current'
+    wrapper_path = current_dir / 'main.deploytoazure.json'
+    if not wrapper_path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
+        current_dir.mkdir(parents=True, exist_ok=True)
+        wrapper_path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+    for name, content in _CURRENT_DIR_BACKUPS.items():
+        fpath = current_dir / name
+        if not fpath.exists():
+            current_dir.mkdir(parents=True, exist_ok=True)
+            fpath.write_text(content, encoding='utf-8')
 
 
 def requires_pwsh(fn):
@@ -63,6 +82,7 @@ def run_ps(command: str, env: typing.Optional[typing.Dict[str, str]] = None) -> 
 
 # Load backup at import time so it is available before any test modifies current/
 _load_current_wrapper_backup()
+_load_current_dir_backups()
 
 
 class RepoContractTests(unittest.TestCase):

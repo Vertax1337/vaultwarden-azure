@@ -1,448 +1,278 @@
 {
-    "resources": [
-        {
-            "type": "Microsoft.Resources/deployments",
-            "properties": {
-                "templateLink": {
-                    "contentVersion": "1.0.0.0",
-                    "uri": "[parameters('mainTemplateUri')]"
-                },
-                "parameters": {
-                    "smtpPassword": {
-                        "value": "[parameters('smtpPassword')]"
-                    },
-                    "enableIngressIpRestrictions": {
-                        "value": "[parameters('enableIngressIpRestrictions')]"
-                    },
-                    "postgresSkuName": {
-                        "value": "[parameters('postgresSkuName')]"
-                    },
-                    "domainUrl": {
-                        "value": "[parameters('domainUrl')]"
-                    },
-                    "ssoAuthority": {
-                        "value": "[parameters('ssoAuthority')]"
-                    },
-                    "postgresBackupRetentionDays": {
-                        "value": "[parameters('postgresBackupRetentionDays')]"
-                    },
-                    "pushUseEuServers": {
-                        "value": "[parameters('pushUseEuServers')]"
-                    },
-                    "allowAzureServicesToPostgres": {
-                        "value": "[parameters('allowAzureServicesToPostgres')]"
-                    },
-                    "ingressAllowedCidrs": {
-                        "value": "[parameters('ingressAllowedCidrs')]"
-                    },
-                    "smtpFromName": {
-                        "value": "[parameters('smtpFromName')]"
-                    },
-                    "azureFilesBackupWeeklyRetentionWeeks": {
-                        "value": "[parameters('azureFilesBackupWeeklyRetentionWeeks')]"
-                    },
-                    "postgresStorageGB": {
-                        "value": "[parameters('postgresStorageGB')]"
-                    },
-                    "mailRootDomain": {
-                        "value": "[parameters('mailRootDomain')]"
-                    },
-                    "appName": {
-                        "value": "[parameters('appName')]"
-                    },
-                    "dbAdminUser": {
-                        "value": "[parameters('dbAdminUser')]"
-                    },
-                    "diagnosticsEnabled": {
-                        "value": "[parameters('diagnosticsEnabled')]"
-                    },
-                    "pushInstallationId": {
-                        "value": "[parameters('pushInstallationId')]"
-                    },
-                    "bsseRef": {
-                        "value": "[parameters('bsseRef')]"
-                    },
-                    "smtpUsername": {
-                        "value": "[parameters('smtpUsername')]"
-                    },
-                    "cpuCores": {
-                        "value": "[parameters('cpuCores')]"
-                    },
-                    "edgeMode": {
-                        "value": "[parameters('edgeMode')]"
-                    },
-                    "ssoClientId": {
-                        "value": "[parameters('ssoClientId')]"
-                    },
-                    "ssoOnly": {
-                        "value": "[parameters('ssoOnly')]"
-                    },
-                    "azureFilesBackupDailyRetentionDays": {
-                        "value": "[parameters('azureFilesBackupDailyRetentionDays')]"
-                    },
-                    "azureFilesBackupEnabled": {
-                        "value": "[parameters('azureFilesBackupEnabled')]"
-                    },
-                    "pushEnabled": {
-                        "value": "[parameters('pushEnabled')]"
-                    },
-                    "ssoEnabled": {
-                        "value": "[parameters('ssoEnabled')]"
-                    },
-                    "heloName": {
-                        "value": "[parameters('heloName')]"
-                    },
-                    "azureFilesBackupTimeZone": {
-                        "value": "[parameters('azureFilesBackupTimeZone')]"
-                    },
-                    "smtpUseAuth": {
-                        "value": "[parameters('smtpUseAuth')]"
-                    },
-                    "invitationOrgName": {
-                        "value": "[parameters('invitationOrgName')]"
-                    },
-                    "azureFilesBackupWeeklyDaysOfWeek": {
-                        "value": "[parameters('azureFilesBackupWeeklyDaysOfWeek')]"
-                    },
-                    "storageAccountSku": {
-                        "value": "[parameters('storageAccountSku')]"
-                    },
-                    "customHostname": {
-                        "value": "[parameters('customHostname')]"
-                    },
-                    "acsDomainName": {
-                        "value": "[parameters('acsDomainName')]"
-                    },
-                    "environment": {
-                        "value": "[parameters('environment')]"
-                    },
-                    "adminPanelEnabled": {
-                        "value": "[parameters('adminPanelEnabled')]"
-                    },
-                    "signupsDomainsWhitelist": {
-                        "value": "[parameters('signupsDomainsWhitelist')]"
-                    },
-                    "smtpAuthMechanism": {
-                        "value": "[parameters('smtpAuthMechanism')]"
-                    },
-                    "allowInsecureHttp": {
-                        "value": "[parameters('allowInsecureHttp')]"
-                    },
-                    "pushInstallationKey": {
-                        "value": "[parameters('pushInstallationKey')]"
-                    },
-                    "dbPassword": {
-                        "value": "[parameters('dbPassword')]"
-                    },
-                    "postgresVersion": {
-                        "value": "[parameters('postgresVersion')]"
-                    },
-                    "acsDataLocation": {
-                        "value": "[parameters('acsDataLocation')]"
-                    },
-                    "smtpSecurity": {
-                        "value": "[parameters('smtpSecurity')]"
-                    },
-                    "deploymentScriptForceUpdateTag": {
-                        "value": "[parameters('deploymentScriptForceUpdateTag')]"
-                    },
-                    "ssoClientSecret": {
-                        "value": "[parameters('ssoClientSecret')]"
-                    },
-                    "smtpFrom": {
-                        "value": "[parameters('smtpFrom')]"
-                    },
-                    "smtpHost": {
-                        "value": "[parameters('smtpHost')]"
-                    },
-                    "orgCreationUsers": {
-                        "value": "[parameters('orgCreationUsers')]"
-                    },
-                    "vaultwardenImage": {
-                        "value": "[parameters('vaultwardenImage')]"
-                    },
-                    "memorySize": {
-                        "value": "[parameters('memorySize')]"
-                    },
-                    "location": {
-                        "value": "[parameters('location')]"
-                    },
-                    "azureFilesBackupScheduleRunTime": {
-                        "value": "[parameters('azureFilesBackupScheduleRunTime')]"
-                    },
-                    "smtpPort": {
-                        "value": "[parameters('smtpPort')]"
-                    },
-                    "ssoScopes": {
-                        "value": "[parameters('ssoScopes')]"
-                    },
-                    "acsDeployFoundation": {
-                        "value": "[parameters('acsDeployFoundation')]"
-                    }
-                },
-                "mode": "Incremental"
-            },
-            "apiVersion": "2022-09-01",
-            "name": "vaultwardenMainTemplate"
-        }
-    ],
     "parameters": {
-        "smtpPassword": {
-            "type": "securestring",
-            "defaultValue": "",
-            "metadata": {
-                "description": "SMTP password"
-            }
-        },
-        "enableIngressIpRestrictions": {
-            "type": "bool",
-            "defaultValue": false,
-            "metadata": {
-                "description": "If true, apply ACA ingress IP restrictions using ingressAllowedCidrs. Intended for the Cloudflare-managed production path."
-            }
-        },
         "postgresSkuName": {
-            "type": "string",
-            "defaultValue": "Standard_B1ms",
             "metadata": {
                 "description": "PostgreSQL SKU name"
-            }
+            },
+            "defaultValue": "Standard_B1ms",
+            "type": "string"
         },
-        "domainUrl": {
-            "type": "string",
-            "defaultValue": "https://vault.thermosun.de",
-            "minLength": 9,
+        "mailRootDomain": {
             "metadata": {
-                "description": "Public URL of your Vaultwarden instance. MUST include https:// (example: https://sub.domain.tld)"
-            }
+                "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter für Direct Send ohne expliziten smtpHost, für ACS Foundation ohne explizites acsDomainName und für den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
+            },
+            "defaultValue": "thermosun.de",
+            "type": "string"
+        },
+        "smtpFromName": {
+            "metadata": {
+                "description": "Anzeigename im From-Header."
+            },
+            "defaultValue": "Vaultwarden",
+            "type": "string"
+        },
+        "environment": {
+            "metadata": {
+                "description": "Kosten/Zuordnung: Umgebung (prod/test/dev)"
+            },
+            "defaultValue": "prod",
+            "type": "string",
+            "allowedValues": [
+                "prod",
+                "test",
+                "dev"
+            ]
+        },
+        "smtpPort": {
+            "metadata": {
+                "description": "SMTP port (M365 default: 587)"
+            },
+            "defaultValue": "587",
+            "type": "string"
+        },
+        "postgresBackupRetentionDays": {
+            "maxValue": 35,
+            "metadata": {
+                "description": "Point-in-time restore retention in Tagen für PostgreSQL Flexible Server."
+            },
+            "defaultValue": 14,
+            "minValue": 7,
+            "type": "int"
+        },
+        "pushInstallationId": {
+            "metadata": {
+                "description": "Bitwarden push installation id (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
+            },
+            "defaultValue": "",
+            "type": "securestring"
+        },
+        "azureFilesBackupWeeklyRetentionWeeks": {
+            "metadata": {
+                "description": "Number of weeks to retain weekly Azure Files backups."
+            },
+            "defaultValue": 12,
+            "type": "int"
+        },
+        "smtpUsername": {
+            "metadata": {
+                "description": "SMTP username (often same as smtpFrom)"
+            },
+            "defaultValue": "vaultwarden@thermosun.de",
+            "type": "string"
+        },
+        "adminPanelEnabled": {
+            "metadata": {
+                "description": "Vaultwarden ADMIN_TOKEN als App-ENV setzen. Default true fuer Erstdeployment/Bootstrap/Tests. Fuer den produktiven Steady State nach erfolgreichem Setup auf false setzen, damit ADMIN_TOKEN nicht mehr an die App durchgereicht wird. Achtung: Falls admin_token bereits in /data/config.json persistiert wurde, dort ebenfalls entfernen, sonst bleibt das Admin-Panel aktiv."
+            },
+            "defaultValue": true,
+            "type": "bool"
+        },
+        "vaultwardenImage": {
+            "metadata": {
+                "description": "Container image to use for Vaultwarden (pin a version for reproducible deployments)"
+            },
+            "defaultValue": "vaultwarden/server:1.35.3-alpine",
+            "type": "string"
+        },
+        "signupsDomainsWhitelist": {
+            "metadata": {
+                "description": "Vaultwarden ENV: SIGNUPS_DOMAINS_WHITELIST. Comma-separated email domains allowed to self-register."
+            },
+            "defaultValue": "thermosun.de",
+            "type": "string"
+        },
+        "cpuCores": {
+            "metadata": {
+                "description": "CPU cores for the container"
+            },
+            "defaultValue": "0.25",
+            "type": "string"
+        },
+        "ssoEnabled": {
+            "metadata": {
+                "description": "Enable Vaultwarden SSO (OIDC) for Web Vault login (requires Vaultwarden >= 1.35)."
+            },
+            "defaultValue": false,
+            "type": "bool"
+        },
+        "allowInsecureHttp": {
+            "metadata": {
+                "description": "Allow insecure HTTP traffic (recommended: false for production)"
+            },
+            "defaultValue": true,
+            "type": "bool"
+        },
+        "azureFilesBackupDailyRetentionDays": {
+            "metadata": {
+                "description": "Number of days to retain daily Azure Files backups."
+            },
+            "defaultValue": 30,
+            "type": "int"
+        },
+        "smtpHost": {
+            "metadata": {
+                "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschließlich auf mailRootDomain. Für den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und lässt SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."
+            },
+            "defaultValue": "smtp.office365.com",
+            "type": "string"
+        },
+        "acsDomainName": {
+            "metadata": {
+                "description": "Custom domain to prepare in ACS Email, e.g. example.com. Leer = verwende mailRootDomain. Es gibt keine automatische Ableitung mehr aus domainUrl."
+            },
+            "defaultValue": "",
+            "type": "string"
+        },
+        "ingressAllowedCidrs": {
+            "metadata": {
+                "description": "Allowed CIDR ranges for ACA ingress when enableIngressIpRestrictions=true. Example: Cloudflare edge IP ranges."
+            },
+            "defaultValue": [],
+            "type": "array"
+        },
+        "smtpSecurity": {
+            "metadata": {
+                "description": "SMTP security (starttls / force_tls / off)"
+            },
+            "defaultValue": "starttls",
+            "type": "string",
+            "allowedValues": [
+                "starttls",
+                "force_tls",
+                "off"
+            ]
+        },
+        "postgresVersion": {
+            "metadata": {
+                "description": "PostgreSQL major version. New deployments should use the latest supported version. Existing servers cannot be downgraded."
+            },
+            "defaultValue": "16",
+            "type": "string",
+            "allowedValues": [
+                "15",
+                "16",
+                "17"
+            ]
+        },
+        "orgCreationUsers": {
+            "metadata": {
+                "description": "Vaultwarden ENV: ORG_CREATION_USERS. Optional comma-separated user emails allowed to create organizations. Empty = all users."
+            },
+            "defaultValue": "",
+            "type": "string"
+        },
+        "dbAdminUser": {
+            "metadata": {
+                "description": "Azure PostgreSQL Flexible Server administrator login. Required for server creation and initial bootstrap only; not used by the Vaultwarden app itself."
+            },
+            "defaultValue": "vaultwarden",
+            "type": "string"
         },
         "ssoAuthority": {
-            "type": "string",
-            "defaultValue": "",
             "metadata": {
                 "description": "OIDC authority/issuer base URL. For Entra ID use https://login.microsoftonline.com/<TENANT_ID>/v2.0 and do not append /.well-known/openid-configuration."
-            }
+            },
+            "defaultValue": "",
+            "type": "string"
+        },
+        "smtpPassword": {
+            "metadata": {
+                "description": "SMTP password"
+            },
+            "defaultValue": "",
+            "type": "securestring"
         },
         "azureFilesBackupWeeklyDaysOfWeek": {
-            "type": "array",
+            "metadata": {
+                "description": "Days of week used for weekly retention points."
+            },
             "defaultValue": [
                 "Sunday",
                 "Tuesday",
                 "Thursday"
             ],
-            "metadata": {
-                "description": "Days of week used for weekly retention points."
-            }
+            "type": "array"
         },
-        "pushUseEuServers": {
-            "type": "bool",
+        "customHostname": {
+            "metadata": {
+                "description": "Optional customer-facing hostname (for example vault.example.com). Used by the production wrapper/documentation. The ARM deployment itself does not bind the hostname."
+            },
+            "defaultValue": "vault.thermosun.de",
+            "type": "string"
+        },
+        "ssoOnly": {
+            "metadata": {
+                "description": "If true, only SSO login is allowed (no email/password). Use with care."
+            },
             "defaultValue": false,
-            "metadata": {
-                "description": "Use Bitwarden EU push relay / identity endpoints. Select this only when the Installation ID / Key were requested for the EU region."
-            }
+            "type": "bool"
         },
-        "postgresBackupRetentionDays": {
-            "maxValue": 35,
-            "defaultValue": 14,
-            "type": "int",
-            "minValue": 7,
+        "bsseRef": {
             "metadata": {
-                "description": "Point-in-time restore retention in Tagen für PostgreSQL Flexible Server."
-            }
+                "description": "Traceability: BSSE Deploy-Ref (z.B. Git Tag oder Commit SHA)"
+            },
+            "defaultValue": "",
+            "type": "string"
         },
-        "ingressAllowedCidrs": {
-            "type": "array",
-            "defaultValue": [],
+        "ssoClientSecret": {
             "metadata": {
-                "description": "Allowed CIDR ranges for ACA ingress when enableIngressIpRestrictions=true. Example: Cloudflare edge IP ranges."
-            }
+                "description": "OIDC Client Secret / App secret value."
+            },
+            "defaultValue": "",
+            "type": "securestring"
         },
-        "allowAzureServicesToPostgres": {
-            "type": "bool",
+        "smtpUseAuth": {
+            "metadata": {
+                "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
+            },
             "defaultValue": true,
-            "metadata": {
-                "description": "Allow Azure services to access PostgreSQL (0.0.0.0 firewall rule). Recommended: true for Container Apps without VNet/NAT."
-            }
+            "type": "bool"
         },
-        "smtpFromName": {
-            "type": "string",
-            "defaultValue": "Vaultwarden",
+        "heloName": {
             "metadata": {
-                "description": "Anzeigename im From-Header."
-            }
-        },
-        "azureFilesBackupWeeklyRetentionWeeks": {
-            "type": "int",
-            "defaultValue": 12,
-            "metadata": {
-                "description": "Number of weeks to retain weekly Azure Files backups."
-            }
-        },
-        "postgresStorageGB": {
-            "type": "int",
-            "defaultValue": 32,
-            "metadata": {
-                "description": "PostgreSQL storage size in GB"
-            }
-        },
-        "mailRootDomain": {
-            "type": "string",
-            "defaultValue": "thermosun.de",
-            "metadata": {
-                "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter für Direct Send ohne expliziten smtpHost, für ACS Foundation ohne explizites acsDomainName und für den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
-            }
+                "description": "Vaultwarden ENV: HELO_NAME. Empty = derive host name from DOMAIN / domainUrl."
+            },
+            "defaultValue": "",
+            "type": "string"
         },
         "appName": {
-            "type": "string",
-            "defaultValue": "vaulttherm",
             "metadata": {
                 "description": "Name of the Vaultwarden Container App"
             },
+            "defaultValue": "vaulttherm",
+            "type": "string",
             "maxLength": 10
         },
-        "smtpPort": {
-            "type": "string",
-            "defaultValue": "587",
-            "metadata": {
-                "description": "SMTP port (M365 default: 587)"
-            }
-        },
-        "dbAdminUser": {
-            "type": "string",
-            "defaultValue": "vaultwarden",
-            "metadata": {
-                "description": "Azure PostgreSQL Flexible Server administrator login. Required for server creation and initial bootstrap only; not used by the Vaultwarden app itself."
-            }
-        },
-        "diagnosticsEnabled": {
-            "type": "bool",
-            "defaultValue": true,
-            "metadata": {
-                "description": "Enable Azure Monitor diagnostic settings for Key Vault and PostgreSQL Flexible Server (Log Analytics)."
-            }
-        },
-        "pushInstallationId": {
-            "type": "securestring",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Bitwarden push installation id (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
-            }
-        },
-        "bsseRef": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Traceability: BSSE Deploy-Ref (z.B. Git Tag oder Commit SHA)"
-            }
-        },
-        "smtpUsername": {
-            "type": "string",
-            "defaultValue": "vaultwarden@thermosun.de",
-            "metadata": {
-                "description": "SMTP username (often same as smtpFrom)"
-            }
-        },
-        "cpuCores": {
-            "type": "string",
-            "defaultValue": "0.25",
-            "metadata": {
-                "description": "CPU cores for the container"
-            }
-        },
-        "edgeMode": {
-            "type": "string",
-            "defaultValue": "cloudflare-managed",
-            "metadata": {
-                "description": "Deployment mode for edge hardening. none = Azure-only/basic, cloudflare-managed = production path with post-deploy Cloudflare automation."
-            },
-            "allowedValues": [
-                "none",
-                "cloudflare-managed"
-            ]
-        },
-        "ssoClientId": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "OIDC Client ID / Application (client) ID."
-            }
-        },
-        "ssoOnly": {
-            "type": "bool",
-            "defaultValue": false,
-            "metadata": {
-                "description": "If true, only SSO login is allowed (no email/password). Use with care."
-            }
-        },
-        "azureFilesBackupDailyRetentionDays": {
-            "type": "int",
-            "defaultValue": 30,
-            "metadata": {
-                "description": "Number of days to retain daily Azure Files backups."
-            }
-        },
         "azureFilesBackupEnabled": {
-            "type": "bool",
-            "defaultValue": true,
             "metadata": {
                 "description": "Enable Azure Backup for the Azure File Share used by Vaultwarden (/data)."
-            }
-        },
-        "pushEnabled": {
-            "type": "bool",
-            "defaultValue": false,
-            "metadata": {
-                "description": "Enable mobile push notifications (requires Bitwarden push relay credentials)."
-            }
-        },
-        "ssoEnabled": {
-            "type": "bool",
-            "defaultValue": false,
-            "metadata": {
-                "description": "Enable Vaultwarden SSO (OIDC) for Web Vault login (requires Vaultwarden >= 1.35)."
-            }
-        },
-        "heloName": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Vaultwarden ENV: HELO_NAME. Empty = derive host name from DOMAIN / domainUrl."
-            }
-        },
-        "azureFilesBackupTimeZone": {
-            "type": "string",
-            "defaultValue": "UTC",
-            "metadata": {
-                "description": "Windows timezone name for the backup schedule, e.g. UTC, W. Europe Standard Time."
-            }
-        },
-        "smtpUseAuth": {
-            "type": "bool",
+            },
             "defaultValue": true,
-            "metadata": {
-                "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
-            }
+            "type": "bool"
         },
-        "invitationOrgName": {
-            "type": "string",
-            "defaultValue": "thermosun.de",
+        "ssoClientId": {
             "metadata": {
-                "description": "Vaultwarden ENV: INVITATION_ORG_NAME. Organization name shown in invitation mails."
-            }
-        },
-        "mainTemplateUri": {
-            "type": "string",
-            "defaultValue": "https://raw.githubusercontent.com/Vertax1337/vaultwarden-azure/master/main.json",
-            "metadata": {
-                "description": "Remote URI of the main ARM template. Adjust this when using a fork or another branch."
-            }
+                "description": "OIDC Client ID / Application (client) ID."
+            },
+            "defaultValue": "",
+            "type": "string"
         },
         "storageAccountSku": {
-            "type": "string",
-            "defaultValue": "Standard_LRS",
             "metadata": {
                 "description": "Storage account SKU for Azure Files"
             },
+            "defaultValue": "Standard_LRS",
+            "type": "string",
             "allowedValues": [
                 "Standard_LRS",
                 "Standard_ZRS",
@@ -452,52 +282,83 @@
                 "Standard_RAGZRS"
             ]
         },
-        "customHostname": {
-            "type": "string",
-            "defaultValue": "vault.thermosun.de",
+        "memorySize": {
             "metadata": {
-                "description": "Optional customer-facing hostname (for example vault.example.com). Used by the production wrapper/documentation. The ARM deployment itself does not bind the hostname."
-            }
-        },
-        "acsDomainName": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Custom domain to prepare in ACS Email, e.g. example.com. Leer = verwende mailRootDomain. Es gibt keine automatische Ableitung mehr aus domainUrl."
-            }
-        },
-        "environment": {
-            "type": "string",
-            "defaultValue": "prod",
-            "metadata": {
-                "description": "Kosten/Zuordnung: Umgebung (prod/test/dev)"
+                "description": "Memory in GiB for the container (CPU:RAM ratio must be 1:2)"
             },
-            "allowedValues": [
-                "prod",
-                "test",
-                "dev"
-            ]
+            "defaultValue": "0.5",
+            "type": "string"
         },
-        "adminPanelEnabled": {
-            "type": "bool",
-            "defaultValue": true,
+        "deploymentScriptForceUpdateTag": {
             "metadata": {
-                "description": "Vaultwarden ADMIN_TOKEN als App-ENV setzen. Default true fuer Erstdeployment/Bootstrap/Tests. Fuer den produktiven Steady State nach erfolgreichem Setup auf false setzen, damit ADMIN_TOKEN nicht mehr an die App durchgereicht wird. Achtung: Falls admin_token bereits in /data/config.json persistiert wurde, dort ebenfalls entfernen, sonst bleibt das Admin-Panel aktiv."
-            }
+                "description": "Optional forceUpdateTag for the bootstrap deploymentScript. Change this value to force a controlled rerun without changing app settings."
+            },
+            "defaultValue": "",
+            "type": "string"
         },
-        "signupsDomainsWhitelist": {
+        "azureFilesBackupScheduleRunTime": {
+            "metadata": {
+                "description": "Time of day (HH:MM) when backup should run. MM must be 00 or 30."
+            },
+            "defaultValue": "05:30",
+            "type": "string"
+        },
+        "dbPassword": {
+            "metadata": {
+                "description": "Azure PostgreSQL Flexible Server administrator password. Required for server creation and initial bootstrap only; not stored in Key Vault and not used as Vaultwarden app credential."
+            },
+            "defaultValue": "[concat(toUpper(newGuid()), newGuid())]",
+            "type": "securestring"
+        },
+        "enableIngressIpRestrictions": {
+            "metadata": {
+                "description": "If true, apply ACA ingress IP restrictions using ingressAllowedCidrs. Intended for the Cloudflare-managed production path."
+            },
+            "defaultValue": false,
+            "type": "bool"
+        },
+        "domainUrl": {
+            "metadata": {
+                "description": "Public URL of your Vaultwarden instance. MUST include https:// (example: https://sub.domain.tld)"
+            },
             "type": "string",
-            "defaultValue": "thermosun.de",
+            "minLength": 9,
+            "defaultValue": "https://vault.thermosun.de"
+        },
+        "postgresStorageGB": {
             "metadata": {
-                "description": "Vaultwarden ENV: SIGNUPS_DOMAINS_WHITELIST. Comma-separated email domains allowed to self-register."
-            }
+                "description": "PostgreSQL storage size in GB"
+            },
+            "defaultValue": 32,
+            "type": "int"
+        },
+        "location": {
+            "metadata": {
+                "description": "Azure region for all resources"
+            },
+            "defaultValue": "germanywestcentral",
+            "type": "string"
+        },
+        "pushEnabled": {
+            "metadata": {
+                "description": "Enable mobile push notifications (requires Bitwarden push relay credentials)."
+            },
+            "defaultValue": false,
+            "type": "bool"
+        },
+        "pushUseEuServers": {
+            "metadata": {
+                "description": "Use Bitwarden EU push relay / identity endpoints. Select this only when the Installation ID / Key were requested for the EU region."
+            },
+            "defaultValue": false,
+            "type": "bool"
         },
         "smtpAuthMechanism": {
-            "type": "string",
-            "defaultValue": "",
             "metadata": {
                 "description": "Optional (nur SMTP Auth): SMTP Auth Mechanism. Mögliche Werte u.a.: Plain, Login, Xoauth2 (auch kommasepariert)."
             },
+            "defaultValue": "",
+            "type": "string",
             "allowedValues": [
                 "",
                 "Plain",
@@ -507,142 +368,281 @@
                 "Login,Plain"
             ]
         },
-        "allowInsecureHttp": {
-            "type": "bool",
-            "defaultValue": true,
-            "metadata": {
-                "description": "Allow insecure HTTP traffic (recommended: false for production)"
-            }
-        },
-        "pushInstallationKey": {
-            "type": "securestring",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Bitwarden push installation key (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
-            }
-        },
-        "dbPassword": {
-            "type": "securestring",
-            "defaultValue": "[concat(toUpper(newGuid()), newGuid())]",
-            "metadata": {
-                "description": "Azure PostgreSQL Flexible Server administrator password. Required for server creation and initial bootstrap only; not stored in Key Vault and not used as Vaultwarden app credential."
-            }
-        },
-        "postgresVersion": {
-            "type": "string",
-            "defaultValue": "16",
-            "metadata": {
-                "description": "PostgreSQL major version. New deployments should use the latest supported version. Existing servers cannot be downgraded."
-            },
-            "allowedValues": [
-                "15",
-                "16",
-                "17"
-            ]
-        },
-        "acsDataLocation": {
-            "type": "string",
-            "defaultValue": "Germany",
-            "metadata": {
-                "description": "ACS data location for Email Service and Communication Service, e.g. Germany, Europe or UnitedStates. Email Service and Communication Service must use the same geography."
-            }
-        },
-        "smtpSecurity": {
-            "type": "string",
-            "defaultValue": "starttls",
-            "metadata": {
-                "description": "SMTP security (starttls / force_tls / off)"
-            },
-            "allowedValues": [
-                "starttls",
-                "force_tls",
-                "off"
-            ]
-        },
-        "deploymentScriptForceUpdateTag": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Optional forceUpdateTag for the bootstrap deploymentScript. Change this value to force a controlled rerun without changing app settings."
-            }
-        },
-        "ssoClientSecret": {
-            "type": "securestring",
-            "defaultValue": "",
-            "metadata": {
-                "description": "OIDC Client Secret / App secret value."
-            }
-        },
-        "smtpHost": {
-            "type": "string",
-            "defaultValue": "smtp.office365.com",
-            "metadata": {
-                "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschließlich auf mailRootDomain. Für den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und lässt SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."
-            }
-        },
-        "orgCreationUsers": {
-            "type": "string",
-            "defaultValue": "",
-            "metadata": {
-                "description": "Vaultwarden ENV: ORG_CREATION_USERS. Optional comma-separated user emails allowed to create organizations. Empty = all users."
-            }
-        },
-        "vaultwardenImage": {
-            "type": "string",
-            "defaultValue": "vaultwarden/server:1.35.3-alpine",
-            "metadata": {
-                "description": "Container image to use for Vaultwarden (pin a version for reproducible deployments)"
-            }
-        },
-        "memorySize": {
-            "type": "string",
-            "defaultValue": "0.5",
-            "metadata": {
-                "description": "Memory in GiB for the container (CPU:RAM ratio must be 1:2)"
-            }
-        },
-        "location": {
-            "type": "string",
-            "defaultValue": "germanywestcentral",
-            "metadata": {
-                "description": "Azure region for all resources"
-            }
-        },
-        "azureFilesBackupScheduleRunTime": {
-            "type": "string",
-            "defaultValue": "05:30",
-            "metadata": {
-                "description": "Time of day (HH:MM) when backup should run. MM must be 00 or 30."
-            }
-        },
-        "smtpFrom": {
-            "type": "string",
-            "defaultValue": "vaultwarden@thermosun.de",
-            "metadata": {
-                "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). Für Produktion explizit setzen."
-            }
-        },
-        "ssoScopes": {
-            "type": "string",
-            "defaultValue": "openid profile email offline_access User.Read",
-            "metadata": {
-                "description": "OIDC scopes passed to Vaultwarden. For Entra ID the default openid profile email offline_access User.Read is recommended."
-            }
-        },
         "acsDeployFoundation": {
-            "type": "bool",
-            "defaultValue": false,
             "metadata": {
                 "description": "Optional: deploy Azure Communication Services foundation resources (Email Service, Email Domain resource, Communication Service) together with the core stack. Domain verification, domain linking and SMTP username activation remain manual post-deploy steps."
-            }
+            },
+            "defaultValue": false,
+            "type": "bool"
+        },
+        "invitationOrgName": {
+            "metadata": {
+                "description": "Vaultwarden ENV: INVITATION_ORG_NAME. Organization name shown in invitation mails."
+            },
+            "defaultValue": "thermosun.de",
+            "type": "string"
+        },
+        "acsDataLocation": {
+            "metadata": {
+                "description": "ACS data location for Email Service and Communication Service, e.g. Germany, Europe or UnitedStates. Email Service and Communication Service must use the same geography."
+            },
+            "defaultValue": "Germany",
+            "type": "string"
+        },
+        "allowAzureServicesToPostgres": {
+            "metadata": {
+                "description": "Allow Azure services to access PostgreSQL (0.0.0.0 firewall rule). Recommended: true for Container Apps without VNet/NAT."
+            },
+            "defaultValue": true,
+            "type": "bool"
+        },
+        "diagnosticsEnabled": {
+            "metadata": {
+                "description": "Enable Azure Monitor diagnostic settings for Key Vault and PostgreSQL Flexible Server (Log Analytics)."
+            },
+            "defaultValue": true,
+            "type": "bool"
+        },
+        "edgeMode": {
+            "metadata": {
+                "description": "Deployment mode for edge hardening. none = Azure-only/basic, cloudflare-managed = production path with post-deploy Cloudflare automation."
+            },
+            "defaultValue": "cloudflare-managed",
+            "type": "string",
+            "allowedValues": [
+                "none",
+                "cloudflare-managed"
+            ]
+        },
+        "mainTemplateUri": {
+            "metadata": {
+                "description": "Remote URI of the main ARM template. Adjust this when using a fork or another branch."
+            },
+            "defaultValue": "https://raw.githubusercontent.com/Vertax1337/vaultwarden-azure/master/main.json",
+            "type": "string"
+        },
+        "ssoScopes": {
+            "metadata": {
+                "description": "OIDC scopes passed to Vaultwarden. For Entra ID the default openid profile email offline_access User.Read is recommended."
+            },
+            "defaultValue": "openid profile email offline_access User.Read",
+            "type": "string"
+        },
+        "smtpFrom": {
+            "metadata": {
+                "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). Für Produktion explizit setzen."
+            },
+            "defaultValue": "vaultwarden@thermosun.de",
+            "type": "string"
+        },
+        "pushInstallationKey": {
+            "metadata": {
+                "description": "Bitwarden push installation key (from https://bitwarden.com/host/). Treated as secret and stored in Key Vault."
+            },
+            "defaultValue": "",
+            "type": "securestring"
+        },
+        "azureFilesBackupTimeZone": {
+            "metadata": {
+                "description": "Windows timezone name for the backup schedule, e.g. UTC, W. Europe Standard Time."
+            },
+            "defaultValue": "UTC",
+            "type": "string"
         }
     },
-    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
     "contentVersion": "1.0.0.0",
     "outputs": {
         "nestedDeploymentName": {
             "type": "string",
             "value": "[resourceId('Microsoft.Resources/deployments', 'vaultwardenMainTemplate')]"
         }
-    }
+    },
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "resources": [
+        {
+            "apiVersion": "2022-09-01",
+            "properties": {
+                "parameters": {
+                    "postgresSkuName": {
+                        "value": "[parameters('postgresSkuName')]"
+                    },
+                    "mailRootDomain": {
+                        "value": "[parameters('mailRootDomain')]"
+                    },
+                    "smtpFromName": {
+                        "value": "[parameters('smtpFromName')]"
+                    },
+                    "environment": {
+                        "value": "[parameters('environment')]"
+                    },
+                    "smtpPort": {
+                        "value": "[parameters('smtpPort')]"
+                    },
+                    "postgresBackupRetentionDays": {
+                        "value": "[parameters('postgresBackupRetentionDays')]"
+                    },
+                    "pushInstallationId": {
+                        "value": "[parameters('pushInstallationId')]"
+                    },
+                    "azureFilesBackupWeeklyRetentionWeeks": {
+                        "value": "[parameters('azureFilesBackupWeeklyRetentionWeeks')]"
+                    },
+                    "smtpUsername": {
+                        "value": "[parameters('smtpUsername')]"
+                    },
+                    "adminPanelEnabled": {
+                        "value": "[parameters('adminPanelEnabled')]"
+                    },
+                    "vaultwardenImage": {
+                        "value": "[parameters('vaultwardenImage')]"
+                    },
+                    "signupsDomainsWhitelist": {
+                        "value": "[parameters('signupsDomainsWhitelist')]"
+                    },
+                    "cpuCores": {
+                        "value": "[parameters('cpuCores')]"
+                    },
+                    "ssoEnabled": {
+                        "value": "[parameters('ssoEnabled')]"
+                    },
+                    "allowInsecureHttp": {
+                        "value": "[parameters('allowInsecureHttp')]"
+                    },
+                    "azureFilesBackupDailyRetentionDays": {
+                        "value": "[parameters('azureFilesBackupDailyRetentionDays')]"
+                    },
+                    "smtpHost": {
+                        "value": "[parameters('smtpHost')]"
+                    },
+                    "acsDomainName": {
+                        "value": "[parameters('acsDomainName')]"
+                    },
+                    "ingressAllowedCidrs": {
+                        "value": "[parameters('ingressAllowedCidrs')]"
+                    },
+                    "smtpSecurity": {
+                        "value": "[parameters('smtpSecurity')]"
+                    },
+                    "postgresVersion": {
+                        "value": "[parameters('postgresVersion')]"
+                    },
+                    "orgCreationUsers": {
+                        "value": "[parameters('orgCreationUsers')]"
+                    },
+                    "dbAdminUser": {
+                        "value": "[parameters('dbAdminUser')]"
+                    },
+                    "ssoAuthority": {
+                        "value": "[parameters('ssoAuthority')]"
+                    },
+                    "smtpPassword": {
+                        "value": "[parameters('smtpPassword')]"
+                    },
+                    "azureFilesBackupWeeklyDaysOfWeek": {
+                        "value": "[parameters('azureFilesBackupWeeklyDaysOfWeek')]"
+                    },
+                    "customHostname": {
+                        "value": "[parameters('customHostname')]"
+                    },
+                    "ssoOnly": {
+                        "value": "[parameters('ssoOnly')]"
+                    },
+                    "bsseRef": {
+                        "value": "[parameters('bsseRef')]"
+                    },
+                    "ssoClientSecret": {
+                        "value": "[parameters('ssoClientSecret')]"
+                    },
+                    "smtpUseAuth": {
+                        "value": "[parameters('smtpUseAuth')]"
+                    },
+                    "heloName": {
+                        "value": "[parameters('heloName')]"
+                    },
+                    "appName": {
+                        "value": "[parameters('appName')]"
+                    },
+                    "azureFilesBackupEnabled": {
+                        "value": "[parameters('azureFilesBackupEnabled')]"
+                    },
+                    "ssoClientId": {
+                        "value": "[parameters('ssoClientId')]"
+                    },
+                    "storageAccountSku": {
+                        "value": "[parameters('storageAccountSku')]"
+                    },
+                    "memorySize": {
+                        "value": "[parameters('memorySize')]"
+                    },
+                    "deploymentScriptForceUpdateTag": {
+                        "value": "[parameters('deploymentScriptForceUpdateTag')]"
+                    },
+                    "azureFilesBackupScheduleRunTime": {
+                        "value": "[parameters('azureFilesBackupScheduleRunTime')]"
+                    },
+                    "dbPassword": {
+                        "value": "[parameters('dbPassword')]"
+                    },
+                    "enableIngressIpRestrictions": {
+                        "value": "[parameters('enableIngressIpRestrictions')]"
+                    },
+                    "domainUrl": {
+                        "value": "[parameters('domainUrl')]"
+                    },
+                    "postgresStorageGB": {
+                        "value": "[parameters('postgresStorageGB')]"
+                    },
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "pushEnabled": {
+                        "value": "[parameters('pushEnabled')]"
+                    },
+                    "pushUseEuServers": {
+                        "value": "[parameters('pushUseEuServers')]"
+                    },
+                    "smtpAuthMechanism": {
+                        "value": "[parameters('smtpAuthMechanism')]"
+                    },
+                    "acsDeployFoundation": {
+                        "value": "[parameters('acsDeployFoundation')]"
+                    },
+                    "invitationOrgName": {
+                        "value": "[parameters('invitationOrgName')]"
+                    },
+                    "acsDataLocation": {
+                        "value": "[parameters('acsDataLocation')]"
+                    },
+                    "allowAzureServicesToPostgres": {
+                        "value": "[parameters('allowAzureServicesToPostgres')]"
+                    },
+                    "diagnosticsEnabled": {
+                        "value": "[parameters('diagnosticsEnabled')]"
+                    },
+                    "edgeMode": {
+                        "value": "[parameters('edgeMode')]"
+                    },
+                    "ssoScopes": {
+                        "value": "[parameters('ssoScopes')]"
+                    },
+                    "smtpFrom": {
+                        "value": "[parameters('smtpFrom')]"
+                    },
+                    "pushInstallationKey": {
+                        "value": "[parameters('pushInstallationKey')]"
+                    },
+                    "azureFilesBackupTimeZone": {
+                        "value": "[parameters('azureFilesBackupTimeZone')]"
+                    }
+                },
+                "templateLink": {
+                    "contentVersion": "1.0.0.0",
+                    "uri": "[parameters('mainTemplateUri')]"
+                },
+                "mode": "Incremental"
+            },
+            "type": "Microsoft.Resources/deployments",
+            "name": "vaultwardenMainTemplate"
+        }
+    ]
 }
