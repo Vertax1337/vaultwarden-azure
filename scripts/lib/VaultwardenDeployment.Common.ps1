@@ -391,7 +391,8 @@ function Ensure-AzModuleLoaded {
             Write-Warning 'Die PowerShell-Session ist nicht elevated. Für die Installation von Az wird eine erhöhte Session benötigt.'
             Write-Host 'Starte erhöhte PowerShell-Session für die Az-Installation...'
             $installCmd = "Install-Module -Name Az -Scope AllUsers -Repository PSGallery -Force -AllowClobber"
-            $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -Command `"Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $installCmd`"" -Verb RunAs -Wait -PassThru
+            $psExe = if ($PSVersionTable.PSVersion.Major -ge 6 -and (Get-Command pwsh -ErrorAction SilentlyContinue)) { 'pwsh.exe' } else { 'powershell.exe' }
+            $proc = Start-Process -FilePath $psExe -ArgumentList "-NoProfile -Command `"Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $installCmd`"" -Verb RunAs -Wait -PassThru
             if ($proc.ExitCode -ne 0) {
                 throw 'Az-Modul-Installation in erhöhter Session fehlgeschlagen. Bitte manuell installieren: Install-Module -Name Az'
             }

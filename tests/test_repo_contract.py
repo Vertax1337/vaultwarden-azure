@@ -11,8 +11,12 @@ import unittest
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 PWSH: typing.Optional[pathlib.Path] = None
 
-# Detect pwsh availability once at import time
-for _candidate in [pathlib.Path('/mnt/data/pwsh76/pwsh'), pathlib.Path('/mnt/data/work/pwsh/pwsh'), pathlib.Path('pwsh')]:
+# Detect pwsh availability once at import time.
+# Override with PWSH_PATH environment variable if needed.
+_pwsh_candidates = [pathlib.Path('pwsh')]
+if os.environ.get('PWSH_PATH'):
+    _pwsh_candidates.insert(0, pathlib.Path(os.environ['PWSH_PATH']))
+for _candidate in _pwsh_candidates:
     try:
         subprocess.run([str(_candidate), '-NoProfile', '-Command', 'exit 0'], check=True, capture_output=True, timeout=10)
         PWSH = _candidate
