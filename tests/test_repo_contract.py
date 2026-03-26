@@ -183,7 +183,7 @@ class RepoContractTests(unittest.TestCase):
             self.assertNotIn('smtpPassword', params['parameters'])
             self.assertNotIn('ssoClientSecret', params['parameters'])
             self.assertNotIn('pushInstallationKey', params['parameters'])
-            self.assertEqual(current_wrapper['parameters']['appName']['defaultValue'], 'vaultkunde')
+            self.assertEqual(current_wrapper['parameters']['appName']['defaultValue'], 'vault')
             self.assertEqual(current_wrapper['parameters']['domainUrl']['defaultValue'], 'https://vault.kunde.de')
             self.assertEqual(current_wrapper['parameters']['mailRootDomain']['defaultValue'], 'kunde.de')
             self.assertEqual(current_wrapper['parameters']['ssoEnabled']['defaultValue'], True)
@@ -728,19 +728,26 @@ class RepoContractTests(unittest.TestCase):
                              f'RG name for {domain}/{env}/{location}: expected {expected_rg}, got {actual_rg}')
 
     def test_ensure_az_cli_ready_verifies_after_login(self):
-        """Ensure-AzCliReady must verify login after az login by calling az account show again."""
+        """Ensure-AzCliReady must verify login after az login by querying account state again."""
         content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8', errors='replace')
         start = content.find('function Ensure-AzCliReady')
         self.assertGreater(start, -1)
         body = content[start:]
-        # After az login, the function must call az account show again to verify
         az_login_pos = body.find('az login')
         self.assertGreater(az_login_pos, -1, 'Ensure-AzCliReady must call az login')
         after_login = body[az_login_pos:]
-        # Should have a second az account show after az login
-        second_account_show = after_login.find('az account show')
-        self.assertGreater(second_account_show, -1,
-                           'Ensure-AzCliReady must verify login by calling az account show after az login')
+        self.assertIn('Get-AzCurrentAccount', after_login,
+                      'Ensure-AzCliReady must verify login after az login')
+
+    @requires_pwsh
+    def test_app_name_is_fixed_to_vault(self):
+        """appName should be the stable fixed value 'vault' instead of a truncated domain-derived name."""
+        command = (
+            ". '{}' ; "
+            "Convert-SlugToAppName -Slug 'vault-50er-jahre-museum-de'"
+        ).format(REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Common.ps1')
+        result = run_ps(command)
+        self.assertEqual(result.stdout.strip(), 'vault')
 
 
 if __name__ == '__main__':

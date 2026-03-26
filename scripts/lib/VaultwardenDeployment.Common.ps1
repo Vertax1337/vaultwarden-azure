@@ -156,10 +156,11 @@ function Convert-DomainToSlug {
 
 function Convert-SlugToAppName {
     param([Parameter(Mandatory)][string]$Slug)
-    $appName = (($Slug -replace '[^a-z0-9]', '')).ToLowerInvariant()
-    if ([string]::IsNullOrWhiteSpace($appName)) { $appName = 'vault' }
-    if ($appName.Length -gt 10) { $appName = $appName.Substring(0, 10) }
-    return $appName
+    # appName is intentionally fixed to a stable value. The customer context is
+    # already encoded in the resource group, domain, customer folder and current/
+    # state. A dynamic, truncated appName produced unreadable values like
+    # 'vault50erj' and offered no operational value.
+    return 'vault'
 }
 
 function Get-DefaultZoneFromHostname {
@@ -508,6 +509,48 @@ function Install-AzCli {
     return $false
 }
 
+
+function Invoke-AzCapture {
+    <#
+    .SYNOPSIS
+        Runs an Azure CLI command without surfacing stderr as a PowerShell error.
+    .DESCRIPTION
+        Start-Process with redirected stdout/stderr is used so the normal CLI state
+        'not logged in' can be detected via exit code and stderr text instead of
+        becoming a terminating PowerShell error when $ErrorActionPreference='Stop'.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string[]]$Arguments)
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $proc = Start-Process -FilePath 'az' -ArgumentList $Arguments -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+        return [ordered]@{
+            ExitCode = $proc.ExitCode
+            StdOut   = ([System.IO.File]::ReadAllText($stdoutFile))
+            StdErr   = ([System.IO.File]::ReadAllText($stderrFile))
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $stdoutFile -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Get-AzCurrentAccount {
+    [CmdletBinding()]
+    param()
+    $result = Invoke-AzCapture -Arguments @('account','show','--only-show-errors','-o','json')
+    if ($result.ExitCode -ne 0 -or [string]::IsNullOrWhiteSpace($result.StdOut)) {
+        return $null
+    }
+    if ($PSVersionTable.PSVersion.Major -ge 6) {
+        return ($result.StdOut | ConvertFrom-Json -Depth 10)
+    }
+    return ($result.StdOut | ConvertFrom-Json)
+}
+
 function Ensure-AzCliReady {
     <#
     .SYNOPSIS
@@ -533,32 +576,18 @@ function Ensure-AzCliReady {
     }
 
     if (-not $SkipLogin) {
-        # Check if already logged in by querying the current account.
-        # stderr is suppressed because az account show outputs an error message when not logged in,
-        # which we handle below by prompting for az login.
-        $accountJson = $null
-        try {
-            $accountJson = az account show -o json 2>$null
-        } catch { }
-        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
+        $account = Get-AzCurrentAccount
+        if ($null -eq $account) {
             Write-Step 'Kein Azure-Login gefunden. Starte az login...'
-            az login
+            & az login
             if ($LASTEXITCODE -ne 0) {
                 throw 'Azure-Login fehlgeschlagen. Bitte manuell az login ausfuehren.'
             }
-            # Verify login succeeded and display account info
-            $accountJson = $null
-            try {
-                $accountJson = az account show -o json 2>$null
-            } catch { }
-            if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($accountJson)) {
+
+            $account = Get-AzCurrentAccount
+            if ($null -eq $account) {
                 throw 'Azure-Login konnte nicht verifiziert werden. Bitte manuell az login ausfuehren und erneut starten.'
             }
-        }
-        if ($PSVersionTable.PSVersion.Major -ge 6) {
-            $account = $accountJson | ConvertFrom-Json -Depth 10
-        } else {
-            $account = $accountJson | ConvertFrom-Json
         }
         Write-Step ('Azure-Login aktiv: {0} (Subscription: {1})' -f $account.user.name, $account.name)
     }

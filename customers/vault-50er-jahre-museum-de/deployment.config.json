@@ -19,9 +19,9 @@
                     "pushInstallationKeySource":  "none"
                 },
     "domain":  {
-                   "hostname":  "vault.50er-Jahre-Museum.de",
+                   "hostname":  "vault.50er-jahre-museum.de",
                    "zoneName":  "50er-jahre-museum.de",
-                   "url":  "https://vault.50er-Jahre-Museum.de"
+                   "url":  "https://vault.50er-jahre-museum.de"
                },
     "edge":  {
                  "mode":  "basic",
@@ -30,10 +30,10 @@
                  "lockOriginToCloudflare":  false
              },
     "azure":  {
-                  "resourceGroupName":  "rg-50er-jahre-museum-vault-prod-gwc",
+                  "resourceGroupName":  "rg-museum-vault-prod-gwc",
                   "location":  "germanywestcentral",
                   "environment":  "prod",
-                  "appName":  "vault50erj",
+                  "appName":  "vault",
                   "edgeMode":  "none",
                   "enableIngressIpRestrictions":  false,
                   "ingressAllowedCidrs":  [
@@ -41,36 +41,32 @@
                                           ],
                   "advancedArmParameters":  {
                                                 "orgCreationUsers":  "",
-                                                "ssoEnabled":  false,
+                                                "pushUseEuServers":  false,
                                                 "acsDomainName":  "",
                                                 "allowAzureServicesToPostgres":  true,
                                                 "pushInstallationId":  "",
+                                                "ssoAuthority":  "",
+                                                "diagnosticsEnabled":  true,
                                                 "storageAccountSku":  "Standard_LRS",
                                                 "postgresSkuName":  "Standard_B1ms",
                                                 "acsDataLocation":  "Germany",
                                                 "ssoOnly":  false,
-                                                "adminPanelEnabled":  true,
-                                                "invitationOrgName":  {
-                                                                          "Length":  6
-                                                                      },
-                                                "diagnosticsEnabled":  true,
-                                                "ssoAuthority":  "",
-                                                "postgresBackupRetentionDays":  14,
+                                                "allowInsecureHttp":  true,
+                                                "invitationOrgName":  "50er-jahre-museum.de",
                                                 "ssoClientId":  "",
-                                                "ssoScopes":  "openid profile email offline_access User.Read",
-                                                "signupsDomainsWhitelist":  {
-                                                                                "Length":  20
-                                                                            },
+                                                "postgresBackupRetentionDays":  14,
+                                                "postgresStorageGB":  32,
                                                 "acsDeployFoundation":  false,
-                                                "allowInsecureHttp":  false,
-                                                "pushUseEuServers":  false,
+                                                "ssoScopes":  "openid profile email offline_access User.Read",
+                                                "signupsDomainsWhitelist":  "50er-jahre-museum.de",
+                                                "ssoEnabled":  false,
                                                 "pushEnabled":  false,
-                                                "postgresStorageGB":  32
+                                                "adminPanelEnabled":  true
                                             }
               },
     "metadata":  {
-                     "createdAt":  "2026-03-26T12:12:36.7582675+01:00",
-                     "updatedAt":  "2026-03-26T12:12:36.7688057+01:00",
+                     "createdAt":  "2026-03-26T13:40:35.6108653+01:00",
+                     "updatedAt":  "2026-03-26T13:40:35.6237914+01:00",
                      "version":  3
                  }
 }
