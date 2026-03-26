@@ -351,13 +351,82 @@ function Normalize-IngressRestrictionParameterValue {
 function New-RandomPlaintextSecret {
     param([int]$Bytes = 32)
     $buffer = New-Object byte[] $Bytes
-    [System.Security.Cryptography.RandomNumberGenerator]::Fill($buffer)
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    try {
+        $rng.GetBytes($buffer)
+    }
+    finally {
+        $rng.Dispose()
+    }
     return [Convert]::ToBase64String($buffer).TrimEnd('=').Replace('+','-').Replace('/','_')
 }
 
 function Test-AzCliPresent {
     if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
         throw 'Azure CLI (az) wurde nicht gefunden.'
+    }
+}
+
+function Ensure-AzModuleLoaded {
+    [CmdletBinding()]
+    param([switch]$SkipLogin)
+
+    # Check if Az module is already available
+    $azModule = Get-Module -Name Az.Accounts -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $azModule) {
+        Write-Step 'Az PowerShell-Modul nicht gefunden. Installation wird versucht...'
+
+        # Check if we can install modules (PSGallery must be trusted or we force it)
+        $isElevated = $false
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            # PowerShell 7+: check IsElevated
+            $isElevated = (-not $IsWindows) -or ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        }
+        else {
+            # Windows PowerShell 5.1
+            $isElevated = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+        }
+
+        if (-not $isElevated -and ($env:OS -eq 'Windows_NT')) {
+            Write-Warning 'Die PowerShell-Session ist nicht elevated. Für die Installation von Az wird eine erhöhte Session benötigt.'
+            Write-Host 'Starte erhöhte PowerShell-Session für die Az-Installation...'
+            $installCmd = "Install-Module -Name Az -Scope AllUsers -Repository PSGallery -Force -AllowClobber"
+            $proc = Start-Process -FilePath 'powershell.exe' -ArgumentList "-NoProfile -Command `"Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force; $installCmd`"" -Verb RunAs -Wait -PassThru
+            if ($proc.ExitCode -ne 0) {
+                throw 'Az-Modul-Installation in erhöhter Session fehlgeschlagen. Bitte manuell installieren: Install-Module -Name Az'
+            }
+        }
+        else {
+            try {
+                Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -Force -AllowClobber -ErrorAction Stop
+            }
+            catch {
+                throw "Az-Modul konnte nicht installiert werden: $_`nBitte manuell installieren: Install-Module -Name Az -Scope CurrentUser"
+            }
+        }
+
+        $azModule = Get-Module -Name Az.Accounts -ListAvailable -ErrorAction SilentlyContinue | Select-Object -First 1
+        if (-not $azModule) {
+            throw 'Az-Modul wurde installiert, ist aber nicht verfügbar. Bitte PowerShell-Session neu starten.'
+        }
+        Write-Step 'Az PowerShell-Modul erfolgreich installiert.'
+    }
+
+    # Import Az.Accounts if not already loaded
+    if (-not (Get-Module -Name Az.Accounts -ErrorAction SilentlyContinue)) {
+        Import-Module Az.Accounts -ErrorAction Stop
+    }
+
+    if (-not $SkipLogin) {
+        # Check if already logged in
+        $context = Get-AzContext -ErrorAction SilentlyContinue
+        if (-not $context -or -not $context.Account) {
+            Write-Step 'Kein Azure-Login gefunden. Starte Connect-AzAccount...'
+            Connect-AzAccount -ErrorAction Stop
+        }
+        else {
+            Write-Step ('Azure-Login aktiv: {0} ({1})' -f $context.Account.Id, $context.Subscription.Name)
+        }
     }
 }
 
@@ -415,18 +484,18 @@ function New-CustomerReadmeContent {
 @"
 # $($Config.customerCode)
 
-- Kunden-Nr.: `$($Config.customerNumber)`
-- Vaultwarden-Domäne: `$($Config.domain.hostname)`
-- Resource Group: `$($Config.azure.resourceGroupName)`
-- Location: `$($Config.azure.location)`
-- URL: `$($Config.domain.url)`
-- Edge-Modus: `$($Config.edge.mode)`
-- WAF: `$($Config.edge.enableWaf)`
-- Rate Limit: `$($Config.edge.enableRateLimit)`
-- Origin Lockdown: `$($Config.edge.lockOriginToCloudflare)`
+- Kunden-Nr.: $($Config.customerNumber)
+- Vaultwarden-Domäne: $($Config.domain.hostname)
+- Resource Group: $($Config.azure.resourceGroupName)
+- Location: $($Config.azure.location)
+- URL: $($Config.domain.url)
+- Edge-Modus: $($Config.edge.mode)
+- WAF: $($Config.edge.enableWaf)
+- Rate Limit: $($Config.edge.enableRateLimit)
+- Origin Lockdown: $($Config.edge.lockOriginToCloudflare)
 
-> `deployment.config.json` ist die persistente Kundenkonfiguration.
-> `azure.parameters.json` wird pro Deployment neu generiert und kann Secrets enthalten. Deshalb ist diese Datei per `.gitignore` ausgeschlossen.
-> Erweiterte ARM-Parameter stehen unter `azure.advancedArmParameters` in der Kundenkonfiguration.
+> ``deployment.config.json`` ist die persistente Kundenkonfiguration.
+> ``azure.parameters.json`` wird pro Deployment neu generiert und kann Secrets enthalten. Deshalb ist diese Datei per ``.gitignore`` ausgeschlossen.
+> Erweiterte ARM-Parameter stehen unter ``azure.advancedArmParameters`` in der Kundenkonfiguration.
 "@
 }

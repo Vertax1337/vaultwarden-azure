@@ -8,6 +8,9 @@ customers/*/artifacts/*.pfx
 customers/*/artifacts/*.csr
 customers/*/artifacts/tmp/
 
+# current/ deployment artifacts (may contain secrets at runtime)
+current/azure.parameters.json
+
 # Local test caches
 .pytest_cache/
 __pycache__/

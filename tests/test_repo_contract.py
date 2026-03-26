@@ -1,28 +1,70 @@
 import json
 import os
 import pathlib
+import re
 import shutil
 import subprocess
 import tempfile
+import typing
 import unittest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
-PWSH = next((p for p in [pathlib.Path('/mnt/data/pwsh76/pwsh'), pathlib.Path('/mnt/data/work/pwsh/pwsh')] if p.exists()), pathlib.Path('pwsh'))
+PWSH: typing.Optional[pathlib.Path] = None
+
+# Detect pwsh availability once at import time
+for _candidate in [pathlib.Path('/mnt/data/pwsh76/pwsh'), pathlib.Path('/mnt/data/work/pwsh/pwsh'), pathlib.Path('pwsh')]:
+    try:
+        subprocess.run([str(_candidate), '-NoProfile', '-Command', 'exit 0'], check=True, capture_output=True, timeout=10)
+        PWSH = _candidate
+        break
+    except (subprocess.CalledProcessError, FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        continue
+
+_PWSH_AVAILABLE = PWSH is not None
+_CURRENT_WRAPPER_BACKUP: typing.Optional[dict] = None
 
 
-def run_ps(command: str, env: dict | None = None) -> subprocess.CompletedProcess:
+def _load_current_wrapper_backup() -> typing.Optional[dict]:
+    """Load the current wrapper from disk to restore after destructive tests."""
+    global _CURRENT_WRAPPER_BACKUP
+    if _CURRENT_WRAPPER_BACKUP is not None:
+        return _CURRENT_WRAPPER_BACKUP
+    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
+    if path.exists():
+        _CURRENT_WRAPPER_BACKUP = json.loads(path.read_text(encoding='utf-8'))
+    return _CURRENT_WRAPPER_BACKUP
+
+
+def _restore_current_wrapper() -> None:
+    """Restore the current wrapper from in-memory backup (no git required)."""
+    path = REPO_ROOT / 'current' / 'main.deploytoazure.json'
+    if not path.exists() and _CURRENT_WRAPPER_BACKUP is not None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(_CURRENT_WRAPPER_BACKUP, indent=4, ensure_ascii=False) + '\n', encoding='utf-8')
+
+
+def requires_pwsh(fn):
+    """Decorator that skips a test when pwsh is not available."""
+    return unittest.skipUnless(_PWSH_AVAILABLE, 'pwsh (PowerShell) not available')(fn)
+
+
+def run_ps(command: str, env: typing.Optional[typing.Dict[str, str]] = None) -> subprocess.CompletedProcess:
+    if not _PWSH_AVAILABLE:
+        raise unittest.SkipTest('pwsh (PowerShell) not available')
     merged_env = os.environ.copy()
     if env:
         merged_env.update(env)
     return subprocess.run([str(PWSH), '-NoProfile', '-Command', command], check=True, capture_output=True, text=True, env=merged_env)
 
 
+# Load backup at import time so it is available before any test modifies current/
+_load_current_wrapper_backup()
+
+
 class RepoContractTests(unittest.TestCase):
     def setUp(self):
-        # Restore current/ directory if it was removed by a previous test
-        current_wrapper = REPO_ROOT / 'current' / 'main.deploytoazure.json'
-        if not current_wrapper.exists():
-            subprocess.run(['git', 'checkout', 'HEAD', '--', 'current/'], cwd=REPO_ROOT, check=True)
+        # Restore current/ directory from in-memory backup (no git dependency)
+        _restore_current_wrapper()
 
     def test_main_json_has_dual_mode_parameters(self):
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
@@ -42,6 +84,7 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('main.json', data['parameters']['mainTemplateUri']['defaultValue'])
         self.assertEqual(data['parameters']['dbPassword']['defaultValue'], '[concat(toUpper(newGuid()), newGuid())]')
 
+    @requires_pwsh
     def test_powershell_scripts_parse(self):
         scripts = [
             'scripts/Invoke-CustomerDeployment.ps1',
@@ -61,6 +104,7 @@ class RepoContractTests(unittest.TestCase):
             )
             run_ps(parser_command)
 
+    @requires_pwsh
     def test_generate_only_cloudflare_customer_files_with_domain_defaults(self):
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-'))
         current_root = REPO_ROOT / 'current'
@@ -128,6 +172,7 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_generate_only_basic_customer_files(self):
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-basic-'))
         try:
@@ -147,6 +192,7 @@ class RepoContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_lockdown_script_keeps_cidrs_in_config_and_rules_in_param_file(self):
         customer_code = 'locktest'
         customer_root = REPO_ROOT / 'customers' / customer_code
@@ -202,6 +248,7 @@ class RepoContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(customer_root, ignore_errors=True)
 
+    @requires_pwsh
     def test_region_helper_uses_caf_like_default_rg_name(self):
         command = (
             ". '{}' ; "
@@ -283,6 +330,7 @@ class RepoContractTests(unittest.TestCase):
             self.assertNotIn('"password":', text.lower(), f'Secret found in {config_path}')
             self.assertNotIn('dbPassword', text, f'dbPassword reference in {config_path}')
 
+    @requires_pwsh
     def test_generate_only_preserves_resources_array(self):
         """GenerateOnly must produce wrapper with resources as JSON array."""
         temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-arr-'))
@@ -325,6 +373,77 @@ class RepoContractTests(unittest.TestCase):
             # RG should contain a customer slug derived from hostname
             self.assertRegex(rg, r'^rg-.+-vault-.+-.+$', f'RG name {rg} in {config_path} does not match pattern')
 
+    def test_no_secrets_in_current_azure_parameters(self):
+        """current/azure.parameters.json must not be tracked in git (or if present, must not contain real secrets)."""
+        params_path = REPO_ROOT / 'current' / 'azure.parameters.json'
+        if not params_path.exists():
+            return  # File correctly absent
+        text = params_path.read_text(encoding='utf-8')
+        params = json.loads(text)
+        secure_keys = ['smtpPassword', 'ssoClientSecret', 'pushInstallationKey']
+        for key in secure_keys:
+            if key in params.get('parameters', {}):
+                value = params['parameters'][key].get('value', '')
+                self.assertEqual(value, '', f'Secret {key} should not have a real value in current/azure.parameters.json')
+
+    def test_gitignore_excludes_azure_parameters(self):
+        """The .gitignore must exclude azure.parameters.json from customers/ and current/."""
+        gitignore = (REPO_ROOT / '.gitignore').read_text(encoding='utf-8')
+        self.assertIn('customers/*/azure.parameters.json', gitignore)
+        self.assertIn('current/azure.parameters.json', gitignore)
+
+    def test_ps_scripts_no_unguarded_depth_parameter(self):
+        """All PowerShell scripts that use ConvertFrom-Json -Depth must guard it for PS5.1 compatibility."""
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            lines = content.split('\n')
+            for i, line in enumerate(lines, 1):
+                if 'ConvertFrom-Json' in line and '-Depth' in line:
+                    # Must be inside a PS6+ guard (check previous lines for version check)
+                    context = '\n'.join(lines[max(0, i-5):i])
+                    self.assertTrue(
+                        'PSVersion.Major' in context or 'PSVersionTable' in context,
+                        f'{ps_file.name}:{i} uses ConvertFrom-Json -Depth without PS5.1 version guard'
+                    )
+
+    def test_ps_scripts_no_randomnumbergenerator_fill(self):
+        """RandomNumberGenerator::Fill() is PS7/.NET Core only. Must use Create()+GetBytes() pattern."""
+        ps_files = list((REPO_ROOT / 'scripts').rglob('*.ps1'))
+        for ps_file in ps_files:
+            content = ps_file.read_text(encoding='utf-8', errors='replace')
+            self.assertNotIn(
+                'RandomNumberGenerator]::Fill',
+                content,
+                f'{ps_file.name} uses RandomNumberGenerator::Fill() which is not available in PS5.1/.NET Framework'
+            )
+
+    def test_wrapper_main_json_parameter_parity(self):
+        """The root wrapper must forward every parameter that main.json declares (except internal-only ones)."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        wrapper = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        main_params = set(main['parameters'].keys())
+        wrapper_params = set(wrapper['parameters'].keys()) - {'mainTemplateUri'}
+        # The wrapper should cover main.json params (wrapper may have extra like mainTemplateUri, customHostname, edgeMode, etc.)
+        # Check that no main.json param is missing from the wrapper
+        missing = main_params - wrapper_params
+        self.assertEqual(missing, set(), f'main.json parameters not exposed by wrapper: {sorted(missing)}')
+
+    def test_customer_configs_no_secret_values(self):
+        """No deployment.config.json in customers/ or current/ should contain plaintext secret values."""
+        secret_patterns = ['"password":', 'dbpassword', 'clientsecret":', 'installationkey":']
+        for config_path in list((REPO_ROOT / 'customers').rglob('deployment.config.json')) + [REPO_ROOT / 'current' / 'deployment.config.json']:
+            if not config_path.exists():
+                continue
+            text = config_path.read_text(encoding='utf-8').lower()
+            for pattern in secret_patterns:
+                # passwordSource is allowed; actual "password": "value" is not
+                if pattern == '"password":':
+                    # Check that it is only passwordSource, not a real password value
+                    self.assertNotIn('"password": "', text.replace('"passwordsource"', ''),
+                                     f'Potential secret ({pattern}) found in {config_path}')
+                else:
+                    self.assertNotIn(pattern, text, f'Potential secret ({pattern}) found in {config_path}')
 
 
 if __name__ == '__main__':
