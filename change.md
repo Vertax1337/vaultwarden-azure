@@ -199,3 +199,86 @@ Die Schritte 1c und 1d versuchten, das Problem um `az postgres flexible-server e
   - `test_main_json_bootstraps_rdbms_connect_extension_explicitly` → `test_main_json_uses_psql_instead_of_rdbms_connect`: prüft, dass `ensure_psql`, `build_psql_env`, `run_psql` vorhanden sind und kein `rdbms-connect`-/`PG_CLI_BASE`-/`ensure_pip`-Pfad mehr existiert.
   - `test_main_json_connectivity_loop_captures_real_execute_exit_code` → `test_main_json_connectivity_loop_uses_psql`: prüft `run_psql`-basierte Aufrufe für Connectivity-Check und SQL-Provisioning mit Exitcode-Erfassung.
 - Bestehender Diagnose-Test (`test_deployment_script_has_pg_diagnostic_helpers`) auf `psql exit code` aktualisiert.
+
+## Schritt 3 – SMTP/Direct-Send-Pfad: MX-Lookup entfernen, smtpHost als Pflichtfeld für Direct Send
+
+### Problem / Ursache
+Der Direct-Send-Pfad (smtpUseAuth=false) im Deployment Script in `main.json` versuchte den MX-Endpunkt der Mail-Domain zur Laufzeit via `dig` oder `nslookup` zu ermitteln. Im Azure-DeploymentScript-Container (CBL-Mariner/Azure-Linux) sind diese Tools nicht zuverlässig verfügbar. Dadurch brach das Deployment mit einer unklaren Fehlermeldung ab.
+
+Gleichzeitig schrieb der Wizard (`Invoke-CustomerDeployment.ps1`) den `smtpHost`-Wert nur für den SMTP-Auth-Pfad in die ARM-Parameterdatei. Bei Direct Send fehlte er, was den MX-Lookup im Deployment Script auslöste.
+
+### Betroffene Dateien
+
+#### Shared-Logic-Kennzeichnung
+- `main.json` – Deployment Script (geteilter Pfad für Wizard, Deploy-to-Azure-Button, Repair, Update, Redeploy)
+- `scripts/Invoke-CustomerDeployment.ps1` – Wizard (geteilte Funktionen `New-CustomerConfigObject`, `New-CustomerAzureParameters`)
+
+#### Alle betroffenen Pfade
+| Pfad | Betroffenheit |
+|---|---|
+| Wizard (Invoke-CustomerDeployment.ps1) | Neuer Direct-Send-Prompt für smtpHost; Early Validation im CLI-Pfad |
+| Deploy-to-Azure-Button | smtpHost-Parameter in ARM-Template bereits vorhanden → kein Umbau nötig |
+| GenerateOnly | Schreibt smtpHost jetzt korrekt für Direct Send in Parameter-Datei |
+| Repair / Update / Redeploy | Lesen vorhandene Config; wenn smtpHost gesetzt ist, wird er korrekt weitergegeben |
+| Bestehende Kundenkonfigs | Konfigurationen mit useAuth=true sind nicht betroffen; Direct-Send-Kunden brauchen smtpHost in deployment.config.json |
+
+#### Konkrete Dateiänderungen
+- `main.json`
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+
+**1. `main.json` – Deployment Script**
+
+Early-Validation-Block:
+- Alt: Schlägt nur fehl wenn BEIDE `SMTP_HOST_INPUT` UND `MAIL_ROOT_DOMAIN` fehlen
+- Neu: Schlägt fehl wenn `smtpUseAuth=false` und `SMTP_HOST_INPUT` fehlt (MX-Lookup-Fallback entfernt)
+- Klare Fehlermeldung: benennt explizit, dass MX-Lookup nicht unterstützt wird
+
+MX-Auflösungsblock (ca. 70 Zeilen `dig`/`nslookup`-Logik):
+- Entfernt: gesamter `dig`-Pfad, gesamter `nslookup`-Pfad, MX-Parsing via Python-Heredocs
+- Ersetzt durch: einfaches `MX_HOST="${SMTP_HOST_INPUT}"` für Direct Send
+
+SMTP Auth: unverändert (smtp.office365.com als Default, SMTP_HOST_INPUT als Override)
+
+**2. `scripts/Invoke-CustomerDeployment.ps1` – Wizard**
+
+Interaktiver Wizard:
+- Wenn `smtpUseAuth=false`: neuer expliziter Prompt `SMTP Host (MX-Endpunkt für Direct Send)` mit `-Required`
+- Wenn `smtpUseAuth=true`: unverändert (smtp.office365.com als Default)
+
+`New-CustomerAzureParameters`:
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+- Wenn `useAuth=false` und `smtp.host` nicht leer: schreibt `smtpHost` in ARM-Parameter (neu)
+- Wenn `useAuth=false` und `smtp.host` leer: wirft früh mit klarer Fehlermeldung
+- Wenn `useAuth=true`: unverändert
+
+CLI-Pfad (NonInteractive / GenerateOnly):
+- Neue Early Validation vor `New-CustomerConfigObject`: schlägt fehl wenn `smtpUseAuth=false` und `SmtpHost` leer
+
+**3. `main.json` – `smtpHost`-Parameter-Beschreibung**
+- Beschreibung aktualisiert: MX-Lookup-Referenz entfernt, Pflichtfeld-Hinweis für Direct Send ergänzt
+
+### Warum wurde die geteilte Funktion `New-CustomerAzureParameters` geändert?
+Diese Funktion schreibt die ARM-Parameterdatei für alle Deploy-Pfade (Wizard, GenerateOnly, Repair, Update). Ohne Änderung hier würde `smtpHost` für Direct Send nie in die Parameterdatei geschrieben, und das Deployment Script würde immer einen leeren `SMTP_HOST_INPUT` sehen. Die Änderung ist minimal: nur ein neuer `elseif`-Branch für den Direct-Send-Fall.
+
+### Relevante Nebenwirkungen / Risiken
+- Bestehende Direct-Send-Kundenkonfigurationen ohne `smtpHost` in `deployment.config.json` werden beim nächsten Repair/Update scheitern, bis `smtpHost` ergänzt wird.
+- Deploy-to-Azure-Button-Nutzer, die `smtpUseAuth=false` wählen und `smtpHost` leer lassen, bekommen jetzt einen frühen, klaren Fehler im Deployment Script statt eines DNS-Tool-Fehlers.
+- SMTP-Auth-Pfad (smtpUseAuth=true) ist vollständig unverändert.
+- GenerateOnly und Wizard-Tests wurden aktualisiert, um smtpHost für Direct Send zu übergeben.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf: 59/59 Tests grün (53 bestehend + 6 neue).
+- 6 neue Tests:
+  - `test_main_json_smtp_no_dig_or_nslookup`: kein `dig`/`nslookup` mehr im Deployment Script
+  - `test_main_json_smtp_direct_send_requires_explicit_host`: frühe Validierung im Script vorhanden
+  - `test_main_json_smtp_direct_send_uses_smtp_host_input_directly`: Direct Send nutzt SMTP_HOST_INPUT direkt
+  - `test_wizard_direct_send_prompts_for_smtp_host`: Wizard hat Prompt für MX-Endpunkt
+  - `test_parameter_generation_writes_smtp_host_for_direct_send`: smtpHost wird für Direct Send in Parameter-Datei geschrieben
+  - `test_cli_path_validates_direct_send_requires_smtp_host`: CLI-Pfad validiert smtpHost für Direct Send
+- 3 bestehende GenerateOnly-Tests aktualisiert: `-SmtpHost 'mx.*.de'` ergänzt (da Direct Send jetzt expliziten smtpHost erfordert)
+

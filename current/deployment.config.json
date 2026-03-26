@@ -1,72 +1,70 @@
 {
-    "smtp":  {
-                 "useAuth":  false,
-                 "mailRootDomain":  "50er-jahre-museum.de",
-                 "from":  "vaultwarden@50er-jahre-museum.de",
-                 "fromName":  "Vaultwarden",
-                 "host":  "",
-                 "port":  "",
-                 "security":  "starttls",
-                 "username":  "",
-                 "passwordSource":  "none"
-             },
-    "customerNumber":  "1309",
-    "customerCode":  "vault-50er-jahre-museum-de",
-    "secrets":  {
-                    "smtpPasswordSource":  "none",
-                    "cloudflareApiTokenSource":  "not-required",
-                    "ssoClientSecretSource":  "none",
-                    "pushInstallationKeySource":  "none"
-                },
-    "domain":  {
-                   "hostname":  "vault.50er-jahre-museum.de",
-                   "zoneName":  "50er-jahre-museum.de",
-                   "url":  "https://vault.50er-jahre-museum.de"
-               },
-    "edge":  {
-                 "mode":  "basic",
-                 "enableWaf":  true,
-                 "enableRateLimit":  true,
-                 "lockOriginToCloudflare":  false
-             },
-    "azure":  {
-                  "resourceGroupName":  "rg-musef-vault-prod-neu",
-                  "location":  "northeurope",
-                  "environment":  "prod",
-                  "appName":  "vault",
-                  "edgeMode":  "none",
-                  "enableIngressIpRestrictions":  false,
-                  "ingressAllowedCidrs":  [
-
-                                          ],
-                  "advancedArmParameters":  {
-                                                "orgCreationUsers":  "",
-                                                "acsDomainName":  "",
-                                                "allowAzureServicesToPostgres":  true,
-                                                "pushInstallationId":  "",
-                                                "storageAccountSku":  "Standard_LRS",
-                                                "postgresSkuName":  "Standard_B1ms",
-                                                "pushUseEuServers":  false,
-                                                "ssoOnly":  false,
-                                                "adminPanelEnabled":  true,
-                                                "invitationOrgName":  "50er-jahre-museum.de",
-                                                "ssoClientId":  "",
-                                                "diagnosticsEnabled":  true,
-                                                "acsDataLocation":  "Germany",
-                                                "postgresBackupRetentionDays":  14,
-                                                "acsDeployFoundation":  false,
-                                                "ssoScopes":  "openid profile email offline_access User.Read",
-                                                "signupsDomainsWhitelist":  "50er-jahre-museum.de",
-                                                "allowInsecureHttp":  true,
-                                                "ssoEnabled":  false,
-                                                "pushEnabled":  false,
-                                                "ssoAuthority":  "",
-                                                "postgresStorageGB":  32
-                                            }
-              },
-    "metadata":  {
-                     "createdAt":  "2026-03-26T18:46:10.7107588+01:00",
-                     "updatedAt":  "2026-03-26T18:46:10.7229640+01:00",
-                     "version":  3
-                 }
+  "metadata": {
+    "createdAt": "2026-03-26T22:14:24.3623086+00:00",
+    "updatedAt": "2026-03-26T22:14:24.3703048+00:00",
+    "version": 3
+  },
+  "customerCode": "vault-basic-de",
+  "secrets": {
+    "smtpPasswordSource": "none",
+    "cloudflareApiTokenSource": "not-required",
+    "ssoClientSecretSource": "none",
+    "pushInstallationKeySource": "none"
+  },
+  "azure": {
+    "resourceGroupName": "rg-basic-vault-test-gwc",
+    "location": "germanywestcentral",
+    "environment": "test",
+    "appName": "vault",
+    "edgeMode": "none",
+    "enableIngressIpRestrictions": false,
+    "ingressAllowedCidrs": [],
+    "advancedArmParameters": {
+      "adminPanelEnabled": true,
+      "pushUseEuServers": false,
+      "postgresSkuName": "Standard_B1ms",
+      "acsDeployFoundation": false,
+      "postgresBackupRetentionDays": 14,
+      "storageAccountSku": "Standard_LRS",
+      "acsDataLocation": "Germany",
+      "acsDomainName": "",
+      "pushInstallationId": "",
+      "ssoEnabled": false,
+      "postgresStorageGB": 32,
+      "ssoAuthority": "",
+      "signupsDomainsWhitelist": "basic.de",
+      "pushEnabled": false,
+      "diagnosticsEnabled": true,
+      "ssoOnly": false,
+      "orgCreationUsers": "",
+      "ssoScopes": "openid profile email offline_access User.Read",
+      "invitationOrgName": "basic.de",
+      "allowInsecureHttp": true,
+      "ssoClientId": "",
+      "allowAzureServicesToPostgres": true
+    }
+  },
+  "smtp": {
+    "useAuth": false,
+    "mailRootDomain": "basic.de",
+    "from": "vaultwarden@basic.de",
+    "fromName": "Vaultwarden",
+    "host": "mx.basic.de",
+    "port": "587",
+    "security": "starttls",
+    "username": "",
+    "passwordSource": "none"
+  },
+  "edge": {
+    "mode": "basic",
+    "enableWaf": false,
+    "enableRateLimit": false,
+    "lockOriginToCloudflare": false
+  },
+  "customerNumber": "0815",
+  "domain": {
+    "hostname": "vault.basic.de",
+    "zoneName": "basic.de",
+    "url": "https://vault.basic.de"
+  }
 }

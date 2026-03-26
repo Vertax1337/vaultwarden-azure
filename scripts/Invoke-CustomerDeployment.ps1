@@ -348,6 +348,11 @@ function New-CustomerConfigInteractive {
         $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
         $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required
     }
+    else {
+        # Direct Send: MX lookup is not supported at deployment time (Azure DeploymentScript lacks dig/nslookup).
+        # The MX endpoint must be provided explicitly here and will be written directly to the parameter file.
+        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z.B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
+    }
 
     $enableWafValue = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableWaf } else { $true }
     $enableRateLimitValue = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableRateLimit } else { $true }
@@ -433,6 +438,14 @@ function New-CustomerAzureParameters {
             }
             $params.parameters.smtpPassword = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.smtpPassword) }
         }
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($Config.smtp.host)) {
+        # Direct Send: write smtpHost so the deployment script receives SMTP_HOST_INPUT.
+        # MX lookup is not performed at runtime; the host must be pre-resolved and stored here.
+        $params.parameters.smtpHost = @{ value = $Config.smtp.host }
+    }
+    else {
+        throw 'Direct Send (smtpUseAuth=false) erfordert einen expliziten smtpHost-Wert. Gib den MX-Endpunkt deiner Mail-Domain an.'
     }
 
     if ($Config.azure.advancedArmParameters) {
@@ -624,6 +637,10 @@ elseif (-not $config) {
     $customerCode = Convert-DomainToSlug -Domain $VaultwardenDomain
     if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location -VaultwardenDomain $VaultwardenDomain }
     $effectiveSmtpUseAuth = $SmtpUseAuth.IsPresent
+    # Early validation for CLI/NonInteractive path: Direct Send requires explicit smtpHost
+    if (-not $effectiveSmtpUseAuth -and [string]::IsNullOrWhiteSpace($SmtpHost)) {
+        throw 'Direct Send (SmtpUseAuth nicht gesetzt) erfordert einen expliziten -SmtpHost-Parameter (MX-Endpunkt). MX-Lookup wird zur Deployment-Zeit nicht unterstützt.'
+    }
     $effectiveEnableWaf = if ($Mode -eq 'cloudflare-managed') { $EnableWaf.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableWaf')) } else { $false }
     $effectiveEnableRateLimit = if ($Mode -eq 'cloudflare-managed') { $EnableRateLimit.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableRateLimit')) } else { $false }
     $advanced = Build-AdvancedArmParametersFromCli -ExistingAdvanced (New-EmptyAdvancedArmParameters) -ZoneName $CloudflareZone

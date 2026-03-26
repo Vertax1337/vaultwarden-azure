@@ -222,7 +222,7 @@ class RepoContractTests(unittest.TestCase):
             command += " -CustomerNumber '0815' -VaultwardenDomain 'vault.basic.de' -CloudflareZone 'basic.de'"
             command += " -Environment 'test' -Location 'germanywestcentral' -Mode 'basic'"
             command += f" -CustomersRoot '{str(customers_root).replace("'", "''")}' -GenerateOnly -NonInteractive"
-            command += " -MailRootDomain 'basic.de' -SmtpFrom 'vaultwarden@basic.de'"
+            command += " -MailRootDomain 'basic.de' -SmtpFrom 'vaultwarden@basic.de' -SmtpHost 'mx.basic.de'"
             run_ps(command)
             config = json.loads((customers_root / 'vault-basic-de' / 'deployment.config.json').read_text(encoding='utf-8'))
             self.assertEqual(config['edge']['mode'], 'basic')
@@ -384,7 +384,7 @@ class RepoContractTests(unittest.TestCase):
             command += " -CustomerNumber '9999' -VaultwardenDomain 'vault.arrtest.de' -CloudflareZone 'arrtest.de'"
             command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
             command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
-            command += " -MailRootDomain 'arrtest.de' -SmtpFrom 'vw@arrtest.de'"
+            command += " -MailRootDomain 'arrtest.de' -SmtpFrom 'vw@arrtest.de' -SmtpHost 'mx.arrtest.de'"
             run_ps(command)
             current_wrapper = json.loads((current_root / 'main.deploytoazure.json').read_text(encoding='utf-8'))
             self.assertIsInstance(current_wrapper['resources'], list, 'resources must be array after GenerateOnly')
@@ -737,7 +737,7 @@ class RepoContractTests(unittest.TestCase):
             command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
             command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
             command += " -MailRootDomain '50er-Jahre-Museum.DE'"
-            command += " -SmtpFrom 'vaultwarden@50er-Jahre-Museum.DE'"
+            command += " -SmtpFrom 'vaultwarden@50er-Jahre-Museum.DE' -SmtpHost 'mx.50er-jahre-museum.de'"
             run_ps(command)
             # Find the generated customer directory (slug should be lowercase)
             customer_dirs = [d for d in customers_root.iterdir() if d.is_dir()]
@@ -849,6 +849,59 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('run_psql "$POSTGRES_DBNAME" -f "$SQL_TMP_DIR/bootstrap-db.sql"', script)
         self.assertIn('ERROR: PostgreSQL bootstrap-admin.sql failed', script)
         self.assertIn('ERROR: PostgreSQL bootstrap-db.sql failed', script)
+
+    def test_main_json_smtp_no_dig_or_nslookup(self):
+        """Deployment script must not use dig or nslookup for MX lookup (not available in Azure DeploymentScript)."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        self.assertNotIn('command -v dig', script)
+        self.assertNotIn('dig +short MX', script)
+        self.assertNotIn('command -v nslookup', script)
+        self.assertNotIn('nslookup -type=mx', script)
+
+    def test_main_json_smtp_direct_send_requires_explicit_host(self):
+        """Deployment script must fail early with clear message when Direct Send and smtpHost is empty."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        # Early validation: Direct Send without SMTP_HOST_INPUT must exit 1
+        self.assertIn(
+            'if [ "${SMTP_USE_AUTH:-false}" != "true" ] && [ -z "${SMTP_HOST_INPUT:-}" ]; then',
+            script
+        )
+        self.assertIn('Direct Send (smtpUseAuth=false) requires an explicit smtpHost parameter', script)
+        self.assertIn('MX lookup is not supported in Azure DeploymentScript environments', script)
+
+    def test_main_json_smtp_direct_send_uses_smtp_host_input_directly(self):
+        """Deployment script Direct Send path must use SMTP_HOST_INPUT directly (no MX resolution)."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        # The simple direct assignment must be present in the else branch
+        self.assertIn('MX_HOST="${SMTP_HOST_INPUT}"', script)
+        # No MX resolution comment or block
+        self.assertNotIn('Resolving MX for', script)
+        self.assertNotIn('MX lookup returned empty', script)
+
+    @requires_pwsh
+    def test_wizard_direct_send_prompts_for_smtp_host(self):
+        """Interactive wizard must prompt for SMTP Host in Direct Send path."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('MX-Endpunkt für Direct Send', script_text)
+
+    @requires_pwsh
+    def test_parameter_generation_writes_smtp_host_for_direct_send(self):
+        """New-CustomerAzureParameters must write smtpHost to ARM parameters for Direct Send."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        # The elseif block for Direct Send smtpHost must exist
+        self.assertIn("elseif (-not [string]::IsNullOrWhiteSpace($Config.smtp.host))", script_text)
+        self.assertIn("Direct Send: write smtpHost so the deployment script receives SMTP_HOST_INPUT", script_text)
+
+    @requires_pwsh
+    def test_cli_path_validates_direct_send_requires_smtp_host(self):
+        """CLI/NonInteractive path must fail early when Direct Send and SmtpHost is missing."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('-not $effectiveSmtpUseAuth -and [string]::IsNullOrWhiteSpace($SmtpHost)', script_text)
+        self.assertIn('Direct Send', script_text)
+        self.assertIn('erfordert einen expliziten -SmtpHost-Parameter', script_text)
 
 if __name__ == '__main__':
     unittest.main()
