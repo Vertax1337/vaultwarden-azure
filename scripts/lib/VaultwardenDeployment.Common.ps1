@@ -784,19 +784,28 @@ function Get-SuggestedSignupsDomainsWhitelist {
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 # Liest die aktuell an eine ACA-App gebundenen Custom Domains aus der Live-Umgebung.
 # Gibt ein (möglicherweise leeres) Array von Custom-Domain-Objekten zurück.
-# Gibt ein leeres Array zurück, wenn die App nicht existiert oder keine Custom Domains hat.
+# Gibt @() zurück wenn die Resource Group, die App oder die Custom Domains nicht existieren
+# (robuster no-op für Erstdeployments).
 function Get-AcaCustomDomains {
     param(
         [Parameter(Mandatory)][string]$ResourceGroupName,
         [Parameter(Mandatory)][string]$AppName
     )
-    $json = az containerapp show -g $ResourceGroupName -n $AppName `
-        --query 'properties.configuration.ingress.customDomains' `
-        -o json --only-show-errors 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json.Trim() -eq 'null') {
-        return @()
-    }
     try {
+        # Temporarily suppress native-command errors so a missing RG or app never
+        # throws a terminating error (important when running inside Start-ThreadJob
+        # with $ErrorActionPreference = 'Stop').
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        $json = az containerapp show -g $ResourceGroupName -n $AppName `
+            --query 'properties.configuration.ingress.customDomains' `
+            -o json --only-show-errors 2>$null
+        $ErrorActionPreference = $prevEap
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json.Trim() -eq 'null') {
+            return @()
+        }
         if ($PSVersionTable.PSVersion.Major -ge 6) {
             $parsed = $json | ConvertFrom-Json -Depth 20
         } else {
@@ -806,6 +815,8 @@ function Get-AcaCustomDomains {
         return @($parsed)
     }
     catch {
+        # Any unexpected error (e.g. NativeCommandExitException on PS 7.3+) is
+        # treated as "nothing to preserve" so a first deployment is never blocked.
         return @()
     }
 }

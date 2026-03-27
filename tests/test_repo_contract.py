@@ -2163,6 +2163,32 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('ACA Verification Code', deploy_text,
                       'Spinner message for ACA Verification Code must be present')
 
+    def test_get_aca_custom_domains_is_robust_for_first_deploy(self):
+        """Get-AcaCustomDomains must silently return empty for missing RG / app (first-deploy robustness).
+
+        The function is called inside Start-ThreadJob (via Invoke-WithSpinner) where
+        $ErrorActionPreference is 'Stop'. A terminating NativeCommandExitException from
+        az CLI must never escape the function.  The outer try/catch and temporary
+        ErrorActionPreference reset ensure this.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        # Locate the function body
+        idx = common_text.find('function Get-AcaCustomDomains')
+        self.assertGreater(idx, 0, 'Get-AcaCustomDomains not found in Common.ps1')
+        # Extract function body up to the closing brace (a few hundred chars is enough)
+        body = common_text[idx:idx + 1200]
+        # Must have an outer try/catch for first-deploy robustness
+        self.assertIn('try {', body,
+                      'Get-AcaCustomDomains must wrap the az call in a try block to be first-deploy safe')
+        self.assertIn('catch {', body,
+                      'Get-AcaCustomDomains must have a catch block returning @() to be first-deploy safe')
+        # Must suppress native command errors locally
+        self.assertIn("ErrorActionPreference = 'SilentlyContinue'", body,
+                      "Get-AcaCustomDomains must locally suppress ErrorActionPreference for the az call")
+        # Must restore ErrorActionPreference after the az call
+        self.assertIn('$ErrorActionPreference = $prevEap', body,
+                      'Get-AcaCustomDomains must restore $ErrorActionPreference after the az call')
+
 
 if __name__ == '__main__':
     unittest.main()
