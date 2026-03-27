@@ -690,40 +690,64 @@ if (-not $CustomersRoot) { $CustomersRoot = Join-Path $repoRoot 'customers' }
 $templateFile = Join-Path $repoRoot 'main.json'
 
 $config = $null
-$action = $null
-if (-not $NonInteractive -and [string]::IsNullOrWhiteSpace($CustomerNumber) -and -not $Repair -and -not $Update) {
-    $action = Get-InteractiveAction
-    switch ($action) {
-        '0' { return }
-        '1' {
-            $flowResult = Start-NewDeploymentFlow
-            $config = $flowResult.Config
-        }
-        '2' {
-            $flowResult = Start-DeployExistingFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
-            $config = $flowResult.Config
-        }
-        '3' {
-            $flowResult = Start-EditAndDeployFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
-            $config = $flowResult.Config
-        }
-        '4' {
-            $flowResult = Start-RepairFlow -CustomersRoot $CustomersRoot
-            $Repair = $flowResult.Repair
-            $CustomerNumber = $flowResult.CustomerNumber
-        }
-        '5' {
-            $flowResult = Start-UpdateFlow -CustomersRoot $CustomersRoot
-            $Update = $flowResult.Update
-            $CustomerNumber = $flowResult.CustomerNumber
-        }
-        '6' {
-            $flowResult = Start-GenerateOnlyFlow
-            $GenerateOnly = $flowResult.GenerateOnly
-            $config = $flowResult.Config
+$_isInteractive = (
+    -not $NonInteractive -and
+    [string]::IsNullOrWhiteSpace($CustomerNumber) -and
+    -not $Repair -and
+    -not $Update
+)
+$_menuState = @{}
+$_menuStack = $null
+
+do {
+    if ($_isInteractive) {
+        $menuResult = Show-DeploymentMainMenu -MenuState $_menuState -MenuStack $_menuStack
+        $_menuState = $menuResult.MenuState
+        $_menuStack = $menuResult.MenuStack
+
+        if ($menuResult.ActionId -eq 'Exit') { return }
+
+        $config = $null
+        $Repair = $false
+        $Update = $false
+        $GenerateOnly = $false
+        $CustomerNumber = $null
+
+        switch ($menuResult.ActionId) {
+            'NewDeployment' {
+                $flowResult = Start-NewDeploymentFlow
+                $config = $flowResult.Config
+            }
+            'DeployExisting' {
+                $flowResult = Start-DeployExistingFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+                $config = $flowResult.Config
+            }
+            'EditAndDeploy' {
+                $flowResult = Start-EditAndDeployFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+                $config = $flowResult.Config
+            }
+            'Repair' {
+                $flowResult = Start-RepairFlow -CustomersRoot $CustomersRoot
+                $Repair = $flowResult.Repair
+                $CustomerNumber = $flowResult.CustomerNumber
+            }
+            'Update' {
+                $flowResult = Start-UpdateFlow -CustomersRoot $CustomersRoot
+                $Update = $flowResult.Update
+                $CustomerNumber = $flowResult.CustomerNumber
+            }
+            'GenerateOnly' {
+                $flowResult = Start-GenerateOnlyFlow
+                $GenerateOnly = $flowResult.GenerateOnly
+                $config = $flowResult.Config
+            }
         }
     }
-}
+
+    # Run the deployment cycle in a child scope so that `return` inside the
+    # deployment block exits only this scriptblock (not the entire script),
+    # allowing the interactive menu loop to resume after each action.
+    $deployResult = & {
 
 if (($Repair -or $Update) -and -not $config) {
     if (-not $CustomerNumber) { throw 'Für Repair/Update muss der Kundenordner oder die Kunden-Nr. angegeben werden.' }
@@ -876,3 +900,9 @@ Write-Step 'Production-Deployment mit Cloudflare abgeschlossen.'
     cloudflareStatePath = $paths.CloudflareStatePath
     bindResult = $bindResult
 }
+
+    } # end deployment scriptblock
+
+    if (-not $_isInteractive) { return $deployResult }
+
+} while ($_isInteractive)

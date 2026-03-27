@@ -1,15 +1,13 @@
 # Interactive flow functions for the Vaultwarden deployment wizard.
-# Each Start-*Flow function encapsulates one interactive action branch from the
-# main action selector (Get-InteractiveAction). Functions return a hashtable with
-# the values that the calling script must apply to its local state.
+# Each Start-*Flow function encapsulates one interactive action branch routed
+# from Show-DeploymentMainMenu. Functions return a hashtable with the values
+# that the calling script must apply to its local state.
 #
 # NOTE: These functions depend on helper functions defined in
 # Invoke-CustomerDeployment.ps1 (Select-CustomerCodeInteractive,
 # New-CustomerConfigInteractive) and in VaultwardenDeployment.Common.ps1
 # (Get-CustomerPaths, ConvertTo-HashtableDeep, Read-JsonFile). They are
 # intended to be dot-sourced only from Invoke-CustomerDeployment.ps1.
-#
-# Do not activate Show-DeploymentMainMenu here; that belongs to a follow-up issue.
 
 function Start-NewDeploymentFlow {
     [CmdletBinding()]

@@ -460,3 +460,17 @@ Parameter: `storageAccountSKU`, `AdminAPIKEY`, `cpuCore`, `memorySize`, `dbPassw
 
 Kein Key Vault, keine Managed Identities, kein Deployment Script, kein Backup, keine Diagnostic Settings, keine ACS-Unterstützung.
 
+
+---
+
+## Revision 18 – 2026-03-27
+
+### Scripts / Wizard – ConsoleMenu als interaktives Root-Menü aktiviert
+
+| Änderung | Detail |
+|---|---|
+| `VaultwardenDeployment.Menu.ps1` | `Show-DeploymentMainMenu` vollständig implementiert. Baut eine Menü-Registry mit Root-Menü und zwei Submenüs (`existing`, `maintenance`). Nutzt `Show-ConsoleMenu` aus dem vendored ConsoleMenu-Modul. Gibt stabile Aktion-IDs zurück (`NewDeployment`, `DeployExisting`, `EditAndDeploy`, `Repair`, `Update`, `GenerateOnly`, `Exit`). |
+| `Invoke-CustomerDeployment.ps1` | `Get-InteractiveAction` nicht mehr aktiver Einstiegspunkt. Neuer `do { } while ($_isInteractive)`-Loop: `Show-DeploymentMainMenu` → Aktion-ID → `Start-*Flow` → Deployment → zurück zum Menü. Deployment-Block in `& { }` eingewickelt für korrekte `return`-Semantik. CLI/NonInteractive-Pfad unverändert. |
+| Submenu-Navigation | `Vorhandene Konfigurationen`-Submenu: Deploy + Edit+Deploy + Back. `Wartung`-Submenu: Repair + Update + Back. |
+| Selektion-Memory | `MenuState`-Hashtable und `MenuStack`-List werden zwischen Aufrufen übergeben. Cursor-Position je Menü wird gespeichert. Nach Aktion kehrt Benutzer zum zuletzt aktiven Submenu zurück. |
+| Keine Verhaltensänderung (non-interaktiv) | CLI-Pfad und `NonInteractive`-Flag unverändert. |

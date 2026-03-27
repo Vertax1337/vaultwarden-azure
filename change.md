@@ -1190,3 +1190,129 @@ Wizard (Read-ChoiceWithDefault: direct_send | smtp_auth | acs_smtp)
   → Deployment Script Bash (MAIL_MODE env var)
   → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
 ```
+
+---
+
+## Issue 3 – ConsoleMenu als interaktives Root-Menü aktivieren und mit Flow-Funktionen verdrahten
+
+### Problem / Ursache
+
+Nach Issue 2 lebte die interaktive Aktionsausführungslogik bereits in `Start-*Flow`-Funktionen in `VaultwardenDeployment.Flows.ps1`, aber `Get-InteractiveAction` (einfache nummerierte Eingabe, kein Submenu-System) war noch der aktive interaktive Einstiegspunkt.
+
+Das vendored `ConsoleMenu`-Modul war zwar schon geladen, die `Show-DeploymentMainMenu`-Funktion war jedoch nur ein leerer Platzhalter. Der interaktive Wizard-Pfad in `Invoke-CustomerDeployment.ps1` rief noch immer `Get-InteractiveAction` auf.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Menu.ps1` – `Show-DeploymentMainMenu` vollständig implementiert
+- `scripts/Invoke-CustomerDeployment.ps1` – aktiver interaktiver Pfad auf `Show-DeploymentMainMenu` umgestellt
+- `change.md` – dieser Eintrag
+- `docs/changes.md` – Eintrag ergänzt
+
+### Umgesetzter Fix
+
+#### 1. `Show-DeploymentMainMenu` in `VaultwardenDeployment.Menu.ps1`
+
+Ersetzt den leeren Platzhalter durch eine vollständige Implementierung mit:
+
+**Menü-Registry (3 Menüs):**
+
+| Menü | Einträge |
+|---|---|
+| `root` | Neues Deployment (→ `NewDeployment`), Vorhandene Konfigurationen (→ Submenu `existing`), Wartung (→ Submenu `maintenance`), Nur Dateien erzeugen (→ `GenerateOnly`), Beenden (→ `Exit`) |
+| `existing` | Vorhandene Konfiguration deployen (→ `DeployExisting`), Konfiguration bearbeiten und deployen (→ `EditAndDeploy`), Zurück |
+| `maintenance` | Repair (→ `Repair`), Update (→ `Update`), Zurück |
+
+**Navigationslogik:**
+- Nutzt `Show-ConsoleMenu` aus dem vendored ConsoleMenu-Modul
+- Eigene Navigationsschleife innerhalb `Show-DeploymentMainMenu` (nicht `Start-ConsoleMenuApplication`, da die Funktion nach jeder Aktionsauswahl eine stabile Aktion-ID zurückgibt)
+- `MenuState` (Hashtable) speichert die zuletzt gewählte Taste je Menü → Cursor-Erinnerung
+- `MenuStack` (List[string]) trackt die Submenu-Navigation → `Back` arbeitet korrekt
+- Beide werden zwischen Aufrufen übergeben, damit nach einer Aktion zum zuletzt aktiven Submenu zurückgekehrt wird
+
+**Rückgabe:** `pscustomobject` mit `ActionId`, `MenuState`, `MenuStack`
+
+#### 2. `Invoke-CustomerDeployment.ps1` – persistente Menü-Schleife
+
+Ersetzt den bisherigen `Get-InteractiveAction`-Block durch eine `do { } while ($_isInteractive)`-Schleife:
+
+- `$_isInteractive` wird einmalig vor der Schleife bestimmt (non-interaktiver Pfad unverändert)
+- Jede Iteration: `Show-DeploymentMainMenu` aufrufen → Aktion-ID → `Start-*Flow` aufrufen → Deployment
+- `Exit` → sofortiger `return` aus dem Skript
+- Das Deployment-Code-Segment (ca. 150 Zeilen) wird in `& { }` eingewickelt, damit `return`-Statements innerhalb des Blocks nur den Scriptblock verlassen (nicht das Skript) – ermöglicht die Rückkehr zur Menüschleife nach jedem Deployment
+- Für den nicht-interaktiven CLI-Pfad: `$_isInteractive = $false`, Schleife läuft einmalig, `return $deployResult` propagiert das Rückgabeobjekt wie bisher
+
+**Rückgabe-Stabilität für CLI-Pfad:**
+`if (-not $_isInteractive) { return $deployResult }` stellt sicher, dass der Return-Wert des Deployment-Scriptblocks an den Aufrufer propagiert wird.
+
+#### 3. `Get-InteractiveAction` – Status
+
+`Get-InteractiveAction` bleibt im Skript erhalten (war bereits in `Invoke-CustomerDeployment.ps1` definiert), treibt den aktiven interaktiven Pfad aber nicht mehr an. `Show-DeploymentMainMenu` ist der alleinige aktive Einstiegspunkt.
+
+### Risiken / Nebenwirkungen
+
+- **CLI / NonInteractive-Pfad**: Unverändert. `$_isInteractive = $false` → Schleife läuft genau einmal → Verhalten identisch zum vorherigen Stand.
+- **Deployment-Return-Wert**: Bleibt via `return $deployResult` erhalten.
+- **Shared Logic**: Keine der `# SHARED LOGIC`-markierten Funktionen wurde verändert.
+- **Select-CustomerCodeInteractive**: Unverändert; wird weiterhin aus den `Start-*Flow`-Funktionen aufgerufen.
+- **`& { }` Scoping**: Variablen im Deployment-Scriptblock werden aus dem äußeren Scope gelesen (Closure). Zuweisungen wie `$config = ConvertTo-HashtableDeep ...` sind lokal zum Scriptblock. Hashtable-Mutationen (z.B. `$config.smtp.from = ...`) wirken auf das äußere Objekt zurück (Referenz-Semantik), was das erwartete Verhalten ist.
+- **GenerateOnly in Schleife**: `if ($GenerateOnly) { ...; return }` verlässt nur den Scriptblock → Menü erscheint wieder. Korrekt.
+
+### Test / Validierung
+
+115/115 Tests grün (keine Änderung am Teststand).
+
+Manuelle Validierungsschritte (in interaktiver PowerShell-Sitzung):
+- Root-Menü erscheint mit Pfeiltasten-Navigation
+- Submenu `Vorhandene Konfigurationen` → Back → zurück im Root-Menü
+- Submenu `Wartung` → Back → zurück im Root-Menü
+- `0` / Beenden → Skript endet sauber
+- Nach einer Aktion (Wizard) → Menü erscheint wieder am letzten Submenu-Stand
+- CLI-Aufruf mit `-CustomerNumber`, `-NonInteractive` etc. → Verhalten unverändert
+
+---
+
+## Issue 4 – Selection-Memory bei „Zurück" im ConsoleMenu korrigiert
+
+### Problem / Ursache
+
+In `Show-DeploymentMainMenu` wurde `$MenuState[$currentMenuId]` unmittelbar nach jeder Auswahl aktualisiert – auch dann, wenn der Nutzer **„Zurück"** wählte. Damit wurde der `back`-Eintrag (Taste `0`) als letzte Position gespeichert.
+
+Beim erneuten Öffnen des Untermenüs wurde dadurch nicht die zuletzt sinnvoll gewählte Aktion vorselektiert, sondern direkt wieder **„Zurück"**.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Menu.ps1` – Selection-Memory-Logik korrigiert
+- `scripts/lib/VaultwardenDeployment.Flows.ps1` – veralteter Kommentar entfernt
+- `change.md` – dieser Eintrag
+
+### Umgesetzter Fix
+
+#### `VaultwardenDeployment.Menu.ps1`
+
+`$MenuState[$currentMenuId] = [string]$selectedItem.Key` aus der gemeinsamen Position vor dem `switch`-Block entfernt. Die Zuweisung erfolgt jetzt **selektiv** innerhalb der `switch`-Cases:
+
+| `ItemType` | `MenuState`-Update? | Begründung |
+|---|---|---|
+| `action` | ✅ Ja | Letzte fachliche Auswahl soll gespeichert werden |
+| `submenu` | ✅ Ja | Auswahl im übergeordneten Menü soll gespeichert werden |
+| `back` | ❌ Nein | Rücksprung ist kein fachlicher Zustand – bisherige Position erhalten |
+| `exit` | ✅ Ja | Vollständig, kein UX-Impact |
+
+#### `VaultwardenDeployment.Flows.ps1`
+
+Veralteten Kommentar entfernt (`# Do not activate Show-DeploymentMainMenu here; that belongs to a follow-up issue.`). `Show-DeploymentMainMenu` ist seit Issue 3 aktiv – der Kommentar war nicht mehr zutreffend.
+
+### Risiken / Nebenwirkungen
+
+- Keine Verhaltensänderung für `action`-, `submenu`- und `exit`-Einträge.
+- Kein Einfluss auf den CLI/NonInteractive-Pfad.
+- Kein Einfluss auf die `Start-*Flow`-Funktionen.
+
+### Test / Validierung
+
+115/115 Tests grün.
+
+Manuelles Testszenario:
+1. Wizard öffnen → Untermenü „Vorhandene Konfigurationen" → Eintrag „2" (Bearbeiten) wählen
+2. Untermenü erneut öffnen → Cursor steht auf „2" (Bearbeiten), nicht auf „0" (Zurück) ✓
+3. Untermenü über „Zurück" verlassen → Root-Menü erscheint → Untermenü wieder öffnen → Cursor steht weiterhin auf „2" ✓
