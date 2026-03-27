@@ -81,10 +81,16 @@ function Invoke-WithSpinner {
     if (-not $hasThreadJob -and -not $hasStartJob) {
         # No job infrastructure at all – run synchronously without spinner.
         Write-Host ('[~] {0} (kein Hintergrundjob verfügbar, direkte Ausführung)' -f $Message)
-        $result  = & $ScriptBlock
-        $elapsed = $stopwatch.Elapsed
-        Write-Host ('[OK] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Green
-        return $result
+        try {
+            $result  = & $ScriptBlock
+            $elapsed = $stopwatch.Elapsed
+            Write-Host ('[OK] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Green
+            return $result
+        } catch {
+            $elapsed = $stopwatch.Elapsed
+            Write-Host ('[FEHLER] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Red
+            throw
+        }
     }
 
     if ($hasThreadJob) {
