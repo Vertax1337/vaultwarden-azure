@@ -2178,6 +2178,33 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('Invoke-WithSpinner', deploy_text,
                       'Deploy-AzureStack.ps1 must use Invoke-WithSpinner for the az deployment call')
 
+    def test_deploy_azure_stack_uses_tempfile_for_az_output(self):
+        """Deploy-AzureStack.ps1 must write az output to a temp file instead of returning through the job pipeline.
+
+        PS 5.1 Start-Job uses CliXml serialization to pass output from background jobs back to
+        the caller.  For large JSON payloads (a full Azure deployment response can be 50 KB+),
+        CliXml deserialization can silently fail.  Receive-Job with -ErrorAction SilentlyContinue
+        swallows the error and returns $null, which ultimately causes Save-JsonUtf8 to fail with
+        'Das Argument kann nicht an den Parameter Data gebunden werden, da es NULL ist'.
+
+        The fix writes the az output to a temp file from inside the spinner ScriptBlock so the
+        payload is never serialized through CliXml at all.
+        """
+        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        # Must use a temp file variable inside the spinner ScriptBlock
+        self.assertIn('$using:_azJsonFile', deploy_text,
+                      'Deploy-AzureStack.ps1 must pass the temp-file path into the spinner via $using:_azJsonFile')
+        self.assertIn('WriteAllText', deploy_text,
+                      'Deploy-AzureStack.ps1 must write az output to the temp file with WriteAllText')
+        self.assertIn('ReadAllText', deploy_text,
+                      'Deploy-AzureStack.ps1 must read az output back from the temp file with ReadAllText')
+        # Must have a finally block to clean up the temp file
+        self.assertIn('finally {', deploy_text,
+                      'Deploy-AzureStack.ps1 must have a finally block to clean up the temp file')
+        # Must guard against null result from ConvertFrom-Json
+        self.assertIn("if ($null -eq $result)", deploy_text,
+                      'Deploy-AzureStack.ps1 must guard against null $result after ConvertFrom-Json')
+
     def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
         """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""
         deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
