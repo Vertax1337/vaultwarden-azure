@@ -57,6 +57,7 @@ param(
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Menu.ps1')
+. (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Flows.ps1')
 $script:InvocationBoundParameters = $PSBoundParameters
 
 function Get-AdvancedParameterValue {
@@ -694,29 +695,32 @@ if (-not $NonInteractive -and [string]::IsNullOrWhiteSpace($CustomerNumber) -and
     $action = Get-InteractiveAction
     switch ($action) {
         '0' { return }
-        '1' { $config = New-CustomerConfigInteractive }
+        '1' {
+            $flowResult = Start-NewDeploymentFlow
+            $config = $flowResult.Config
+        }
         '2' {
-            $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-            $pathsForLoad = Get-CustomerPaths -RepoRoot $repoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
-            $config = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
+            $flowResult = Start-DeployExistingFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+            $config = $flowResult.Config
         }
         '3' {
-            $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-            $pathsForLoad = Get-CustomerPaths -RepoRoot $repoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
-            $loaded = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
-            $config = New-CustomerConfigInteractive -ExistingConfig $loaded
+            $flowResult = Start-EditAndDeployFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+            $config = $flowResult.Config
         }
         '4' {
-            $Repair = $true
-            $CustomerNumber = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+            $flowResult = Start-RepairFlow -CustomersRoot $CustomersRoot
+            $Repair = $flowResult.Repair
+            $CustomerNumber = $flowResult.CustomerNumber
         }
         '5' {
-            $Update = $true
-            $CustomerNumber = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+            $flowResult = Start-UpdateFlow -CustomersRoot $CustomersRoot
+            $Update = $flowResult.Update
+            $CustomerNumber = $flowResult.CustomerNumber
         }
         '6' {
-            $GenerateOnly = $true
-            $config = New-CustomerConfigInteractive
+            $flowResult = Start-GenerateOnlyFlow
+            $GenerateOnly = $flowResult.GenerateOnly
+            $config = $flowResult.Config
         }
     }
 }
