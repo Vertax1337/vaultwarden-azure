@@ -33,9 +33,12 @@ $deployArgs = @(
     '-o','json'
 )
 
-$json = az @deployArgs
-if ($LASTEXITCODE -ne 0) {
-    throw 'Azure deployment failed.'
+$json = Invoke-WithSpinner -Message ('Azure-Deployment laeuft: {0}' -f $DeploymentName) -ScriptBlock {
+    # $using: references pass captured variables into the thread job.
+    $args_capture = $using:deployArgs
+    $output = az @args_capture
+    if ($LASTEXITCODE -ne 0) { throw 'Azure deployment failed.' }
+    $output
 }
 if ($PSVersionTable.PSVersion.Major -ge 6) {
     $result = $json | ConvertFrom-Json -Depth 100

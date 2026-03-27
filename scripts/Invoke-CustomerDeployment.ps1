@@ -568,8 +568,11 @@ if ($GenerateOnly) {
 }
 
 # --- Preserve existing ACA custom domain state before redeploy ---
-Write-Step 'ACA Custom Domain State wird vor dem Deployment gesichert.'
-$preservedCustomDomains = @(Get-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $config.azure.appName)
+$preservedCustomDomains = Invoke-WithSpinner -Message 'ACA Custom Domain State wird gesichert' -ScriptBlock {
+    $resourceGroup = $using:config.azure.resourceGroupName
+    $appName       = $using:config.azure.appName
+    @(Get-AcaCustomDomains -ResourceGroupName $resourceGroup -AppName $appName)
+}
 if ($preservedCustomDomains.Count -gt 0) {
     Write-Step ("  {0} vorhandene Custom Domain(s) gefunden und im Config gespeichert." -f $preservedCustomDomains.Count)
     if (-not $config.ContainsKey('preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }
@@ -619,20 +622,63 @@ $appFqdn = $result.properties.outputs.containerAppFqdn.value
 if (-not $appName) { $appName = $config.azure.appName }
 if (-not $envName) { $envName = ('{0}-env' -f $config.azure.appName) }
 
-Write-Step 'ACA Verification Code wird abgefragt.'
-$verificationCode = az containerapp show -g $config.azure.resourceGroupName -n $appName --query customDomainVerificationId -o tsv
-if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($verificationCode)) {
-    throw 'ACA customDomainVerificationId konnte nicht gelesen werden.'
+$verificationCode = Invoke-WithSpinner -Message 'ACA Verification Code wird abgefragt' -ScriptBlock {
+    $resourceGroup   = $using:config.azure.resourceGroupName
+    $containerApp    = $using:appName
+    $code = az containerapp show -g $resourceGroup -n $containerApp --query customDomainVerificationId -o tsv
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($code)) {
+        throw 'ACA customDomainVerificationId konnte nicht gelesen werden.'
+    }
+    $code
 }
 
-$cloudflareState = & (Join-Path $PSScriptRoot 'Set-CloudflareZoneConfig.ps1') -ApiToken $cfToken -ZoneName $config.domain.zoneName -Hostname $config.domain.hostname -OriginTarget $appFqdn -VerificationCode $verificationCode -EnableWaf:$config.edge.enableWaf -EnableRateLimit:$config.edge.enableRateLimit -StatePath $paths.CloudflareStatePath
+$cloudflareState = Invoke-WithSpinner -Message 'Cloudflare-Konfiguration wird gesetzt' -ScriptBlock {
+    $cfScript    = Join-Path $using:PSScriptRoot 'Set-CloudflareZoneConfig.ps1'
+    $token       = $using:cfToken
+    $zoneName    = $using:config.domain.zoneName
+    $hostname    = $using:config.domain.hostname
+    $originFqdn  = $using:appFqdn
+    $verCode     = $using:verificationCode
+    $enableWaf   = $using:config.edge.enableWaf
+    $enableRl    = $using:config.edge.enableRateLimit
+    $statePath   = $using:paths.CloudflareStatePath
+    & $cfScript -ApiToken $token -ZoneName $zoneName -Hostname $hostname -OriginTarget $originFqdn -VerificationCode $verCode -EnableWaf:$enableWaf -EnableRateLimit:$enableRl -StatePath $statePath
+}
 $zoneId = $cloudflareState.zoneId
-$bindResult = & (Join-Path $PSScriptRoot 'Bind-AcaCustomDomain.ps1') -ApiToken $cfToken -ZoneId $zoneId -Hostname $config.domain.hostname -ResourceGroupName $config.azure.resourceGroupName -ContainerAppName $appName -EnvironmentName $envName -ArtifactsRoot $paths.ArtifactsRoot
-& (Join-Path $PSScriptRoot 'Set-CloudflareZoneConfig.ps1') -ApiToken $cfToken -ZoneName $config.domain.zoneName -Hostname $config.domain.hostname -OriginTarget $appFqdn -VerificationCode $verificationCode -EnableWaf:$config.edge.enableWaf -EnableRateLimit:$config.edge.enableRateLimit -EnableProxy -StatePath $paths.CloudflareStatePath | Out-Null
+
+$bindResult = Invoke-WithSpinner -Message 'Custom Domain Binding wird durchgeführt' -ScriptBlock {
+    $bindScript    = Join-Path $using:PSScriptRoot 'Bind-AcaCustomDomain.ps1'
+    $token         = $using:cfToken
+    $zone          = $using:zoneId
+    $hostname      = $using:config.domain.hostname
+    $resourceGroup = $using:config.azure.resourceGroupName
+    $containerApp  = $using:appName
+    $environment   = $using:envName
+    $artifacts     = $using:paths.ArtifactsRoot
+    & $bindScript -ApiToken $token -ZoneId $zone -Hostname $hostname -ResourceGroupName $resourceGroup -ContainerAppName $containerApp -EnvironmentName $environment -ArtifactsRoot $artifacts
+}
+
+Invoke-WithSpinner -Message 'Cloudflare-Proxy wird aktiviert' -ScriptBlock {
+    $cfScript   = Join-Path $using:PSScriptRoot 'Set-CloudflareZoneConfig.ps1'
+    $token      = $using:cfToken
+    $zoneName   = $using:config.domain.zoneName
+    $hostname   = $using:config.domain.hostname
+    $originFqdn = $using:appFqdn
+    $verCode    = $using:verificationCode
+    $enableWaf  = $using:config.edge.enableWaf
+    $enableRl   = $using:config.edge.enableRateLimit
+    $statePath  = $using:paths.CloudflareStatePath
+    & $cfScript -ApiToken $token -ZoneName $zoneName -Hostname $hostname -OriginTarget $originFqdn -VerificationCode $verCode -EnableWaf:$enableWaf -EnableRateLimit:$enableRl -EnableProxy -StatePath $statePath | Out-Null
+} | Out-Null
 
 if (-not $SkipOriginLockdown -and $config.edge.lockOriginToCloudflare) {
-    Write-Step 'Cloudflare-Origin-Lockdown wird per ARM-Parameter und Redeploy angewendet.'
-    & (Join-Path $PSScriptRoot 'Set-AcaIngressRestrictions.ps1') -CustomerConfigPath $paths.ConfigPath -Redeploy -TemplateFile $templateFile -OutputPath $paths.DeployOutputPath | Out-Null
+    Invoke-WithSpinner -Message 'Origin-Lockdown per Redeploy wird angewendet' -ScriptBlock {
+        $restrictScript = Join-Path $using:PSScriptRoot 'Set-AcaIngressRestrictions.ps1'
+        $configPath     = $using:paths.ConfigPath
+        $template       = $using:templateFile
+        $outputPath     = $using:paths.DeployOutputPath
+        & $restrictScript -CustomerConfigPath $configPath -Redeploy -TemplateFile $template -OutputPath $outputPath | Out-Null
+    } | Out-Null
 }
 
 Write-Step 'Production-Deployment mit Cloudflare abgeschlossen.'

@@ -41,6 +41,64 @@ function Write-Step {
     Write-Host ('[+] {0}' -f $Message)
 }
 
+# Runs a ScriptBlock while displaying a live spinner with elapsed time.
+# Shows:  [~] <Message> <spinner> <mm:ss>   (updated in-place each tick)
+# Prints: [OK] <Message> (<mm:ss>)          on success
+# Prints: [FEHLER] <Message> (<mm:ss>)       on error, then re-throws
+# Returns the value produced by ScriptBlock.
+function Invoke-WithSpinner {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [int]$RefreshMilliseconds = 120
+    )
+
+    $spinChars   = @('|', '/', '-', '\')
+    $spinIdx     = 0
+    $lineWidth   = 82   # wide enough to cover [~] + message + spinner char + mm:ss
+    $stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
+
+    # Run the block on a background thread so the spinner can tick on the main thread.
+    $job = Start-ThreadJob -ScriptBlock $ScriptBlock -ErrorAction Stop
+
+    $consoleAvailable = $true
+    try { $null = [Console]::CursorVisible } catch { $consoleAvailable = $false }
+
+    try {
+        while ($job.State -eq 'Running') {
+            $elapsed = $stopwatch.Elapsed
+            $display = '[~] {0} {1} {2:mm\:ss}' -f $Message, $spinChars[$spinIdx % $spinChars.Count], $elapsed
+            if ($consoleAvailable) {
+                [Console]::Write("`r{0,-$lineWidth}" -f $display)
+            }
+            $spinIdx++
+            Start-Sleep -Milliseconds $RefreshMilliseconds
+        }
+    }
+    finally {
+        # Ensure the spinner line is cleared before printing the final status.
+        if ($consoleAvailable) { [Console]::Write("`r{0}`r" -f (' ' * $lineWidth)) }
+    }
+
+    $elapsed = $stopwatch.Elapsed
+    $elapsedStr = $elapsed.ToString('mm\:ss')
+
+    # Collect output and check for errors.
+    $jobResult = Receive-Job -Job $job -Wait -ErrorAction SilentlyContinue
+    $jobError  = $job.Error
+
+    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+
+    if ($jobError -and $jobError.Count -gt 0) {
+        Write-Host ('[FEHLER] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Red
+        # Re-throw the first error from the job.
+        throw $jobError[0].Exception
+    }
+
+    Write-Host ('[OK] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Green
+    return $jobResult
+}
+
 function Read-TextWithDefault {
     param(
         [Parameter(Mandatory)][string]$Label,

@@ -2123,6 +2123,46 @@ class RepoContractTests(unittest.TestCase):
                              f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
                              f'(it belongs in VaultwardenDeployment.Common.ps1)')
 
+    def test_invoke_with_spinner_defined_in_common(self):
+        """Invoke-WithSpinner must be defined in VaultwardenDeployment.Common.ps1."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Invoke-WithSpinner', common_text,
+                      'Invoke-WithSpinner must be defined in VaultwardenDeployment.Common.ps1')
+
+    def test_invoke_with_spinner_has_required_params(self):
+        """Invoke-WithSpinner must accept Message, ScriptBlock, and optional RefreshMilliseconds."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        # Locate the function body
+        idx = common_text.find('function Invoke-WithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found')
+        body = common_text[idx:idx + 800]
+        self.assertIn('$Message', body, 'Invoke-WithSpinner must have a $Message parameter')
+        self.assertIn('$ScriptBlock', body, 'Invoke-WithSpinner must have a $ScriptBlock parameter')
+        self.assertIn('$RefreshMilliseconds', body, 'Invoke-WithSpinner must have a $RefreshMilliseconds parameter')
+
+    def test_invoke_with_spinner_shows_ok_and_fehler(self):
+        """Invoke-WithSpinner must print [OK] on success and [FEHLER] on error."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('[OK]', common_text, 'Invoke-WithSpinner must output [OK] on success')
+        self.assertIn('[FEHLER]', common_text, 'Invoke-WithSpinner must output [FEHLER] on error')
+
+    def test_deploy_azurestack_uses_spinner(self):
+        """Deploy-AzureStack.ps1 must wrap the az deployment command with Invoke-WithSpinner."""
+        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        self.assertIn('Invoke-WithSpinner', deploy_text,
+                      'Deploy-AzureStack.ps1 must use Invoke-WithSpinner for the az deployment call')
+
+    def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
+        """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('Invoke-WithSpinner', deploy_text,
+                      'Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for operative steps')
+        # ACA custom domain state and ACA verification code are key waiting steps
+        self.assertIn('ACA Custom Domain State', deploy_text,
+                      'Spinner message for ACA Custom Domain State must be present')
+        self.assertIn('ACA Verification Code', deploy_text,
+                      'Spinner message for ACA Verification Code must be present')
+
 
 if __name__ == '__main__':
     unittest.main()
