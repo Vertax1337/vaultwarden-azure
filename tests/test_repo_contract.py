@@ -2172,95 +2172,36 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('[OK]', common_text, 'Invoke-WithSpinner must output [OK] on success')
         self.assertIn('[FEHLER]', common_text, 'Invoke-WithSpinner must output [FEHLER] on error')
 
-    def test_deploy_azurestack_uses_spinner(self):
-        """Deploy-AzureStack.ps1 must wrap the az deployment command with Invoke-WithSpinner."""
-        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
-        self.assertIn('Invoke-WithSpinner', deploy_text,
-                      'Deploy-AzureStack.ps1 must use Invoke-WithSpinner for the az deployment call')
+    def test_deploy_azurestack_runs_az_directly_in_main_thread(self):
+        """Deploy-AzureStack.ps1 must run az deployment group create directly in the main thread.
 
-    def test_deploy_azure_stack_uses_tempfile_for_az_output(self):
-        """Deploy-AzureStack.ps1 must write az output to a temp file instead of returning through the job pipeline.
+        The az deployment command must NOT be wrapped in Invoke-WithSpinner, Start-Job,
+        Start-ThreadJob, or any other background-job mechanism.  Running az directly avoids all
+        PS 5.1 CliXml serialization edge-cases and guarantees the real exit-code and JSON output
+        are available immediately in the caller's scope.
 
-        PS 5.1 Start-Job uses CliXml serialization to pass output from background jobs back to
-        the caller.  For large JSON payloads (a full Azure deployment response can be 50 KB+),
-        CliXml deserialization can silently fail.  Receive-Job with -ErrorAction SilentlyContinue
-        swallows the error and returns $null, which ultimately causes Save-JsonUtf8 to fail with
-        'Das Argument kann nicht an den Parameter Data gebunden werden, da es NULL ist'.
-
-        The fix writes the az output to a temp file from inside the spinner ScriptBlock so the
-        payload is never serialized through CliXml at all.
+        Expected pattern (matches master branch):
+            $json = az @deployArgs
+            if ($LASTEXITCODE -ne 0) { throw ... }
+            $result = $json | ConvertFrom-Json ...
         """
         deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
-        # Must use a temp file variable inside the spinner ScriptBlock
-        self.assertIn('$using:_azJsonFile', deploy_text,
-                      'Deploy-AzureStack.ps1 must pass the temp-file path into the spinner via $using:_azJsonFile')
-        self.assertIn('WriteAllText', deploy_text,
-                      'Deploy-AzureStack.ps1 must write az output to the temp file with WriteAllText')
-        self.assertIn('ReadAllText', deploy_text,
-                      'Deploy-AzureStack.ps1 must read az output back from the temp file with ReadAllText')
-        # Must have a finally block to clean up the temp file
-        self.assertIn('finally {', deploy_text,
-                      'Deploy-AzureStack.ps1 must have a finally block to clean up the temp file')
-        # Must guard against null result from ConvertFrom-Json
-        self.assertIn("if ($null -eq $result)", deploy_text,
-                      'Deploy-AzureStack.ps1 must guard against null $result after ConvertFrom-Json')
-
-    def test_deploy_azure_stack_scriptblock_null_guards(self):
-        """Deploy-AzureStack.ps1 ScriptBlock must have null guards for robustness.
-
-        Two failure modes must be guarded against:
-        1. $using:_azJsonFile resolves to $null (PS scoping edge-case) → WriteAllText($null, ...) throws
-           an ArgumentNullException that is very hard to diagnose. An explicit null check at the start
-           of the ScriptBlock gives a clear, actionable error message.
-        2. az CLI returns $null output (can happen in some thread-job contexts) → the file is silently
-           never created. Writing unconditionally (even an empty string) means the file always exists
-           and the caller gets a clear ConvertFrom-Json error instead of a misleading "no output" msg.
-        """
-        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
-        self.assertIn('[string]::IsNullOrWhiteSpace($tmpFile)', deploy_text,
-                      'Deploy-AzureStack.ps1 ScriptBlock must guard against null $tmpFile')
-        # The old pattern wrapped WriteAllText in "if ($null -ne $output) { ... }" so that a null
-        # output would silently skip the write.  The replacement uses a ternary-style $text assignment
-        # so WriteAllText is always called – check for the unconditional write marker.
-        self.assertIn("else { '' }", deploy_text,
-                      "Deploy-AzureStack.ps1 must have an else-branch for null output "
-                      "in the ternary $text assignment, ensuring WriteAllText is always called")
-        # Verify the standalone block-guard form is gone (pattern: if-null guard with newline after {)
-        self.assertNotIn("if ($null -ne $output) {\n", deploy_text.replace('\r\n', '\n'),
-                         'Deploy-AzureStack.ps1 must not guard WriteAllText with a standalone '
-                         '"if ($null -ne $output) { ... }" block')
-
-    def test_invoke_with_spinner_reads_job_error_before_receive_job(self):
-        """Invoke-WithSpinner must read $job.Error BEFORE calling Receive-Job.
-
-        With Start-ThreadJob, Receive-Job -ErrorAction SilentlyContinue replays error records from
-        the job's stream into the current session's error stream and then clears them.  If $job.Error
-        is read AFTER Receive-Job, it will appear empty even when the job threw an exception – so the
-        spinner shows [OK] and the error is silently discarded.
-
-        The fix reads $job.Error (and, as fallback, $job.ChildJobs[0].Error for the ThreadJob case)
-        BEFORE calling Receive-Job so the error is never missed.
-        """
-        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
-        # Locate the job-based path of Invoke-WithSpinner (after the "Start-ThreadJob/Start-Job" branch)
-        idx = common_text.find('function Invoke-WithSpinner')
-        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found in Common.ps1')
-        # Use a large enough window to cover the whole function body (~5000 chars is ample)
-        _WINDOW = 5000
-        body = common_text[idx:idx + _WINDOW]
-        # $job.Error must appear before the actual Receive-Job invocation in the function body
-        error_pos   = body.find('$jobError = $job.Error')
-        # Use the specific assignment form to avoid matching the comment that mentions 'Receive-Job'
-        receive_pos = body.find('$jobResult = Receive-Job')
-        self.assertGreater(error_pos, 0,
-                           'Invoke-WithSpinner must assign $jobError = $job.Error')
-        self.assertGreater(receive_pos, 0,
-                           'Invoke-WithSpinner must assign $jobResult = Receive-Job ...')
-        self.assertLess(error_pos, receive_pos,
-                        'Invoke-WithSpinner must read $job.Error BEFORE calling Receive-Job')
-        # Must also check ChildJobs for Start-ThreadJob compatibility
-        self.assertIn('ChildJobs', body,
-                      'Invoke-WithSpinner must fall back to $job.ChildJobs errors for Start-ThreadJob')
+        # Must invoke az and capture output directly (not inside a ScriptBlock)
+        self.assertIn('$json = az @deployArgs', deploy_text,
+                      'Deploy-AzureStack.ps1 must capture az output directly: $json = az @deployArgs')
+        # Must check exit code in the main thread
+        self.assertIn('$LASTEXITCODE -ne 0', deploy_text,
+                      'Deploy-AzureStack.ps1 must check $LASTEXITCODE after az call')
+        # Must pipe directly to ConvertFrom-Json (no temp-file round-trip)
+        self.assertIn('$json | ConvertFrom-Json', deploy_text,
+                      'Deploy-AzureStack.ps1 must pipe $json directly to ConvertFrom-Json')
+        # Must NOT use any background-job or temp-file mechanism for the az call
+        self.assertNotIn('$using:_azJsonFile', deploy_text,
+                         'Deploy-AzureStack.ps1 must not use a $using:_azJsonFile temp-file transfer')
+        self.assertNotIn('WriteAllText', deploy_text,
+                         'Deploy-AzureStack.ps1 must not write az output to a temp file')
+        self.assertNotIn('ReadAllText', deploy_text,
+                         'Deploy-AzureStack.ps1 must not read az output from a temp file')
 
     def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
         """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""
