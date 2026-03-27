@@ -449,6 +449,13 @@
       "metadata": {
         "description": "Azure PostgreSQL Flexible Server administrator password. Required for server creation and initial bootstrap only; not stored in Key Vault and not used as Vaultwarden app credential."
       }
+    },
+    "hibpApiKey": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "HIBP (Have I Been Pwned) API key. Stored in Key Vault. Leave empty to use placeholder '00000-00000-00000'."
+      }
     }
   },
   "resources": [
@@ -633,6 +640,9 @@
           },
           "dbPassword": {
             "value": "[parameters('dbPassword')]"
+          },
+          "hibpApiKey": {
+            "value": "[parameters('hibpApiKey')]"
           }
         }
       }

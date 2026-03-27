@@ -185,6 +185,9 @@
                     },
                     "cpuCores": {
                         "value": "[parameters('cpuCores')]"
+                    },
+                    "hibpApiKey": {
+                        "value": "[parameters('hibpApiKey')]"
                     }
                 },
                 "mode": "Incremental"
@@ -642,6 +645,13 @@
             "type": "string",
             "metadata": {
                 "description": "CPU cores for the container"
+            }
+        },
+        "hibpApiKey": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "HIBP (Have I Been Pwned) API key. Stored in Key Vault. Leave empty to use placeholder '00000-00000-00000'."
             }
         }
     }

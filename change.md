@@ -475,3 +475,84 @@ Vaultwarden persistiert SMTP-Konfiguration intern in `/data/config.json` (Admin-
   - `test_generate_only_mode_switch_smtp_auth_to_direct_send_clears_auth_fields`
   - `test_generate_only_existing_smtp_auth_redeploy_no_regression`
   - `test_generate_only_existing_direct_send_redeploy_no_smtp_auth_ballast`
+
+---
+
+## Schritt 5 – Vaultwarden Default-ENVs fest integrieren
+
+### Problem / Ursache
+
+Mehrere sicherheitsrelevante Vaultwarden-ENVs waren entweder:
+- **Fehlend** (5 von 7 ENVs waren gar nicht im Template): `EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE`, `DISABLE_2FA_REMEMBER`, `ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY`, `PASSWORD_HINTS_ALLOWED`, `SIGNUPS_VERIFY`
+- **Mit falschem Wert** (1 von 7 ENVs): `EMAIL_2FA_AUTO_FALLBACK` war `false` statt `true`
+- **Korrekt** (bereits vorhanden): `SHOW_PASSWORD_HINT=false`
+
+Zusätzlich fehlte `HIBP_API_KEY` vollständig – weder als ENV-Variable noch als Key-Vault-Secret.
+
+Alle 7 genannten ENVs sind serverseitige Sicherheitshärtungs-Konfigurationen, die immer aktiv sein sollen – nicht optional per Wizard und nicht abhängig vom Deployment-Pfad.
+
+### Betroffene Dateien
+
+- `main.json` – Kern-Template (Haupt-Änderungsort)
+- `main.deploytoazure.json` – Root-Wrapper (Deploy-to-Azure-Button)
+- `current/main.deploytoazure.json` – Current-State-Wrapper
+- `tests/test_repo_contract.py` – Neue Contract-Tests
+
+### Umgesetzter Fix
+
+#### 1. `EMAIL_2FA_AUTO_FALLBACK` korrigiert
+In `vwEnvBase` von `"false"` auf `"true"` gesetzt.
+
+#### 2. 5 fehlende Härtungs-ENVs hinzugefügt (in `vwEnvBase`)
+```json
+{ "name": "DISABLE_2FA_REMEMBER",                    "value": "true"  }
+{ "name": "EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE",     "value": "true"  }
+{ "name": "ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY",  "value": "true"  }
+{ "name": "PASSWORD_HINTS_ALLOWED",                   "value": "false" }
+{ "name": "SIGNUPS_VERIFY",                           "value": "true"  }
+```
+Alle in `vwEnvBase` – d.h. immer aktiv, unabhängig von SMTP-, SSO-, Push- oder anderen Optionen.
+
+#### 3. `HIBP_API_KEY` als Key-Vault-Secret eingebunden
+
+- **Parameter `hibpApiKey`** (securestring, default `''`) hinzugefügt
+- **Variable `kvSecretHibpApiKeyName`** = `"vw-hibp-api-key"` hinzugefügt
+- **Variable `vwSecretsHibp`** (KV-Secret-Referenz für Container App) hinzugefügt
+- **ENV-Variable `HIBP_API_KEY`** in `vwEnvBase` mit `secretRef: "hibp-api-key"` hinzugefügt
+- **Container-App-Secrets-Concat** aktualisiert: `vwSecretsHibp` wird immer (unconditional) eingeschlossen
+- **Deployment-Script** (`ensure-kv-secrets`) erweitert:
+  - Neue ENV-Vars: `HIBP_API_KEY_SECRET` (Wert: KV-Secret-Name), `HIBP_API_KEY_VALUE` (secureValue: Param)
+  - Neue Script-Logik: wenn `hibpApiKey`-Parameter vorhanden → in KV setzen; wenn leer → Placeholder `00000-00000-00000` in KV schreiben (nur wenn Secret noch nicht existiert)
+
+#### 4. Wrapper-Dateien aktualisiert
+`hibpApiKey` (securestring, default `''`) in beiden Wrappers hinzugefügt und an das Nested-Deployment weitergeleitet.
+
+### Shared-Logic-Analyse
+
+Die Änderungen betreffen ausschließlich:
+- `vwEnvBase`: Array-Variable in `main.json` – wird direkt per ARM-`concat` in alle Deployment-Pfade eingebunden (Wizard, GenerateOnly, DirectDeploy, Repair, Update, DeployToAzure-Button)
+- `ensure-kv-secrets`-Deployment-Script: wird in allen Deployment-Pfaden aufgerufen
+
+Da `vwEnvBase` in allen Pfaden über den identischen ARM-`concat`-Ausdruck eingebunden wird, sind alle Pfade gleichzeitig und konsistent betroffen. Kein Pfad-spezifischer Code wurde verändert.
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende Deployments (Redeploy/Update)**: `EMAIL_2FA_AUTO_FALLBACK=true` überschreibt den bisherigen Wert `false`. Dies ist gewollt (Security-Härtung). Alle anderen ENVs sind neu – keine Regression.
+- **HIBP_API_KEY beim Redeploy ohne hibpApiKey-Parameter**: Das Deployment-Script schreibt den Placeholder nur, wenn das Secret noch nicht existiert. Einmal gesetzter echter Key wird nicht überschrieben.
+- **HIBP_API_KEY in Container App Secrets immer aktiv**: Das Secret `hibp-api-key` muss im KV vorhanden sein, wenn der Container startet. Das Deployment-Script stellt dies sicher (immer Placeholder oder echter Key).
+- **Keine echten Secret-Werte in customers/ oder current/**: `hibpApiKey` hat im Wrapper leeren Default und wird nie in Konfig-Dateien persistiert.
+
+### Test / Validierung
+
+9 neue Contract-Tests (alle grün):
+- `test_vaultwarden_hardened_envs_in_vwEnvBase` – alle 7 ENVs mit korrekten Werten in `vwEnvBase`
+- `test_hibp_api_key_env_in_vwEnvBase_uses_secret_ref` – HIBP_API_KEY in `vwEnvBase` mit secretRef, kein Plaintext
+- `test_hibp_api_key_kv_secret_variable_defined` – `kvSecretHibpApiKeyName` und `vwSecretsHibp` definiert
+- `test_container_app_secrets_include_hibp` – Container-App-Secrets-Concat enthält `vwSecretsHibp`
+- `test_hibp_api_key_is_securestring_parameter` – `hibpApiKey` als securestring mit leerem Default
+- `test_hibp_api_key_deployment_script_env_vars` – Deployment-Script hat `HIBP_API_KEY_SECRET` und `HIBP_API_KEY_VALUE` (secureValue)
+- `test_hibp_api_key_placeholder_logic_in_deployment_script` – Deployment-Script enthält Placeholder-Logik
+- `test_wrapper_exposes_hibp_api_key` – Beide Wrapper-Dateien haben `hibpApiKey` als securestring
+- `test_hardened_envs_not_in_wizard_prompt` – Keine Wizard-Read-Host-Prompts für Härtungs-ENVs
+
+Gesamt: 78/79 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert – betrifft gespeicherte Kundenkonfig mit abweichendem RG-Namensschema).

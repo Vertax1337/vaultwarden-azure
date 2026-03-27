@@ -1262,5 +1262,159 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
 
+    # ------------------------------------------------------------------
+    # Vaultwarden hardened default ENVs
+    # ------------------------------------------------------------------
+
+    def test_vaultwarden_hardened_envs_in_vwEnvBase(self):
+        """All 7 security-hardened ENVs must be present in vwEnvBase with correct values."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        vw_env_base = main['variables']['vwEnvBase']
+        env_map = {e['name']: e.get('value', '') for e in vw_env_base if isinstance(e, dict) and 'name' in e}
+
+        expected = {
+            'EMAIL_2FA_AUTO_FALLBACK':              'true',
+            'EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE': 'true',
+            'DISABLE_2FA_REMEMBER':                 'true',
+            'ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY': 'true',
+            'PASSWORD_HINTS_ALLOWED':               'false',
+            'SIGNUPS_VERIFY':                       'true',
+            'SHOW_PASSWORD_HINT':                   'false',
+        }
+        for env_name, expected_value in expected.items():
+            self.assertIn(env_name, env_map,
+                          f'Hardened ENV {env_name} missing from vwEnvBase')
+            self.assertEqual(env_map[env_name], expected_value,
+                             f'Hardened ENV {env_name} has wrong value: '
+                             f'expected {expected_value!r}, got {env_map[env_name]!r}')
+
+    def test_hibp_api_key_env_in_vwEnvBase_uses_secret_ref(self):
+        """HIBP_API_KEY in vwEnvBase must use secretRef, not a plaintext value."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        vw_env_base = main['variables']['vwEnvBase']
+        hibp_entries = [e for e in vw_env_base if isinstance(e, dict) and e.get('name') == 'HIBP_API_KEY']
+        self.assertEqual(len(hibp_entries), 1, 'HIBP_API_KEY must appear exactly once in vwEnvBase')
+        self.assertEqual(hibp_entries[0].get('secretRef'), 'hibp-api-key',
+                         'HIBP_API_KEY must use secretRef=hibp-api-key')
+        self.assertNotIn('value', hibp_entries[0], 'HIBP_API_KEY must not have a plaintext value')
+
+    def test_hibp_api_key_kv_secret_variable_defined(self):
+        """vwSecretsHibp variable must be defined and point to Key Vault."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        variables = main['variables']
+        self.assertIn('kvSecretHibpApiKeyName', variables,
+                      'kvSecretHibpApiKeyName variable must be defined')
+        self.assertIn('vwSecretsHibp', variables,
+                      'vwSecretsHibp variable must be defined')
+        hibp_secrets = variables['vwSecretsHibp']
+        self.assertIsInstance(hibp_secrets, list)
+        self.assertEqual(len(hibp_secrets), 1)
+        self.assertEqual(hibp_secrets[0]['name'], 'hibp-api-key')
+        self.assertIn('keyVaultUrl', hibp_secrets[0])
+        self.assertIn('kvSecretHibpApiKeyName', hibp_secrets[0]['keyVaultUrl'])
+
+    def test_container_app_secrets_include_hibp(self):
+        """Container App secrets concat must include vwSecretsHibp unconditionally."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        container_app = next(
+            r for r in main['resources'] if r.get('type') == 'Microsoft.App/containerApps'
+        )
+        secrets_expr = container_app['properties']['configuration']['secrets']
+        self.assertIn("variables('vwSecretsHibp')", secrets_expr,
+                      'Container App secrets concat must include vwSecretsHibp')
+
+    def test_hibp_api_key_is_securestring_parameter(self):
+        """hibpApiKey must be declared as securestring in main.json with empty default."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        self.assertIn('hibpApiKey', main['parameters'],
+                      'hibpApiKey must be declared as a parameter in main.json')
+        param = main['parameters']['hibpApiKey']
+        self.assertEqual(param['type'].lower(), 'securestring',
+                         'hibpApiKey must be of type securestring')
+        self.assertEqual(param.get('defaultValue', ''), '',
+                         'hibpApiKey must have an empty default value')
+
+    def test_hibp_api_key_deployment_script_env_vars(self):
+        """Deployment script must have HIBP_API_KEY_SECRET and HIBP_API_KEY_VALUE env vars."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_script = next(
+            r for r in main['resources']
+            if r.get('type') == 'Microsoft.Resources/deploymentScripts'
+            and 'ensure-kv-secrets' in r.get('name', '')
+        )
+        env_names = {
+            e['name']
+            for e in deploy_script['properties']['environmentVariables']
+            if isinstance(e, dict)
+        }
+        self.assertIn('HIBP_API_KEY_SECRET', env_names,
+                      'Deployment script must expose HIBP_API_KEY_SECRET env var')
+        self.assertIn('HIBP_API_KEY_VALUE', env_names,
+                      'Deployment script must expose HIBP_API_KEY_VALUE env var')
+
+        # HIBP_API_KEY_VALUE must be a secureValue, not plaintext
+        hibp_val_env = next(
+            e for e in deploy_script['properties']['environmentVariables']
+            if isinstance(e, dict) and e.get('name') == 'HIBP_API_KEY_VALUE'
+        )
+        self.assertIn('secureValue', hibp_val_env,
+                      'HIBP_API_KEY_VALUE must be a secureValue (not plaintext value)')
+        self.assertNotIn('value', hibp_val_env,
+                         'HIBP_API_KEY_VALUE must not use plaintext value field')
+
+    def test_hibp_api_key_placeholder_logic_in_deployment_script(self):
+        """Deployment script must set placeholder '00000-00000-00000' when no real HIBP key is provided."""
+        main = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        deploy_script = next(
+            r for r in main['resources']
+            if r.get('type') == 'Microsoft.Resources/deploymentScripts'
+            and 'ensure-kv-secrets' in r.get('name', '')
+        )
+        script = deploy_script['properties']['scriptContent']
+        self.assertIn('HIBP_API_KEY', script,
+                      'Deployment script must contain HIBP_API_KEY secret logic')
+        self.assertIn('00000-00000-00000', script,
+                      'Deployment script must set placeholder for HIBP_API_KEY when no real key is provided')
+
+    def test_wrapper_exposes_hibp_api_key(self):
+        """Both wrapper files must expose hibpApiKey as securestring."""
+        for wrapper_path in [
+            REPO_ROOT / 'main.deploytoazure.json',
+            REPO_ROOT / 'current' / 'main.deploytoazure.json',
+        ]:
+            wrapper = json.loads(wrapper_path.read_text(encoding='utf-8'))
+            self.assertIn('hibpApiKey', wrapper['parameters'],
+                          f'hibpApiKey missing from {wrapper_path.name}')
+            param = wrapper['parameters']['hibpApiKey']
+            self.assertEqual(param['type'].lower(), 'securestring',
+                             f'hibpApiKey in {wrapper_path.name} must be securestring')
+            self.assertEqual(param.get('defaultValue', ''), '',
+                             f'hibpApiKey in {wrapper_path.name} must have empty default')
+
+    def test_hardened_envs_not_in_wizard_prompt(self):
+        """The 7 hardened ENVs must not be interactively prompted in the Wizard."""
+        ps_script = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        # These ENVs should never appear in Read-Host prompts
+        hardened_env_names = [
+            'EMAIL_2FA_AUTO_FALLBACK',
+            'EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE',
+            'DISABLE_2FA_REMEMBER',
+            'ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY',
+            'PASSWORD_HINTS_ALLOWED',
+            'SIGNUPS_VERIFY',
+            'SHOW_PASSWORD_HINT',
+        ]
+        for env_name in hardened_env_names:
+            # Check that this ENV name doesn't appear in Read-Host context
+            lower = ps_script.lower()
+            env_lower = env_name.lower()
+            # We check that it's not in Read-Host calls (prompt text)
+            for line in ps_script.splitlines():
+                if 'read-host' in line.lower() and env_lower in line.lower():
+                    self.fail(
+                        f'Hardened ENV {env_name} should not be in a Read-Host prompt: {line.strip()}'
+                    )
+
+
 if __name__ == '__main__':
     unittest.main()
