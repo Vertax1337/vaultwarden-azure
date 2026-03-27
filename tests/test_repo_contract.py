@@ -2055,11 +2055,23 @@ class RepoContractTests(unittest.TestCase):
         content = (REPO_ROOT / 'scripts/modules/ConsoleMenu/ConsoleMenu.psm1').read_text(encoding='utf-8')
 
         # The 'back' case must NOT contain a menuState assignment.
-        # Extract the text of the 'back' branch from Start-ConsoleMenuApplication.
-        # We look for the block between "'back' {" and the next matching closing brace.
-        back_match = re.search(r"'back'\s*\{([^}]*)\}", content)
-        self.assertIsNotNone(back_match, "Start-ConsoleMenuApplication must have a 'back' case")
-        back_body = back_match.group(1)
+        # Use brace-depth counting to extract the full case body (the case may contain
+        # nested braces such as if/else blocks, so a simple [^}]* regex is insufficient).
+        back_start = re.search(r"'back'\s*\{", content)
+        self.assertIsNotNone(back_start, "Start-ConsoleMenuApplication must have a 'back' case")
+        pos = back_start.end() - 1  # position of the opening '{'
+        depth = 0
+        case_body_chars = []
+        for ch in content[pos:]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                case_body_chars.append(ch)
+        back_body = ''.join(case_body_chars)
         self.assertNotIn('$menuState[', back_body,
                          "Start-ConsoleMenuApplication 'back' branch must not update menuState "
                          "(Back key must not overwrite the last meaningful submenu selection)")
@@ -2078,9 +2090,23 @@ class RepoContractTests(unittest.TestCase):
         content = (REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Menu.ps1').read_text(encoding='utf-8')
 
         # The 'back' case must NOT contain a MenuState assignment.
-        back_match = re.search(r"'back'\s*\{([^}]*)\}", content)
-        self.assertIsNotNone(back_match, "Show-DeploymentMainMenu must have a 'back' case")
-        back_body = back_match.group(1)
+        # Use brace-depth counting so that nested if/else blocks inside the case
+        # body are fully covered (a simple [^}]* regex would stop at the first '}'.
+        back_start = re.search(r"'back'\s*\{", content)
+        self.assertIsNotNone(back_start, "Show-DeploymentMainMenu must have a 'back' case")
+        pos = back_start.end() - 1  # position of the opening '{'
+        depth = 0
+        case_body_chars = []
+        for ch in content[pos:]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                case_body_chars.append(ch)
+        back_body = ''.join(case_body_chars)
         self.assertNotIn('$MenuState[', back_body,
                          "Show-DeploymentMainMenu 'back' branch must not update MenuState "
                          "(Back key must not overwrite the last meaningful submenu selection)")
