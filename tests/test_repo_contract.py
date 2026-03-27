@@ -133,6 +133,8 @@ class RepoContractTests(unittest.TestCase):
             'scripts/Bind-AcaCustomDomain.ps1',
             'scripts/Set-AcaIngressRestrictions.ps1',
             'scripts/lib/VaultwardenDeployment.Common.ps1',
+            'scripts/lib/VaultwardenDeployment.Flows.ps1',
+            'scripts/lib/VaultwardenDeployment.Menu.ps1',
             'scripts/cloudflare/Get-CloudflareIpRanges.ps1',
             'scripts/deploy.ps1',
         ]
@@ -953,14 +955,14 @@ class RepoContractTests(unittest.TestCase):
     @requires_pwsh
     def test_wizard_direct_send_prompts_for_smtp_host(self):
         """Interactive wizard must prompt for SMTP Host in Direct Send path."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         self.assertIn('MX-Endpunkt', script_text)
 
     @requires_pwsh
     def test_wizard_smtp_auth_prompts_for_host_with_default(self):
         """Interactive wizard must prompt for SMTP Host in the smtp_auth flow with a default of smtp.office365.com.
         Operator can accept the default or type a custom host. direct_send still uses its own explicit MX prompt."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         # smtp_auth block must contain a Read-TextWithDefault prompt that exposes the SMTP host
         self.assertIn("smtp_auth-Relay", script_text)
         # Default must be smtp.office365.com
@@ -1113,16 +1115,19 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('Get-RuntimeSecretParameters', script_text)
         # Save-CustomerFiles must be marked shared logic (orchestration)
         self.assertIn('Save-CustomerFiles', script_text)
-        # All key functions above must have the SHARED LOGIC marker nearby
+        # All key shared functions must have the SHARED LOGIC marker nearby
         for func_name in ['New-CustomerConfigObject', 'Get-RuntimeSecretParameters',
-                          'New-CustomerConfigInteractive', 'New-CustomerAzureParameters',
-                          'Save-CustomerFiles']:
+                          'New-CustomerAzureParameters', 'Save-CustomerFiles']:
             idx = script_text.find(f'function {func_name}')
             self.assertGreater(idx, 0, f'function {func_name} not found in script')
             # The SHARED LOGIC comment must appear within 600 chars before the function keyword
             context = script_text[max(0, idx - 600):idx]
             self.assertIn('# SHARED LOGIC:', context,
                           f'function {func_name} must have a # SHARED LOGIC: comment above it')
+        # New-CustomerConfigInteractive is an interactive-wizard function; it lives in Flows.ps1
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        self.assertIn('function New-CustomerConfigInteractive', flows_text,
+                      'New-CustomerConfigInteractive must be defined in VaultwardenDeployment.Flows.ps1')
 
     # -----------------------------------------------------------------------
     # Mail-Modus-Zustandswechsel: Parameter-Generierung (pwsh-abhängig)
@@ -1474,7 +1479,10 @@ class RepoContractTests(unittest.TestCase):
 
     def test_hardened_envs_not_in_wizard_prompt(self):
         """The 7 hardened ENVs must not be interactively prompted in the Wizard."""
-        ps_script = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        wizard_scripts = [
+            (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8'),
+            (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8'),
+        ]
         # These ENVs should never appear in Read-Host prompts
         hardened_env_names = [
             'EMAIL_2FA_AUTO_FALLBACK',
@@ -1485,16 +1493,14 @@ class RepoContractTests(unittest.TestCase):
             'SIGNUPS_VERIFY',
             'SHOW_PASSWORD_HINT',
         ]
-        for env_name in hardened_env_names:
-            # Check that this ENV name doesn't appear in Read-Host context
-            lower = ps_script.lower()
-            env_lower = env_name.lower()
-            # We check that it's not in Read-Host calls (prompt text)
-            for line in ps_script.splitlines():
-                if 'read-host' in line.lower() and env_lower in line.lower():
-                    self.fail(
-                        f'Hardened ENV {env_name} should not be in a Read-Host prompt: {line.strip()}'
-                    )
+        for ps_script in wizard_scripts:
+            for env_name in hardened_env_names:
+                env_lower = env_name.lower()
+                for line in ps_script.splitlines():
+                    if 'read-host' in line.lower() and env_lower in line.lower():
+                        self.fail(
+                            f'Hardened ENV {env_name} should not be in a Read-Host prompt: {line.strip()}'
+                        )
 
 
     # ------------------------------------------------------------------
@@ -1503,15 +1509,15 @@ class RepoContractTests(unittest.TestCase):
 
     def test_wizard_has_three_mail_mode_choices(self):
         """The wizard must expose exactly 3 mail mode choices: direct_send, smtp_auth, acs_smtp."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
-        self.assertIn("'direct_send'", script_text,
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        self.assertIn("'direct_send'", flows_text,
                       "Wizard must have 'direct_send' as a mail mode choice")
-        self.assertIn("'smtp_auth'", script_text,
+        self.assertIn("'smtp_auth'", flows_text,
                       "Wizard must have 'smtp_auth' as a mail mode choice")
-        self.assertIn("'acs_smtp'", script_text,
+        self.assertIn("'acs_smtp'", flows_text,
                       "Wizard must have 'acs_smtp' as a mail mode choice")
         # Choices must appear near the 3-way mail mode selector (Read-ChoiceWithDefault for Mail-Modus)
-        self.assertIn('Mail-Modus', script_text,
+        self.assertIn('Mail-Modus', flows_text,
                       "Wizard must prompt 'Mail-Modus' for the 3-way mode selection")
 
     def test_acs_smtp_mode_auto_sets_host_and_acs_foundation(self):
@@ -1545,7 +1551,7 @@ class RepoContractTests(unittest.TestCase):
 
     def test_acs_smtp_wizard_prompts_for_acs_username(self):
         """Wizard acs_smtp path must prompt for ACS SMTP Username, not for a generic SMTP Host."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         self.assertIn('ACS SMTP Username', script_text,
                       'acs_smtp wizard path must prompt for ACS SMTP Username')
 
@@ -2036,6 +2042,306 @@ class RepoContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
+
+
+    def test_consolemenu_back_does_not_update_menu_state(self):
+        """Start-ConsoleMenuApplication must not persist the Back key as last submenu position.
+
+        The unconditional $menuState update that previously ran before the switch
+        statement would overwrite the last meaningful selection with the 'Zurueck'
+        key whenever a user left a submenu via Back.  The fix moves the state update
+        into each individual case so that the 'back' branch is deliberately excluded.
+        """
+        content = (REPO_ROOT / 'scripts/modules/ConsoleMenu/ConsoleMenu.psm1').read_text(encoding='utf-8')
+
+        # The 'back' case must NOT contain a menuState assignment.
+        # Use brace-depth counting to extract the full case body (the case may contain
+        # nested braces such as if/else blocks, so a simple [^}]* regex is insufficient).
+        back_start = re.search(r"'back'\s*\{", content)
+        self.assertIsNotNone(back_start, "Start-ConsoleMenuApplication must have a 'back' case")
+        pos = back_start.end() - 1  # position of the opening '{'
+        depth = 0
+        case_body_chars = []
+        for ch in content[pos:]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                case_body_chars.append(ch)
+        back_body = ''.join(case_body_chars)
+        self.assertNotIn('$menuState[', back_body,
+                         "Start-ConsoleMenuApplication 'back' branch must not update menuState "
+                         "(Back key must not overwrite the last meaningful submenu selection)")
+
+        # The 'action' and 'submenu' cases must update menuState.
+        self.assertIn("$menuState[$currentMenuId] = [string]$selectedItem.Key", content,
+                      "Start-ConsoleMenuApplication must persist selection for action/submenu items")
+
+    def test_deployment_menu_back_does_not_update_menu_state(self):
+        """Show-DeploymentMainMenu must not persist the Back key as last submenu position.
+
+        When a user leaves a submenu via 'Zurueck', the MenuState for that submenu
+        must remain unchanged so that on re-entry the last meaningful action is
+        pre-selected rather than the Back item.
+        """
+        content = (REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Menu.ps1').read_text(encoding='utf-8')
+
+        # The 'back' case must NOT contain a MenuState assignment.
+        # Use brace-depth counting so that nested if/else blocks inside the case
+        # body are fully covered (a simple [^}]* regex would stop at the first '}'.
+        back_start = re.search(r"'back'\s*\{", content)
+        self.assertIsNotNone(back_start, "Show-DeploymentMainMenu must have a 'back' case")
+        pos = back_start.end() - 1  # position of the opening '{'
+        depth = 0
+        case_body_chars = []
+        for ch in content[pos:]:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    break
+            if depth > 0:
+                case_body_chars.append(ch)
+        back_body = ''.join(case_body_chars)
+        self.assertNotIn('$MenuState[', back_body,
+                         "Show-DeploymentMainMenu 'back' branch must not update MenuState "
+                         "(Back key must not overwrite the last meaningful submenu selection)")
+
+        # The 'action' case must update MenuState.
+        self.assertIn("$MenuState[$currentMenuId] = [string]$selectedItem.Key", content,
+                      "Show-DeploymentMainMenu must persist selection for action items")
+
+    def test_wizard_functions_live_in_flows_ps1(self):
+        """Interactive wizard helper functions must be defined in VaultwardenDeployment.Flows.ps1.
+
+        After the Issue-5 wizard decoupling refactor, all interactive-wizard orchestration
+        belongs in Flows.ps1, not in Invoke-CustomerDeployment.ps1.
+        """
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+
+        for func_name in ['Select-CustomerCodeInteractive', 'New-AdvancedArmParametersInteractive',
+                          'New-CustomerConfigInteractive']:
+            self.assertIn(f'function {func_name}', flows_text,
+                          f'{func_name} must be defined in VaultwardenDeployment.Flows.ps1')
+            self.assertNotIn(f'function {func_name}', deploy_text,
+                             f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
+                             f'(it belongs in VaultwardenDeployment.Flows.ps1)')
+
+    def test_shared_data_factories_live_in_common_ps1(self):
+        """Get-AdvancedParameterValue and New-EmptyAdvancedArmParameters must live in Common.ps1.
+
+        These are pure data/utility helpers with no interactive UI coupling and are
+        used by both the CLI path (Build-AdvancedArmParametersFromCli) and the
+        interactive wizard (New-AdvancedArmParametersInteractive).
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+
+        for func_name in ['Get-AdvancedParameterValue', 'New-EmptyAdvancedArmParameters']:
+            self.assertIn(f'function {func_name}', common_text,
+                          f'{func_name} must be defined in VaultwardenDeployment.Common.ps1')
+            self.assertNotIn(f'function {func_name}', deploy_text,
+                             f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
+                             f'(it belongs in VaultwardenDeployment.Common.ps1)')
+
+    def test_invoke_with_spinner_defined_in_common(self):
+        """Invoke-WithSpinner must be defined in VaultwardenDeployment.Common.ps1."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Invoke-WithSpinner', common_text,
+                      'Invoke-WithSpinner must be defined in VaultwardenDeployment.Common.ps1')
+
+    def test_invoke_with_spinner_has_required_params(self):
+        """Invoke-WithSpinner must accept Message, ScriptBlock, and optional RefreshMilliseconds."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        # Locate the function body
+        idx = common_text.find('function Invoke-WithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found')
+        body = common_text[idx:idx + 800]
+        self.assertIn('$Message', body, 'Invoke-WithSpinner must have a $Message parameter')
+        self.assertIn('$ScriptBlock', body, 'Invoke-WithSpinner must have a $ScriptBlock parameter')
+        self.assertIn('$RefreshMilliseconds', body, 'Invoke-WithSpinner must have a $RefreshMilliseconds parameter')
+
+    def test_invoke_with_spinner_shows_ok_and_fehler(self):
+        """Invoke-WithSpinner must print [OK] on success and [FEHLER] on error."""
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('[OK]', common_text, 'Invoke-WithSpinner must output [OK] on success')
+        self.assertIn('[FEHLER]', common_text, 'Invoke-WithSpinner must output [FEHLER] on error')
+
+    def test_deploy_azurestack_uses_native_process_spinner(self):
+        """Deploy-AzureStack.ps1 must use an inline native-process spinner for the az deployment.
+
+        The spinner is implemented directly in Deploy-AzureStack.ps1 using
+        System.Diagnostics.Process + ReadToEndAsync() – no Start-Job, no Start-ThreadJob,
+        no helper function in Common.ps1.  cmd.exe /c az is used (Windows-focused).
+        """
+        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        # Must use native OS process (not a PS job)
+        self.assertIn('System.Diagnostics.Process', deploy_text,
+                      'Deploy-AzureStack.ps1 must use System.Diagnostics.Process for az')
+        # Must drain streams asynchronously to prevent deadlock on large output
+        self.assertIn('ReadToEndAsync', deploy_text,
+                      'Deploy-AzureStack.ps1 must use ReadToEndAsync to drain stdout/stderr')
+        # Must show [OK] on success and [FEHLER] on failure
+        self.assertIn('[OK]', deploy_text,
+                      'Deploy-AzureStack.ps1 spinner must output [OK] on success')
+        self.assertIn('[FEHLER]', deploy_text,
+                      'Deploy-AzureStack.ps1 spinner must output [FEHLER] on failure')
+        # Must still pipe the returned stdout to ConvertFrom-Json
+        self.assertIn('ConvertFrom-Json', deploy_text,
+                      'Deploy-AzureStack.ps1 must parse stdout with ConvertFrom-Json')
+        # Must NOT use any background-job mechanism for the az deployment
+        self.assertNotIn('Start-ThreadJob', deploy_text,
+                         'Deploy-AzureStack.ps1 must not use Start-ThreadJob for az deployment')
+        self.assertNotIn('Start-Job', deploy_text,
+                         'Deploy-AzureStack.ps1 must not use Start-Job for az deployment')
+
+    def test_deploy_azurestack_spinner_is_inline_not_in_common(self):
+        """The az-deploy spinner must be inlined in Deploy-AzureStack.ps1, not a shared function.
+
+        Invoke-NativeProcessWithSpinner must NOT appear in VaultwardenDeployment.Common.ps1 –
+        keeping the spinner inline keeps the code minimal and Windows-focused.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertNotIn('Invoke-NativeProcessWithSpinner', common_text,
+                         'Invoke-NativeProcessWithSpinner must not be in Common.ps1 (spinner is inlined in Deploy-AzureStack.ps1)')
+        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        self.assertNotIn('Invoke-NativeProcessWithSpinner', deploy_text,
+                         'Invoke-NativeProcessWithSpinner helper call must not appear (spinner is inlined directly)')
+
+    def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
+        """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('Invoke-WithSpinner', deploy_text,
+                      'Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for operative steps')
+        # ACA custom domain state and ACA verification code are key waiting steps
+        self.assertIn('ACA Custom Domain State', deploy_text,
+                      'Spinner message for ACA Custom Domain State must be present')
+        self.assertIn('ACA Verification Code', deploy_text,
+                      'Spinner message for ACA Verification Code must be present')
+
+    def test_get_aca_custom_domains_is_robust_for_first_deploy(self):
+        """Get-AcaCustomDomains must silently return empty for missing RG / app (first-deploy robustness).
+
+        The function may be called inside a background job (via Invoke-WithSpinner) where
+        $ErrorActionPreference is 'Stop'. A terminating NativeCommandExitException from
+        az CLI must never escape the function.  The outer try/catch and temporary
+        ErrorActionPreference reset ensure this.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        # Locate the function body
+        idx = common_text.find('function Get-AcaCustomDomains')
+        self.assertGreater(idx, 0, 'Get-AcaCustomDomains not found in Common.ps1')
+        # Extract function body up to the closing brace (a few hundred chars is enough)
+        body = common_text[idx:idx + 1200]
+        # Must have an outer try/catch for first-deploy robustness
+        self.assertIn('try {', body,
+                      'Get-AcaCustomDomains must wrap the az call in a try block to be first-deploy safe')
+        self.assertIn('catch {', body,
+                      'Get-AcaCustomDomains must have a catch block returning @() to be first-deploy safe')
+        # Must suppress native command errors locally
+        self.assertIn("ErrorActionPreference = 'SilentlyContinue'", body,
+                      "Get-AcaCustomDomains must locally suppress ErrorActionPreference for the az call")
+        # Must restore ErrorActionPreference after the az call
+        self.assertIn('$ErrorActionPreference = $prevEap', body,
+                      'Get-AcaCustomDomains must restore $ErrorActionPreference after the az call')
+
+    def test_preserved_custom_domains_null_normalized_after_spinner(self):
+        """Invoke-CustomerDeployment.ps1 must normalize the spinner result to an array.
+
+        Receive-Job may return $null for an empty array or unwrap a single-item array to
+        a scalar.  Both cases must be handled so that .Count is safe under
+        Set-StrictMode -Version Latest (Windows PS 5.1).
+        The code must first null-guard with 'if ($null -eq ...)' then wrap with @() to
+        cover the single-element scalar case as well.
+        """
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn(
+            "if ($null -eq $preservedCustomDomains) { $preservedCustomDomains = @() }",
+            content,
+            "Invoke-CustomerDeployment.ps1 must null-guard $preservedCustomDomains "
+            "after the spinner call so that .Count is safe under Set-StrictMode -Version Latest"
+        )
+        self.assertIn(
+            "$preservedCustomDomains = @($preservedCustomDomains)",
+            content,
+            "Invoke-CustomerDeployment.ps1 must wrap $preservedCustomDomains in @() "
+            "to handle single-element scalars unwrapped by Receive-Job"
+        )
+
+    def test_invoke_with_spinner_has_threadjob_fallback(self):
+        """Invoke-WithSpinner must not unconditionally depend on Start-ThreadJob.
+
+        On Windows PowerShell 5.1 without the ThreadJob module, Start-ThreadJob is
+        unavailable. The function must detect availability via cached script-scoped variables
+        (set at module load time), fall back to Start-Job (with Common.ps1 re-sourced so
+        helper functions are available), and ultimately support a direct-execution path if no
+        job infrastructure exists.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+
+        # Locate the Invoke-WithSpinner function body
+        idx = common_text.find('function Invoke-WithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found in Common.ps1')
+        # Extract enough body to cover all three paths
+        body = common_text[idx:idx + 3000]
+
+        # The function must read job-availability from the cached script-scoped variable,
+        # not call Start-ThreadJob unconditionally without a guard.
+        self.assertIn('_SpinnerHasThreadJob', body,
+                      'Invoke-WithSpinner must read the cached _SpinnerHasThreadJob flag')
+
+        # The cached availability flags must be set at module level (before the function).
+        module_header = common_text[:idx]
+        self.assertIn("Get-Command -Name 'Start-ThreadJob'", module_header,
+                      "Common.ps1 module level must cache Start-ThreadJob availability via Get-Command")
+        self.assertIn('_SpinnerHasThreadJob', module_header,
+                      'Common.ps1 must set $Script:_SpinnerHasThreadJob at module load time')
+
+        # Must have a Start-Job fallback
+        self.assertIn('Start-Job', body,
+                      'Invoke-WithSpinner must fall back to Start-Job when Start-ThreadJob is unavailable')
+
+        # Must have a direct-execution (no-job) fallback
+        self.assertIn('kein Hintergrundjob', body,
+                      'Invoke-WithSpinner must have a direct-execution fallback when no job cmdlet is available')
+
+        # Optional ThreadJob import must be present at module level (best-effort)
+        import_idx = common_text.find('Import-Module ThreadJob')
+        self.assertGreater(import_idx, 0,
+                           'Common.ps1 must attempt a silent Import-Module ThreadJob at load time')
+        # The import must come before the function definition
+        self.assertLess(import_idx, idx,
+                        'Import-Module ThreadJob must appear before Invoke-WithSpinner in Common.ps1')
+
+        # Common.ps1 path must be captured for Start-Job initialization
+        self.assertIn('_InvokeWithSpinnerCommonPath', common_text,
+                      'Common.ps1 must capture its own path for Start-Job InitializationScript')
+
+
+    def test_spinner_scriptblocks_have_no_using_member_chains(self):
+        """Spinner scriptblocks must not use $using:obj.property member-chain expressions.
+
+        Both Start-ThreadJob and Start-Job only support simple top-level $using:varname
+        references. Member chains like $using:config.azure.resourceGroupName cause:
+          "Cannot get the value of the Using expression $using:config.azure.resourceGroupName.
+           Start-ThreadJob only supports using variable expressions."
+
+        All nested values must be pre-resolved into simple scalar variables before the
+        Invoke-WithSpinner call and passed via $using:simpleVar.
+        """
+        import re
+        for script_name in ('Invoke-CustomerDeployment.ps1', 'Deploy-AzureStack.ps1'):
+            script_text = (REPO_ROOT / 'scripts' / script_name).read_text(encoding='utf-8')
+            # Find $using:identifier.something – the identifier part is a word, then a dot follows
+            bad_refs = re.findall(r'\$using:[A-Za-z_][A-Za-z0-9_]*\.', script_text)
+            self.assertEqual(bad_refs, [],
+                             f'{script_name} must not contain nested $using: member-chain expressions; '
+                             f'found: {bad_refs}')
 
 
 if __name__ == '__main__':

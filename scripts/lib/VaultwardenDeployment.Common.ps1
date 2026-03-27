@@ -1,6 +1,19 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Capture this file's path so Invoke-WithSpinner can pass it as a Start-Job
+# initialization script when Start-ThreadJob is not available.
+$Script:_InvokeWithSpinnerCommonPath = $PSCommandPath
+
+# Try to load the optional ThreadJob module (built into PS 7+; installable on PS 5.1).
+# This is best-effort; Invoke-WithSpinner falls back gracefully if ThreadJob is absent.
+Import-Module ThreadJob -ErrorAction SilentlyContinue
+
+# Cache job-mechanism availability so Invoke-WithSpinner does not call Get-Command
+# on every invocation. Refreshed at dot-source time; callers may re-dot-source to refresh.
+$Script:_SpinnerHasThreadJob = $null -ne (Get-Command -Name 'Start-ThreadJob' -ErrorAction SilentlyContinue)
+$Script:_SpinnerHasStartJob  = $null -ne (Get-Command -Name 'Start-Job'       -ErrorAction SilentlyContinue)
+
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-RepoRoot {
@@ -39,6 +52,108 @@ function Write-Section {
 function Write-Step {
     param([Parameter(Mandatory)][string]$Message)
     Write-Host ('[+] {0}' -f $Message)
+}
+
+# Runs a ScriptBlock while displaying a live spinner with elapsed time.
+# Shows:  [~] <Message> <spinner> <mm:ss>   (updated in-place each tick)
+# Prints: [OK] <Message> (<mm:ss>)          on success
+# Prints: [FEHLER] <Message> (<mm:ss>)       on error, then re-throws
+# Returns the value produced by ScriptBlock.
+# Compatibility: prefers Start-ThreadJob; falls back to Start-Job (with Common.ps1
+# re-sourced as InitializationScript so helper functions are available); last resort
+# is synchronous direct execution without a spinner.
+function Invoke-WithSpinner {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [Parameter(Mandatory)][scriptblock]$ScriptBlock,
+        [int]$RefreshMilliseconds = 120
+    )
+
+    $spinChars   = @('|', '/', '-', '\')
+    $spinIdx     = 0
+    $lineWidth   = 82   # wide enough to cover [~] + message + spinner char + mm:ss
+    $stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
+
+    # Use cached job-mechanism availability (set at module load time after ThreadJob import).
+    $hasThreadJob = $Script:_SpinnerHasThreadJob
+    $hasStartJob  = $Script:_SpinnerHasStartJob
+
+    if (-not $hasThreadJob -and -not $hasStartJob) {
+        # No job infrastructure at all – run synchronously without spinner.
+        Write-Host ('[~] {0} (kein Hintergrundjob verfügbar, direkte Ausführung)' -f $Message)
+        try {
+            $result  = & $ScriptBlock
+            $elapsed = $stopwatch.Elapsed
+            Write-Host ('[OK] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Green
+            return $result
+        } catch {
+            $elapsed = $stopwatch.Elapsed
+            Write-Host ('[FEHLER] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Red
+            throw
+        }
+    }
+
+    if ($hasThreadJob) {
+        # Run the block on a background thread so the spinner can tick on the main thread.
+        $job = Start-ThreadJob -ScriptBlock $ScriptBlock -ErrorAction Stop
+    } else {
+        # Start-Job fallback: spawns a new PS process, so helper functions defined in
+        # the current session are not inherited. Re-source Common.ps1 via InitializationScript.
+        $commonPath = $Script:_InvokeWithSpinnerCommonPath
+        if ($commonPath -and (Test-Path -LiteralPath $commonPath)) {
+            $escapedPath = $commonPath.Replace("'", "''")
+            $initScript  = [scriptblock]::Create(". '$escapedPath'")
+            $job = Start-Job -ScriptBlock $ScriptBlock -InitializationScript $initScript -ErrorAction Stop
+        } else {
+            $job = Start-Job -ScriptBlock $ScriptBlock -ErrorAction Stop
+        }
+    }
+
+    $consoleAvailable = $true
+    try { $null = [Console]::CursorVisible } catch { $consoleAvailable = $false }
+
+    try {
+        while ($job.State -eq 'Running') {
+            $elapsed = $stopwatch.Elapsed
+            $display = '[~] {0} {1} {2:mm\:ss}' -f $Message, $spinChars[$spinIdx % $spinChars.Count], $elapsed
+            if ($consoleAvailable) {
+                [Console]::Write("`r{0,-$lineWidth}" -f $display)
+            }
+            $spinIdx++
+            Start-Sleep -Milliseconds $RefreshMilliseconds
+        }
+    }
+    finally {
+        # Ensure the spinner line is cleared before printing the final status.
+        if ($consoleAvailable) { [Console]::Write("`r{0}`r" -f (' ' * $lineWidth)) }
+    }
+
+    $elapsed = $stopwatch.Elapsed
+    $elapsedStr = $elapsed.ToString('mm\:ss')
+
+    # Read job errors BEFORE calling Receive-Job. With Start-ThreadJob,
+    # Receive-Job -ErrorAction SilentlyContinue replays error records from the
+    # job's stream into the current session's (suppressed) error stream, which
+    # can clear $job.Error before we ever read it. Reading it first – plus
+    # falling back to $job.ChildJobs errors for the ThreadJob case – ensures
+    # exceptions in the job are never silently discarded.
+    $jobError = $job.Error
+    if (-not ($jobError -and $jobError.Count -gt 0) -and
+        ($job.ChildJobs -and $job.ChildJobs.Count -gt 0)) {
+        $jobError = @($job.ChildJobs | ForEach-Object { $_.Error } | Where-Object { $_ })
+    }
+    $jobResult = Receive-Job -Job $job -Wait -ErrorAction SilentlyContinue
+
+    Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
+
+    if ($jobError -and $jobError.Count -gt 0) {
+        Write-Host ('[FEHLER] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Red
+        # Re-throw the first error from the job.
+        throw $jobError[0].Exception
+    }
+
+    Write-Host ('[OK] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Green
+    return $jobResult
 }
 
 function Read-TextWithDefault {
@@ -679,6 +794,39 @@ function Invoke-CloudflareApi {
     }
 }
 
+function Get-AdvancedParameterValue {
+    param([hashtable]$Advanced, [string]$Name, $Default = $null)
+    if ($Advanced -and $Advanced.ContainsKey($Name)) { return $Advanced[$Name] }
+    return $Default
+}
+
+function New-EmptyAdvancedArmParameters {
+    return [ordered]@{
+        adminPanelEnabled = $true
+        invitationOrgName = ''
+        signupsDomainsWhitelist = ''
+        orgCreationUsers = ''
+        diagnosticsEnabled = $true
+        allowInsecureHttp = $true
+        ssoEnabled = $false
+        ssoOnly = $false
+        ssoAuthority = ''
+        ssoClientId = ''
+        ssoScopes = 'openid profile email offline_access User.Read'
+        pushEnabled = $false
+        pushInstallationId = ''
+        pushUseEuServers = $false
+        acsDeployFoundation = $false
+        acsDataLocation = 'Germany'
+        acsDomainName = ''
+        storageAccountSku = 'Standard_LRS'
+        postgresSkuName = 'Standard_B1ms'
+        postgresStorageGB = 32
+        postgresBackupRetentionDays = 14
+        allowAzureServicesToPostgres = $true
+    }
+}
+
 function Get-SuggestedInvitationOrgName {
     param([Parameter(Mandatory)][string]$ZoneName)
     return $ZoneName
@@ -693,19 +841,28 @@ function Get-SuggestedSignupsDomainsWhitelist {
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 # Liest die aktuell an eine ACA-App gebundenen Custom Domains aus der Live-Umgebung.
 # Gibt ein (möglicherweise leeres) Array von Custom-Domain-Objekten zurück.
-# Gibt ein leeres Array zurück, wenn die App nicht existiert oder keine Custom Domains hat.
+# Gibt @() zurück wenn die Resource Group, die App oder die Custom Domains nicht existieren
+# (robuster no-op für Erstdeployments).
 function Get-AcaCustomDomains {
     param(
         [Parameter(Mandatory)][string]$ResourceGroupName,
         [Parameter(Mandatory)][string]$AppName
     )
-    $json = az containerapp show -g $ResourceGroupName -n $AppName `
-        --query 'properties.configuration.ingress.customDomains' `
-        -o json --only-show-errors 2>$null
-    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json.Trim() -eq 'null') {
-        return @()
-    }
     try {
+        # Temporarily suppress native-command errors so a missing RG or app never
+        # throws a terminating error (important when running inside Start-ThreadJob
+        # with $ErrorActionPreference = 'Stop').
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = 'SilentlyContinue'
+        $json = az containerapp show -g $ResourceGroupName -n $AppName `
+            --query 'properties.configuration.ingress.customDomains' `
+            -o json --only-show-errors 2>$null
+        $ErrorActionPreference = $prevEap
+        $exitCode = $LASTEXITCODE
+
+        if ($exitCode -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json.Trim() -eq 'null') {
+            return @()
+        }
         if ($PSVersionTable.PSVersion.Major -ge 6) {
             $parsed = $json | ConvertFrom-Json -Depth 20
         } else {
@@ -715,6 +872,8 @@ function Get-AcaCustomDomains {
         return @($parsed)
     }
     catch {
+        # Any unexpected error (e.g. NativeCommandExitException on PS 7.3+) is
+        # treated as "nothing to preserve" so a first deployment is never blocked.
         return @()
     }
 }
