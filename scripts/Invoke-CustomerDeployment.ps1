@@ -495,10 +495,8 @@ function New-CustomerConfigInteractive {
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 # Betroffen: Save-CustomerFiles (alle Pfade), temporärer Deploy-Pfad (Hauptpfad mit Secrets).
-# Mail-Modus-Zielzustand:
-#   SMTP Auth (useAuth=true):  smtpHost/Port/Security/Username/Password alle in ARM-Params geschrieben.
-#   Direct Send (useAuth=false): NUR smtpHost (kein Port, Security, Username, Password).
-#   ACA erhält damit immer den vollständigen, mode-korrekten Parameter-Satz.
+# mailMode ist Source of Truth: wird immer in ARM-Params geschrieben.
+# direct_send: nur smtpHost. smtp_auth/acs_smtp: Host+Port+Security+Username+Password.
 function New-CustomerAzureParameters {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -518,6 +516,7 @@ function New-CustomerAzureParameters {
             customHostname = @{ value = $Config.domain.hostname }
             mailRootDomain = @{ value = $Config.smtp.mailRootDomain }
             smtpUseAuth = @{ value = [bool]$Config.smtp.useAuth }
+            mailMode = @{ value = [string]$Config.smtp.mailMode }
             smtpFrom = @{ value = $Config.smtp.from }
             smtpFromName = @{ value = $Config.smtp.fromName }
             edgeMode = @{ value = $Config.azure.edgeMode }

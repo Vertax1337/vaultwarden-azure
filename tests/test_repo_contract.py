@@ -865,10 +865,10 @@ class RepoContractTests(unittest.TestCase):
         script = next(r['properties']['scriptContent'] for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
         # Early validation: Direct Send without SMTP_HOST_INPUT must exit 1
         self.assertIn(
-            'if [ "${SMTP_USE_AUTH:-false}" != "true" ] && [ -z "${SMTP_HOST_INPUT:-}" ]; then',
+            'if [ "${MAIL_MODE:-smtp_auth}" = "direct_send" ] && [ -z "${SMTP_HOST_INPUT:-}" ]; then',
             script
         )
-        self.assertIn('Direct Send (smtpUseAuth=false) requires an explicit smtpHost parameter', script)
+        self.assertIn('Direct Send (mailMode=direct_send) requires an explicit smtpHost parameter', script)
         self.assertIn('MX lookup is not supported in Azure DeploymentScript environments', script)
 
     def test_main_json_smtp_direct_send_uses_smtp_host_input_directly(self):
@@ -920,10 +920,10 @@ class RepoContractTests(unittest.TestCase):
     # -----------------------------------------------------------------------
 
     def test_main_json_smtp_secrets_conditional_on_smtp_use_auth(self):
-        """ACA container app secrets must include smtp-password only when smtpUseAuth=true.
+        """ACA container app secrets must include smtp-password only when mailMode != direct_send.
 
-        Transition SMTP Auth → Direct Send: smtp-password SecretRef must be absent.
-        Transition Direct Send → SMTP Auth: smtp-password SecretRef must be present.
+        Transition smtp_auth/acs_smtp → direct_send: smtp-password SecretRef must be absent.
+        Transition direct_send → smtp_auth/acs_smtp: smtp-password SecretRef must be present.
         Verified via the ARM concat/if expression in the container app resource.
         """
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
@@ -935,24 +935,27 @@ class RepoContractTests(unittest.TestCase):
         smtp_secret_names = [s['name'] for s in smtp_secrets]
         self.assertIn('smtp-password', smtp_secret_names, 'vwSecretsSmtp must contain smtp-password')
 
-        # The container app secrets expression must conditionally include vwSecretsSmtp
+        # The container app secrets expression must conditionally include vwSecretsSmtp based on mailMode
         container_app = next(
             r for r in data['resources'] if r.get('type') == 'Microsoft.App/containerApps'
         )
         secrets_expr = container_app['properties']['configuration']['secrets']
         self.assertIsInstance(secrets_expr, str, 'Container app secrets must be an ARM expression')
-        # Must use if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), ...) pattern
-        self.assertIn("if(parameters('smtpUseAuth'), variables('vwSecretsSmtp')", secrets_expr,
-                      'smtp-password secret must be conditional on smtpUseAuth in the ACA secrets list')
-        # Direct Send (smtpUseAuth=false) must result in empty array for smtp secrets
+        # Must use mailMode-based condition (not direct_send = use smtp secrets)
+        self.assertIn("not(equals(parameters('mailMode'), 'direct_send')), variables('vwSecretsSmtp')", secrets_expr,
+                      'smtp-password secret must be conditional on mailMode != direct_send in the ACA secrets list')
+        # direct_send must result in empty array for smtp secrets
         self.assertIn("json('[]')", secrets_expr,
-                      'ACA secrets must fall back to empty array when smtpUseAuth=false')
+                      'ACA secrets must fall back to empty array when mailMode=direct_send')
+        # smtpUseAuth must NOT be the gating condition for smtp secrets
+        self.assertNotIn("if(parameters('smtpUseAuth'), variables('vwSecretsSmtp')", secrets_expr,
+                         'ACA secrets must use mailMode, not smtpUseAuth, as the gating condition')
 
     def test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth(self):
-        """SMTP_USERNAME and SMTP_PASSWORD (secretRef) env vars must only appear when smtpUseAuth=true.
+        """SMTP_USERNAME and SMTP_PASSWORD (secretRef) env vars must only appear when mailMode != direct_send.
 
-        Transition SMTP Auth → Direct Send: these env vars must be absent from ACA env.
-        Transition Direct Send → SMTP Auth: these env vars must be present.
+        Transition smtp_auth/acs_smtp → direct_send: these env vars must be absent from ACA env.
+        Transition direct_send → smtp_auth/acs_smtp: these env vars must be present.
         Verified via vwEnvSmtpAuthCore variable and the conditional env concat expression.
         """
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
@@ -971,17 +974,20 @@ class RepoContractTests(unittest.TestCase):
                       'SMTP_PASSWORD env var must use secretRef, not a plain value')
         self.assertEqual(smtp_password_entry['secretRef'], 'smtp-password')
 
-        # The container app env expression must conditionally include vwEnvSmtpAuthCore
+        # The container app env expression must conditionally include vwEnvSmtpAuthCore based on mailMode
         container_app = next(
             r for r in data['resources'] if r.get('type') == 'Microsoft.App/containerApps'
         )
         env_expr = container_app['properties']['template']['containers'][0]['env']
         self.assertIsInstance(env_expr, str, 'Container app env must be an ARM expression')
-        self.assertIn("if(parameters('smtpUseAuth'), variables('vwEnvSmtpAuthCore')", env_expr,
-                      'SMTP_USERNAME/SMTP_PASSWORD env vars must be conditional on smtpUseAuth')
+        self.assertIn("not(equals(parameters('mailMode'), 'direct_send')), variables('vwEnvSmtpAuthCore')", env_expr,
+                      'SMTP_USERNAME/SMTP_PASSWORD env vars must be conditional on mailMode != direct_send')
+        # smtpUseAuth must NOT be the gating condition for vwEnvSmtpAuthCore
+        self.assertNotIn("if(parameters('smtpUseAuth'), variables('vwEnvSmtpAuthCore')", env_expr,
+                         'ACA env must use mailMode, not smtpUseAuth, as the gating condition for vwEnvSmtpAuthCore')
 
     def test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth(self):
-        """SMTP_AUTH_MECHANISM env var must only appear when smtpUseAuth=true and smtpAuthMechanism is set.
+        """SMTP_AUTH_MECHANISM env var must only appear when mailMode != direct_send and smtpAuthMechanism is set.
 
         Direct Send: SMTP_AUTH_MECHANISM must never be active.
         Verified via vwEnvSmtpAuthMechanism variable expression.
@@ -991,28 +997,31 @@ class RepoContractTests(unittest.TestCase):
 
         mechanism_expr = variables['vwEnvSmtpAuthMechanism']
         self.assertIsInstance(mechanism_expr, str, 'vwEnvSmtpAuthMechanism must be a conditional ARM expression')
-        # Must be disabled when smtpUseAuth=false (Direct Send)
-        self.assertIn("not(parameters('smtpUseAuth'))", mechanism_expr,
-                      'SMTP_AUTH_MECHANISM must be suppressed when smtpUseAuth=false')
+        # Must be disabled when mailMode=direct_send
+        self.assertIn("equals(parameters('mailMode'), 'direct_send')", mechanism_expr,
+                      'SMTP_AUTH_MECHANISM must be suppressed when mailMode=direct_send')
+        # smtpUseAuth must NOT be used as the gating condition
+        self.assertNotIn("not(parameters('smtpUseAuth'))", mechanism_expr,
+                         'vwEnvSmtpAuthMechanism must use mailMode, not smtpUseAuth')
         # Must be disabled when smtpAuthMechanism is empty
         self.assertIn("empty(parameters('smtpAuthMechanism'))", mechanism_expr,
                       'SMTP_AUTH_MECHANISM must be suppressed when smtpAuthMechanism is empty')
 
     def test_deployment_script_smtp_password_secret_only_in_auth_mode(self):
-        """Deployment script must create/update smtp-password KV secret only in SMTP Auth mode.
+        """Deployment script must create/update smtp-password KV secret only when mailMode != direct_send.
 
-        Direct Send (smtpUseAuth=false): secret creation must be skipped.
-        SMTP Auth (smtpUseAuth=true): secret must be created/updated.
+        direct_send (mailMode=direct_send): secret creation must be skipped.
+        smtp_auth/acs_smtp (mailMode!=direct_send): secret must be created/updated.
         """
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
         script = next(
             r['properties']['scriptContent']
             for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts'
         )
-        # SMTP password block must be guarded by SMTP_USE_AUTH check
-        self.assertIn('if [ "${SMTP_USE_AUTH:-false}" = "true" ]; then', script)
+        # SMTP password block must be guarded by MAIL_MODE check (not smtpUseAuth)
+        self.assertIn('if [ "${MAIL_MODE:-smtp_auth}" != "direct_send" ]; then', script)
         # The skip message for Direct Send must be present
-        self.assertIn('SMTP auth disabled (Direct Send). Skipping SMTP password secret.', script)
+        self.assertIn('SMTP auth disabled (mailMode=direct_send). Skipping SMTP password secret.', script)
         # The KV secret set command must be inside the SMTP Auth guard
         smtp_auth_block_start = script.find('# --- SMTP password ---')
         smtp_auth_block_end = script.find('# --- SSO client secret', smtp_auth_block_start)
@@ -1020,6 +1029,9 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('az keyvault secret set', smtp_block,
                       'az keyvault secret set for smtp-password must be inside SMTP Auth guard')
         self.assertIn('SMTP_PASSWORD_SECRET', smtp_block)
+        # smtpUseAuth must NOT be used as gating condition for SMTP password secret
+        self.assertNotIn('SMTP_USE_AUTH', smtp_block,
+                         'SMTP password secret guard must use MAIL_MODE, not SMTP_USE_AUTH')
 
     def test_main_json_smtp_shared_logic_comment_in_deploy_script(self):
         """Key SMTP state-transition functions in Invoke-CustomerDeployment.ps1 must have SHARED LOGIC comments."""
@@ -1663,6 +1675,138 @@ class RepoContractTests(unittest.TestCase):
             self.assertNotIn('smtpPassword', p, 'direct_send must not have smtpPassword in ARM params')
             # Config must reflect direct_send state
             self.assertEqual(config['smtp']['passwordSource'], 'none')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+
+    # ------------------------------------------------------------------
+    # ARM-level mailMode propagation (Source of Truth through all layers)
+    # ------------------------------------------------------------------
+
+    def test_main_json_has_mail_mode_parameter(self):
+        """main.json must declare mailMode as an ARM parameter with allowedValues."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        params = data['parameters']
+        self.assertIn('mailMode', params,
+                      'main.json must have a mailMode parameter')
+        mp = params['mailMode']
+        self.assertEqual(mp['type'], 'string', 'mailMode must be of type string')
+        allowed = mp.get('allowedValues', [])
+        self.assertIn('direct_send', allowed, 'mailMode must allow direct_send')
+        self.assertIn('smtp_auth', allowed, 'mailMode must allow smtp_auth')
+        self.assertIn('acs_smtp', allowed, 'mailMode must allow acs_smtp')
+        self.assertEqual(mp.get('defaultValue'), 'smtp_auth',
+                         'mailMode default must be smtp_auth for backward compat')
+
+    def test_main_json_deployment_script_receives_mail_mode(self):
+        """Deployment script must receive MAIL_MODE as an environment variable."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        ds = next(r for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts')
+        env_names = [e['name'] for e in ds['properties']['environmentVariables']]
+        self.assertIn('MAIL_MODE', env_names,
+                      'Deployment script must receive MAIL_MODE environment variable')
+        mail_mode_ev = next(e for e in ds['properties']['environmentVariables'] if e['name'] == 'MAIL_MODE')
+        self.assertIn("parameters('mailMode')", mail_mode_ev['value'],
+                      'MAIL_MODE must reference the mailMode ARM parameter')
+
+    def test_main_json_deployment_script_logs_mail_mode(self):
+        """Deployment script bash must log the active mail mode for traceability."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(
+            r['properties']['scriptContent']
+            for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts'
+        )
+        self.assertIn('MAIL_MODE', script,
+                      'Deployment script must reference MAIL_MODE')
+        self.assertIn('Mail mode:', script,
+                      'Deployment script must log the active mail mode')
+
+    def test_main_json_smtp_host_not_using_deployment_script_reference_for_direct_send(self):
+        """ACA SMTP_HOST env must not use deployment script output reference.
+        Instead, it must use parameters('smtpHost') directly for all modes
+        (direct_send always has smtpHost pre-set by the PowerShell script).
+        """
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        ca = next(r for r in data['resources'] if r.get('type') == 'Microsoft.App/containerApps')
+        env_expr = ca['properties']['template']['containers'][0]['env']
+        self.assertNotIn('deploymentScriptApiVersion', env_expr,
+                         'ACA SMTP_HOST must not reference deployment script output')
+        self.assertNotIn('.outputs.smtp_host', env_expr,
+                         'ACA SMTP_HOST must not use deployment script smtp_host output')
+        self.assertIn("parameters('smtpHost')", env_expr,
+                      "ACA SMTP_HOST must use parameters('smtpHost') directly")
+
+    def test_main_json_smtp_port_and_security_use_mail_mode(self):
+        """SMTP_PORT and SMTP_SECURITY env vars must use mailMode, not smtpUseAuth, as condition."""
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        smtp_common = data['variables']['vwEnvSmtpCommon']
+        port_entry = next(e for e in smtp_common if e['name'] == 'SMTP_PORT')
+        security_entry = next(e for e in smtp_common if e['name'] == 'SMTP_SECURITY')
+        self.assertIn("mailMode", port_entry['value'],
+                      'SMTP_PORT must use mailMode as condition, not smtpUseAuth')
+        self.assertIn("mailMode", security_entry['value'],
+                      'SMTP_SECURITY must use mailMode as condition, not smtpUseAuth')
+        self.assertNotIn("smtpUseAuth", port_entry['value'],
+                         'SMTP_PORT must not use smtpUseAuth as condition')
+        self.assertNotIn("smtpUseAuth", security_entry['value'],
+                         'SMTP_SECURITY must not use smtpUseAuth as condition')
+
+    def test_wrapper_exposes_mail_mode(self):
+        """main.deploytoazure.json wrapper must expose the mailMode parameter."""
+        wrapper = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        self.assertIn('mailMode', wrapper['parameters'],
+                      'Wrapper must expose mailMode parameter')
+        wp = wrapper['parameters']['mailMode']
+        self.assertEqual(wp['type'], 'string', 'Wrapper mailMode must be of type string')
+        self.assertIn('direct_send', wp.get('allowedValues', []),
+                      'Wrapper mailMode must allow direct_send')
+        self.assertIn('acs_smtp', wp.get('allowedValues', []),
+                      'Wrapper mailMode must allow acs_smtp')
+
+    @requires_pwsh
+    def test_generate_only_azure_params_include_mail_mode(self):
+        """azure.parameters.json must always include mailMode for all 3 mail states."""
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-mailmode-arm-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base += f" -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+
+            # Test direct_send
+            run_ps(base + " -CustomerNumber '9040' -VaultwardenDomain 'vault.mm1.de' -CloudflareZone 'mm1.de'"
+                        + " -MailMode 'direct_send' -MailRootDomain 'mm1.de'"
+                        + " -SmtpHost 'mx01.mm1.mail.protection.outlook.com'")
+            params_ds = json.loads((customers_root / 'vault-mm1-de' / 'azure.parameters.json').read_text())
+            self.assertIn('mailMode', params_ds['parameters'],
+                          'azure.parameters.json must contain mailMode for direct_send')
+            self.assertEqual(params_ds['parameters']['mailMode']['value'], 'direct_send',
+                             'mailMode must be direct_send in ARM params')
+
+            # Test smtp_auth
+            run_ps(base + " -CustomerNumber '9041' -VaultwardenDomain 'vault.mm2.de' -CloudflareZone 'mm2.de'"
+                        + " -MailMode 'smtp_auth' -MailRootDomain 'mm2.de' -SmtpUseAuth"
+                        + " -SmtpHost 'smtp.office365.com' -SmtpUsername 'vault@mm2.de'"
+                        + " -SmtpPassword (ConvertTo-SecureString 'pw' -AsPlainText -Force)")
+            params_sa = json.loads((customers_root / 'vault-mm2-de' / 'azure.parameters.json').read_text())
+            self.assertIn('mailMode', params_sa['parameters'],
+                          'azure.parameters.json must contain mailMode for smtp_auth')
+            self.assertEqual(params_sa['parameters']['mailMode']['value'], 'smtp_auth',
+                             'mailMode must be smtp_auth in ARM params')
+
+            # Test acs_smtp
+            run_ps(base + " -CustomerNumber '9042' -VaultwardenDomain 'vault.mm3.de' -CloudflareZone 'mm3.de'"
+                        + " -MailMode 'acs_smtp' -MailRootDomain 'mm3.de'"
+                        + " -SmtpUsername 'acsuser@mm3.de'"
+                        + " -SmtpPassword (ConvertTo-SecureString 'acskey' -AsPlainText -Force)")
+            params_acs = json.loads((customers_root / 'vault-mm3-de' / 'azure.parameters.json').read_text())
+            self.assertIn('mailMode', params_acs['parameters'],
+                          'azure.parameters.json must contain mailMode for acs_smtp')
+            self.assertEqual(params_acs['parameters']['mailMode']['value'], 'acs_smtp',
+                             'mailMode must be acs_smtp in ARM params')
         finally:
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)

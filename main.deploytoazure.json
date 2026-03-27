@@ -242,6 +242,18 @@
         "description": "Optional (nur SMTP Auth): SMTP Auth Mechanism. Mögliche Werte u.a.: Plain, Login, Xoauth2 (auch kommasepariert)."
       }
     },
+    "mailMode": {
+      "type": "string",
+      "defaultValue": "smtp_auth",
+      "allowedValues": [
+        "direct_send",
+        "smtp_auth",
+        "acs_smtp"
+      ],
+      "metadata": {
+        "description": "Mail-Modus: direct_send | smtp_auth | acs_smtp. Source of Truth für den Mail-Zielzustand."
+      }
+    },
     "ssoEnabled": {
       "type": "bool",
       "defaultValue": false,

@@ -642,3 +642,92 @@ Gesamt: 89/90 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored
 | **direct_send** | ✅ (Redeploy-Test) | ✅ | ✅ |
 | **smtp_auth** | ✅ | ✅ (Redeploy-Test) | ✅ (Transition-Test) |
 | **acs_smtp** | ✅ (Transition-Test) | n/a | ✅ |
+
+---
+
+## Schritt 7 – mailMode als Source of Truth durch alle ARM-Schichten propagiert
+
+### Problem / Ursache
+
+Schritt 6 etablierte `mailMode` als Source of Truth in der PowerShell/Config-Schicht. Aber die ARM-Template-Schicht (`main.json`, `main.deploytoazure.json`) und der Deployment-Script-Bash kannte `mailMode` noch nicht. Stattdessen verwendeten alle ARM-Ausdrücke noch das binäre `smtpUseAuth`-Flag:
+- ACA secrets: `if(parameters('smtpUseAuth'), vwSecretsSmtp, [])`
+- ACA env vwEnvSmtpAuthCore: `if(parameters('smtpUseAuth'), vwEnvSmtpAuthCore, [])`
+- vwEnvSmtpAuthMechanism: `if(or(not(parameters('smtpUseAuth')), empty(smtpAuthMechanism)), [], ...)`
+- SMTP_PORT: `if(smtpUseAuth, port, '25')`
+- SMTP_SECURITY: `if(smtpUseAuth, security, 'starttls')`
+- SMTP_HOST: verwendete `reference()` auf das Deployment Script für `direct_send`
+
+### Betroffene Dateien
+
+- `main.json` – Haupttemplate (Parameter, Variablen, ACA-Ressource, Deployment Script)
+- `main.deploytoazure.json` – Root-Wrapper
+- `current/main.deploytoazure.json` – Active-Current-Wrapper
+- `scripts/Invoke-CustomerDeployment.ps1` – `New-CustomerAzureParameters`
+- `tests/test_repo_contract.py` – 3 Tests aktualisiert, 7 neue Tests hinzugefügt
+
+### Umgesetzter Fix
+
+#### 1. `main.json` – `mailMode` ARM-Parameter
+- Neuer String-Parameter `mailMode` mit `allowedValues: ['direct_send', 'smtp_auth', 'acs_smtp']` und `defaultValue: 'smtp_auth'` (Backward-Compat)
+
+#### 2. `main.json` – Deployment Script Env Var
+- `MAIL_MODE` als Umgebungsvariable zum Deployment Script hinzugefügt
+- Deployment Script bash: loggt den aktiven Mail-Modus; Warnung wenn `mailMode=acs_smtp` aber `smtpHost != smtp.azurecomm.net`
+
+#### 3. `main.json` – ACA Secrets via mailMode
+- Ersetzt: `if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), json('[]'))`
+- Durch: `if(not(equals(parameters('mailMode'), 'direct_send')), variables('vwSecretsSmtp'), json('[]'))`
+
+#### 4. `main.json` – ACA ENV via mailMode
+- `vwEnvSmtpAuthCore`: `smtpUseAuth` → `mailMode != direct_send`
+- `vwEnvSmtpAuthMechanism`: `not(smtpUseAuth)` → `equals(mailMode, 'direct_send')`
+- `SMTP_PORT`: `smtpUseAuth` → `mailMode == direct_send ? '25' : port`
+- `SMTP_SECURITY`: `smtpUseAuth` → `mailMode == direct_send ? 'starttls' : security`
+
+#### 5. `main.json` – SMTP_HOST vereinfacht
+- Entfernt: `reference(deploymentScript).outputs.smtp_host` für `direct_send`
+- Ersetzt durch: `if(empty(smtpHost), 'smtp.office365.com', smtpHost)` für alle Modi
+- Begründung: Container App hat bereits explizite `dependsOn`-Abhängigkeit auf den Deployment Script. Der `smtpHost`-Parameter ist für alle Modi immer vorbelegt (PS-Script setzt ihn vor dem Deploy).
+
+#### 6. `Invoke-CustomerDeployment.ps1` – `New-CustomerAzureParameters`
+- `mailMode` wird jetzt als ARM-Parameter an `azure.parameters.json` geschrieben
+- `SHARED LOGIC`-Kommentar aktualisiert
+
+#### 7. Wrapper Updates
+- `main.deploytoazure.json`: `mailMode`-Parameter hinzugefügt
+- `current/main.deploytoazure.json`: `mailMode`-Parameter und Forward hinzugefügt
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende azure.parameters.json ohne `mailMode`**: Der ARM-Default `smtp_auth` greift. Vollständig backward-compat.
+- **SMTP_HOST vereinfacht**: Kein Deployment Script Output mehr für `direct_send`. Das ist korrekt, da der PS-Script immer einen expliziten `smtpHost`-Wert setzt. Minimales Risiko: Wenn jemand manuell mit leerem `smtpHost` deployed, greift `smtp.office365.com` als Fallback.
+- **`smtpUseAuth`-Parameter bleibt weiterhin**: Er ist noch in allen Schichten vorhanden für absolute Backward-Compat (z.B. alte Deploy-to-Azure-Buttons ohne `mailMode`). Er steuert jetzt keine ARM-Ausdrücke mehr direkt, aber der PS-Script schreibt ihn weiterhin zu ARM-Params.
+
+### Test / Validierung
+
+7 neue Contract-Tests (alle grün):
+- `test_main_json_has_mail_mode_parameter`
+- `test_main_json_deployment_script_receives_mail_mode`
+- `test_main_json_deployment_script_logs_mail_mode`
+- `test_main_json_smtp_host_not_using_deployment_script_reference_for_direct_send`
+- `test_main_json_smtp_port_and_security_use_mail_mode`
+- `test_wrapper_exposes_mail_mode`
+- `test_generate_only_azure_params_include_mail_mode` (pwsh)
+
+3 aktualisierte Tests (von smtpUseAuth auf mailMode):
+- `test_main_json_smtp_secrets_conditional_on_smtp_use_auth`
+- `test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth`
+- `test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth`
+
+Gesamt: 97/97 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+### Vollständige Source-of-Truth-Kette (nach Schritten 6 + 7)
+
+```
+Wizard (Read-ChoiceWithDefault)
+  → deployment.config.json (smtp.mailMode)
+  → azure.parameters.json (parameters.mailMode.value)
+  → ARM-Deploy (parameters('mailMode'))
+  → Deployment Script Bash (MAIL_MODE env var)
+  → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
+```
