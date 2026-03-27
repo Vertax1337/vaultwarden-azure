@@ -1416,5 +1416,257 @@ class RepoContractTests(unittest.TestCase):
                     )
 
 
+    # ------------------------------------------------------------------
+    # Mail-Modus: 3 exklusive Zielzustände (direct_send / smtp_auth / acs_smtp)
+    # ------------------------------------------------------------------
+
+    def test_wizard_has_three_mail_mode_choices(self):
+        """The wizard must expose exactly 3 mail mode choices: direct_send, smtp_auth, acs_smtp."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn("'direct_send'", script_text,
+                      "Wizard must have 'direct_send' as a mail mode choice")
+        self.assertIn("'smtp_auth'", script_text,
+                      "Wizard must have 'smtp_auth' as a mail mode choice")
+        self.assertIn("'acs_smtp'", script_text,
+                      "Wizard must have 'acs_smtp' as a mail mode choice")
+        # Choices must appear near the 3-way mail mode selector (Read-ChoiceWithDefault for Mail-Modus)
+        self.assertIn('Mail-Modus', script_text,
+                      "Wizard must prompt 'Mail-Modus' for the 3-way mode selection")
+
+    def test_acs_smtp_mode_auto_sets_host_and_acs_foundation(self):
+        """New-CustomerConfigObject with MailMode=acs_smtp must auto-set smtp.azurecomm.net and acsDeployFoundation=true."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('smtp.azurecomm.net', script_text,
+                      'smtp.azurecomm.net must be the auto-set SMTP host for acs_smtp mode')
+        self.assertIn('acsDeployFoundation', script_text,
+                      'acsDeployFoundation must be referenced in the acs_smtp handling')
+
+    def test_get_mail_mode_from_config_function_present(self):
+        """Get-MailModeFromConfig helper must be present for backward compatibility."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Get-MailModeFromConfig', script_text,
+                      'Get-MailModeFromConfig helper must be present in the script')
+        # Must handle backward compat derivation from smtp.useAuth
+        self.assertIn('smtp.useAuth', script_text,
+                      'Get-MailModeFromConfig must reference smtp.useAuth for backward compat')
+
+    def test_mail_mode_parameter_declared_in_script(self):
+        """Script must expose a -MailMode parameter with ValidateSet for 3 states."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn("[ValidateSet('direct_send','smtp_auth','acs_smtp')]", script_text,
+                      "Script must declare -MailMode with ValidateSet for all 3 states")
+
+    def test_new_customer_config_object_stores_mail_mode(self):
+        """New-CustomerConfigObject must store smtp.mailMode in the config object."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('mailMode = $effectiveMailMode', script_text,
+                      'New-CustomerConfigObject must write mailMode to smtp section')
+
+    def test_acs_smtp_wizard_prompts_for_acs_username(self):
+        """Wizard acs_smtp path must prompt for ACS SMTP Username, not for a generic SMTP Host."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('ACS SMTP Username', script_text,
+                      'acs_smtp wizard path must prompt for ACS SMTP Username')
+
+    def test_acs_smtp_mode_cli_validation_requires_username(self):
+        """CLI path must validate that acs_smtp requires -SmtpUsername."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('MailMode=acs_smtp', script_text,
+                      'CLI validation must mention MailMode=acs_smtp in error message')
+        self.assertIn('SmtpUsername', script_text,
+                      'CLI validation for acs_smtp must reference SmtpUsername')
+
+    @requires_pwsh
+    def test_generate_only_acs_smtp_mode_produces_correct_params(self):
+        """GenerateOnly with -MailMode acs_smtp must produce ARM parameters with acsDeployFoundation=true and smtp.azurecomm.net.
+
+        Scenario: New acs_smtp deployment.
+        Expected: smtpUseAuth=true, smtpHost=smtp.azurecomm.net, acsDeployFoundation=true,
+                  smtpUsername set, smtp.mailMode='acs_smtp' in config.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-acsmtp-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            command = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            command += " -CustomerNumber '9001' -VaultwardenDomain 'vault.acs-smtp.de' -CloudflareZone 'acs-smtp.de'"
+            command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            command += " -MailMode 'acs_smtp' -MailRootDomain 'acs-smtp.de'"
+            command += " -SmtpFrom 'vaultwarden@acs-smtp.de'"
+            command += " -SmtpUsername 'smtp-user@acs-smtp.de'"
+            command += " -SmtpPassword (ConvertTo-SecureString 'acskey' -AsPlainText -Force)"
+            run_ps(command)
+            params = json.loads(
+                (customers_root / 'vault-acs-smtp-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            config = json.loads(
+                (customers_root / 'vault-acs-smtp-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            # ACS SMTP mode: smtpUseAuth=true, smtpHost=smtp.azurecomm.net
+            self.assertTrue(p['smtpUseAuth']['value'], 'smtpUseAuth must be true for acs_smtp mode')
+            self.assertEqual(p['smtpHost']['value'], 'smtp.azurecomm.net',
+                             'smtpHost must be smtp.azurecomm.net for acs_smtp mode')
+            # acsDeployFoundation must be true
+            self.assertTrue(p['acsDeployFoundation']['value'],
+                            'acsDeployFoundation must be true for acs_smtp mode')
+            # smtpUsername must be present
+            self.assertEqual(p['smtpUsername']['value'], 'smtp-user@acs-smtp.de')
+            # Config must reflect acs_smtp state
+            self.assertEqual(config['smtp']['mailMode'], 'acs_smtp')
+            self.assertTrue(config['smtp']['useAuth'])
+            self.assertEqual(config['smtp']['host'], 'smtp.azurecomm.net')
+            self.assertEqual(config['smtp']['passwordSource'], 'prompt')
+            self.assertEqual(config['secrets']['smtpPasswordSource'], 'prompt')
+            # acsDeployFoundation in advanced ARM params
+            self.assertTrue(config['azure']['advancedArmParameters']['acsDeployFoundation'],
+                            'acsDeployFoundation must be true in stored config for acs_smtp')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_mail_mode_stored_for_all_three_modes(self):
+        """Config must store smtp.mailMode for all 3 modes (direct_send, smtp_auth, acs_smtp)."""
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-mailmodes-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base += f" -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+
+            # direct_send
+            run_ps(base + " -CustomerNumber '9010' -VaultwardenDomain 'vault.ds.de' -CloudflareZone 'ds.de'"
+                         + " -MailMode 'direct_send' -MailRootDomain 'ds.de'"
+                         + " -SmtpHost 'mx01.ds-de.mail.protection.outlook.com'")
+            config_ds = json.loads((customers_root / 'vault-ds-de' / 'deployment.config.json').read_text())
+            self.assertEqual(config_ds['smtp']['mailMode'], 'direct_send')
+            self.assertFalse(config_ds['smtp']['useAuth'])
+
+            # smtp_auth
+            run_ps(base + " -CustomerNumber '9011' -VaultwardenDomain 'vault.sa.de' -CloudflareZone 'sa.de'"
+                         + " -MailMode 'smtp_auth' -MailRootDomain 'sa.de' -SmtpUseAuth"
+                         + " -SmtpHost 'smtp.office365.com' -SmtpUsername 'vault@sa.de'"
+                         + " -SmtpPassword (ConvertTo-SecureString 'pw' -AsPlainText -Force)")
+            config_sa = json.loads((customers_root / 'vault-sa-de' / 'deployment.config.json').read_text())
+            self.assertEqual(config_sa['smtp']['mailMode'], 'smtp_auth')
+            self.assertTrue(config_sa['smtp']['useAuth'])
+
+            # acs_smtp
+            run_ps(base + " -CustomerNumber '9012' -VaultwardenDomain 'vault.acs2.de' -CloudflareZone 'acs2.de'"
+                         + " -MailMode 'acs_smtp' -MailRootDomain 'acs2.de'"
+                         + " -SmtpUsername 'acsuser@acs2.de'"
+                         + " -SmtpPassword (ConvertTo-SecureString 'acskey' -AsPlainText -Force)")
+            config_acs = json.loads((customers_root / 'vault-acs2-de' / 'deployment.config.json').read_text())
+            self.assertEqual(config_acs['smtp']['mailMode'], 'acs_smtp')
+            self.assertTrue(config_acs['smtp']['useAuth'])
+            self.assertEqual(config_acs['smtp']['host'], 'smtp.azurecomm.net')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_smtp_auth_to_acs_smtp_transition(self):
+        """Switching from smtp_auth to acs_smtp must produce a clean acs_smtp config.
+
+        Scenario: Existing smtp_auth config → redeploy as acs_smtp.
+        Expected: mailMode=acs_smtp, smtpHost=smtp.azurecomm.net, acsDeployFoundation=true,
+                  no stale smtp_auth-specific host value.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-sa2acs-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base += f" -CustomerNumber '9020' -VaultwardenDomain 'vault.transition.de' -CloudflareZone 'transition.de'"
+            base += f" -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            base += f" -MailRootDomain 'transition.de'"
+
+            # First: create smtp_auth config
+            run_ps(base + " -MailMode 'smtp_auth' -SmtpUseAuth"
+                        + " -SmtpHost 'smtp.office365.com' -SmtpUsername 'vault@transition.de'"
+                        + " -SmtpPassword (ConvertTo-SecureString 'pw' -AsPlainText -Force)")
+            # Transition to acs_smtp
+            run_ps(base + " -MailMode 'acs_smtp'"
+                        + " -SmtpUsername 'acsuser@transition.de'"
+                        + " -SmtpPassword (ConvertTo-SecureString 'acskey' -AsPlainText -Force)")
+
+            params = json.loads(
+                (customers_root / 'vault-transition-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            config = json.loads(
+                (customers_root / 'vault-transition-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            self.assertEqual(config['smtp']['mailMode'], 'acs_smtp',
+                             'After transition: smtp.mailMode must be acs_smtp')
+            self.assertTrue(p['smtpUseAuth']['value'])
+            self.assertEqual(p['smtpHost']['value'], 'smtp.azurecomm.net',
+                             'After acs_smtp transition: smtpHost must be smtp.azurecomm.net')
+            self.assertTrue(p['acsDeployFoundation']['value'],
+                            'After acs_smtp transition: acsDeployFoundation must be true')
+            # Old smtp_auth host must NOT be present
+            self.assertNotEqual(p.get('smtpHost', {}).get('value', ''), 'smtp.office365.com',
+                                'After acs_smtp transition: smtp.office365.com must be replaced')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_acs_smtp_to_direct_send_transition(self):
+        """Switching from acs_smtp to direct_send must produce a clean direct_send config.
+
+        Scenario: Existing acs_smtp config → redeploy as direct_send.
+        Expected: mailMode=direct_send, smtpUseAuth=false, no smtp-auth fields,
+                  no acsDeployFoundation in active state (no override needed).
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-acs2ds-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base += f" -CustomerNumber '9030' -VaultwardenDomain 'vault.acs2ds.de' -CloudflareZone 'acs2ds.de'"
+            base += f" -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            base += f" -MailRootDomain 'acs2ds.de'"
+
+            # First: create acs_smtp config
+            run_ps(base + " -MailMode 'acs_smtp'"
+                        + " -SmtpUsername 'acsuser@acs2ds.de'"
+                        + " -SmtpPassword (ConvertTo-SecureString 'acskey' -AsPlainText -Force)")
+            # Transition to direct_send
+            run_ps(base + " -MailMode 'direct_send'"
+                        + " -SmtpHost 'mx01.acs2ds-de.mail.protection.outlook.com'")
+
+            params = json.loads(
+                (customers_root / 'vault-acs2ds-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            config = json.loads(
+                (customers_root / 'vault-acs2ds-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            self.assertEqual(config['smtp']['mailMode'], 'direct_send',
+                             'After transition: smtp.mailMode must be direct_send')
+            self.assertFalse(p['smtpUseAuth']['value'],
+                             'After direct_send transition: smtpUseAuth must be false')
+            self.assertEqual(p['smtpHost']['value'], 'mx01.acs2ds-de.mail.protection.outlook.com')
+            # No SMTP Auth fields
+            self.assertNotIn('smtpPort', p, 'direct_send must not have smtpPort in ARM params')
+            self.assertNotIn('smtpUsername', p, 'direct_send must not have smtpUsername in ARM params')
+            self.assertNotIn('smtpPassword', p, 'direct_send must not have smtpPassword in ARM params')
+            # Config must reflect direct_send state
+            self.assertEqual(config['smtp']['passwordSource'], 'none')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+
 if __name__ == '__main__':
     unittest.main()

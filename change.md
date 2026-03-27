@@ -556,3 +556,89 @@ Da `vwEnvBase` in allen Pfaden über den identischen ARM-`concat`-Ausdruck einge
 - `test_hardened_envs_not_in_wizard_prompt` – Keine Wizard-Read-Host-Prompts für Härtungs-ENVs
 
 Gesamt: 78/79 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert – betrifft gespeicherte Kundenkonfig mit abweichendem RG-Namensschema).
+
+---
+
+## Schritt 6 – Mail-Architektur: 3 exklusive Mail-Zielzustände (direct_send / smtp_auth / acs_smtp)
+
+### Problem / Ursache
+
+Die bisherige Mail-Architektur verwendete einen binären `smtpUseAuth`-Flag und ein separates `acsDeployFoundation`-Flag. Es gab keine zentrale Source of Truth für den Mail-Modus. Insbesondere:
+- `acs_smtp` war nicht als eigener State modelliert (nur implizit via `smtpUseAuth=true` + `acsDeployFoundation=true`)
+- Kein `mailMode`-Feld in der gespeicherten Konfiguration
+- Wizard fragte nur „SMTP Auth verwenden? (j/n)" ohne ACS-SMTP als eigenständige Option
+- State-Übergänge konnten inkonsistente Kombinationen erzeugen (z.B. `acs_smtp` → `direct_send` ließ `acsDeployFoundation=true` in der Config stehen)
+
+### Betroffene Dateien
+
+- `scripts/Invoke-CustomerDeployment.ps1` – Hauptänderung (Wizard, Config-Erzeugung, CLI-Pfad)
+- `tests/test_repo_contract.py` – Neue Contract-Tests
+- `change.md`
+
+### Shared-Logic-Analyse
+
+Geänderte SHARED LOGIC-Funktionen:
+1. **`New-CustomerConfigObject`**: Neue `$MailMode`-Parameter; `smtp.mailMode` wird als kanonisches Feld geschrieben. `smtp.useAuth` wird aus `$MailMode` abgeleitet. `acs_smtp` setzt auto `smtpHost=smtp.azurecomm.net` und `acsDeployFoundation=true`.
+2. **`New-CustomerConfigInteractive`** (Wizard): Binäre „SMTP Auth verwenden?"-Frage durch 3-Wege-Modus-Selektor (`Read-ChoiceWithDefault`) ersetzt. ACS Foundation Prompt wird bei `acs_smtp` übersprungen (implizit gesetzt).
+3. **CLI-Pfad**: `$effectiveMailMode` wird aus `$MailMode` oder `$SmtpUseAuth` abgeleitet. Neue Validierung: `acs_smtp` erfordert `-SmtpUsername`.
+
+Neue Hilfsfunktion:
+- **`Get-MailModeFromConfig`** (SHARED LOGIC): Leitet `mailMode` aus gespeicherter Config ab (Backward-Compat: `smtp.mailMode` explizit → sonst via `smtp.useAuth` + `acsDeployFoundation`).
+
+### Umgesetzter Fix
+
+#### 1. `$MailMode` als Script-Parameter
+```powershell
+[ValidateSet('direct_send','smtp_auth','acs_smtp')][string]$MailMode,
+```
+
+#### 2. `Get-MailModeFromConfig` Hilfsfunktion
+Leitet `mailMode` aus gespeicherter Config ab. Ermöglicht nahtlose Backward-Compat beim Laden älterer Configs ohne `smtp.mailMode`-Feld.
+
+#### 3. `New-CustomerConfigObject` – Mail-Modus-Logik
+- `$MailMode` überschreibt `$SmtpUseAuth` wenn gesetzt
+- `$effectiveMailMode` → `smtp.mailMode` in Config
+- `acs_smtp`: `SmtpHost` auto-gesetzt auf `smtp.azurecomm.net`, `advanced.acsDeployFoundation = $true`
+
+#### 4. Wizard (`New-CustomerConfigInteractive`) – 3-Wege-Modus-Selektor
+- Ersetzte Binary-Prompt durch `Read-ChoiceWithDefault` mit Choices: `direct_send`, `smtp_auth`, `acs_smtp`
+- `direct_send`: Prompt für MX-Endpunkt (wie bisher)
+- `smtp_auth`: Host-Default bleibt `smtp.office365.com` (kein Prompt in Hauptpfad)
+- `acs_smtp`: Host auto-gesetzt auf `smtp.azurecomm.net`, Prompt für ACS-spezifischen Username; `acsDeployFoundation` wird ohne Prompt auf `$true` gesetzt
+
+#### 5. CLI-Pfad – `$effectiveMailMode` + Validierung
+- `$effectiveMailMode` abgeleitet aus `$MailMode` oder `$SmtpUseAuth`
+- Neue Validierung: `acs_smtp` erfordert `-SmtpUsername`
+- Backward-Compat: `-SmtpUseAuth` switch weiterhin funktional (leitet `smtp_auth` ab)
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende Configs ohne `smtp.mailMode`**: `Get-MailModeFromConfig` leitet den Modus aus `smtp.useAuth` + `acsDeployFoundation` ab. Backward-compat gewährleistet.
+- **ACS Foundation Default im Wizard geändert**: Für `direct_send`/`smtp_auth` ist der ACS-Foundation-Prompt-Default jetzt `$false` (war `$true` für neue Configs). Das ist konsistenter mit dem CLI-Default.
+- **`$SmtpUseAuth`-Switch bleibt funktional**: Alle Tests die `-SmtpUseAuth` übergeben, funktionieren weiterhin; `acs_smtp` ist nur via `-MailMode` erreichbar (nicht via `-SmtpUseAuth`).
+- **`smtp.mailMode` ist ein neues Pflichtfeld** in allen neuen Configs; `smtp.useAuth` bleibt als abgeleitetes Feld erhalten.
+
+### Test / Validierung
+
+10 neue Contract-Tests (alle grün):
+- `test_wizard_has_three_mail_mode_choices`
+- `test_acs_smtp_mode_auto_sets_host_and_acs_foundation`
+- `test_get_mail_mode_from_config_function_present`
+- `test_mail_mode_parameter_declared_in_script`
+- `test_new_customer_config_object_stores_mail_mode`
+- `test_acs_smtp_wizard_prompts_for_acs_username`
+- `test_acs_smtp_mode_cli_validation_requires_username`
+- `test_generate_only_acs_smtp_mode_produces_correct_params` (pwsh)
+- `test_generate_only_mail_mode_stored_for_all_three_modes` (pwsh)
+- `test_generate_only_smtp_auth_to_acs_smtp_transition` (pwsh)
+- `test_generate_only_acs_smtp_to_direct_send_transition` (pwsh)
+
+Gesamt: 89/90 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+### State-Transition-Matrix (vollständig getestet)
+
+| Von → | direct_send | smtp_auth | acs_smtp |
+|-------|-------------|-----------|----------|
+| **direct_send** | ✅ (Redeploy-Test) | ✅ | ✅ |
+| **smtp_auth** | ✅ | ✅ (Redeploy-Test) | ✅ (Transition-Test) |
+| **acs_smtp** | ✅ (Transition-Test) | n/a | ✅ |
