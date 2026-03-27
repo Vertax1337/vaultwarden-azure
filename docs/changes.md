@@ -7,6 +7,19 @@ Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Te
 ---
 
 
+## Revision 17 – 2026-03-27
+
+### Scripts / Wizard – Refactoring
+
+| Änderung | Detail |
+|---|---|
+| `VaultwardenDeployment.Flows.ps1` (neu) | Neue Library-Datei unter `scripts/lib/`. Enthält sechs dedizierte Flow-Funktionen: `Start-NewDeploymentFlow`, `Start-DeployExistingFlow`, `Start-EditAndDeployFlow`, `Start-RepairFlow`, `Start-UpdateFlow`, `Start-GenerateOnlyFlow`. |
+| `Invoke-CustomerDeployment.ps1` | Dot-Source für `VaultwardenDeployment.Flows.ps1` hinzugefügt. Großer inline `switch`-Block durch kompakte Dispatch-Aufrufe der neuen `Start-*Flow`-Funktionen ersetzt. |
+| Keine Verhaltensänderung | Rein strukturelles Refactoring. Bestehende Logik bleibt unverändert. `Get-InteractiveAction` ist weiterhin der aktive Root-Action-Selector. `Show-DeploymentMainMenu` bleibt Placeholder. |
+
+---
+
+
 ## Revision 16 – 2026-03-27
 
 ### Scripts / Wizard

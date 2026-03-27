@@ -1,5 +1,74 @@
 # Change Log
 
+## Refactor: Extract interactive action flows into VaultwardenDeployment.Flows.ps1
+
+### Problem / Ursache
+
+`scripts/Invoke-CustomerDeployment.ps1` contained all six interactive action execution
+branches inline inside a single `switch` block. As the wizard grows, this makes the
+file harder to maintain and extends the distance between related logic. The interactive
+flow/orchestration code should live in a dedicated library file so that each action path
+can be found, tested and extended independently.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Flows.ps1` (new)
+- `scripts/Invoke-CustomerDeployment.ps1` (dot-source added; switch branches replaced)
+- `change.md`
+- `docs/changes.md`
+
+### Umgesetzter Fix
+
+1. Created `scripts/lib/VaultwardenDeployment.Flows.ps1` with six dedicated flow functions:
+   - `Start-NewDeploymentFlow` – calls `New-CustomerConfigInteractive`
+   - `Start-DeployExistingFlow` – selects customer code and loads the stored config
+   - `Start-EditAndDeployFlow` – selects customer code, loads config, edits it interactively
+   - `Start-RepairFlow` – selects customer code and signals `Repair = $true`
+   - `Start-UpdateFlow` – selects customer code and signals `Update = $true`
+   - `Start-GenerateOnlyFlow` – calls `New-CustomerConfigInteractive`, signals `GenerateOnly = $true`
+
+   Each function returns a hashtable with the values the calling script must apply to its
+   local state (`Config`, `CustomerNumber`, `Repair`, `Update`, `GenerateOnly`).
+
+2. Added a dot-source of `VaultwardenDeployment.Flows.ps1` in
+   `scripts/Invoke-CustomerDeployment.ps1` (after the existing Common and Menu dot-sources).
+
+3. Replaced the large inline `switch` block in `Invoke-CustomerDeployment.ps1` with
+   compact dispatch calls to the new `Start-*Flow` functions. The calling code assigns
+   the returned values (`$config`, `$Repair`, `$Update`, `$GenerateOnly`, `$CustomerNumber`)
+   back into the script scope, preserving identical downstream behavior.
+
+### Design-Entscheide
+
+- Helper functions (`Get-InteractiveAction`, `Select-CustomerCodeInteractive`,
+  `New-CustomerConfigInteractive`, `Get-RuntimeSecretParameters`) are **not** moved.
+  They remain in `Invoke-CustomerDeployment.ps1`.
+- `Show-DeploymentMainMenu` remains a placeholder and is still not activated.
+- `Get-InteractiveAction` remains the active root action selector; action mapping unchanged.
+- NonInteractive behavior is unchanged; the new flow functions are only reachable through
+  the existing interactive guard (`-not $NonInteractive`).
+
+### Risiken / Nebenwirkungen
+
+- No logic change. Each `Start-*Flow` function is a verbatim extraction of the
+  corresponding `switch` branch; only the variable assignments are hoisted back to the
+  call site via the returned hashtable.
+- Side-effect review for affected workflows:
+  - **Wizard (New deployment)** – behavior unchanged; `Start-NewDeploymentFlow` calls `New-CustomerConfigInteractive` as before
+  - **GenerateOnly** – behavior unchanged; `Start-GenerateOnlyFlow` calls `New-CustomerConfigInteractive` and returns `GenerateOnly = $true`
+  - **Existing Config Deploy** – behavior unchanged; `Start-DeployExistingFlow` selects and loads config as before
+  - **Existing Config Edit+Deploy** – behavior unchanged; `Start-EditAndDeployFlow` selects, loads, and edits as before
+  - **Repair** – behavior unchanged; `Start-RepairFlow` selects customer and signals `Repair = $true`
+  - **Update** – behavior unchanged; `Start-UpdateFlow` selects customer and signals `Update = $true`
+  - **Deploy-to-Azure Wrapper** – not affected (non-interactive path)
+  - **current/…** – no change
+
+### Test / Validierung
+
+- `python3 -m pytest tests/test_repo_contract.py -v` → all 115 tests pass.
+
+---
+
 ## Fix: Harden vendored ConsoleMenu import in VaultwardenDeployment.Menu.ps1
 
 ### Problem / Ursache
