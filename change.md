@@ -1,6 +1,86 @@
 # Change Log
 
-## Revert: RG artifact name restored to custom wizard-override value
+## Fix: Preserve existing ACA custom domain bindings on redeploy
+
+### Problem / Ursache
+
+When redeploying an existing customer deployment (edit+deploy, update, repair), any
+previously configured Azure Container Apps custom domain binding was silently removed.
+
+Root cause: The ARM/Bicep ingress definition in `main.bicep`/`main.json` does not carry
+forward existing `customDomains`. Each redeploy replaces the ingress config, dropping all
+previously bound custom domains. A second issue existed in the `cloudflare-managed` flow:
+the `Set-AcaIngressRestrictions.ps1 -Redeploy` step re-deployed the container app without
+restoring the domain just bound by `Bind-AcaCustomDomain.ps1`, causing the binding to be
+lost a second time.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Common.ps1`
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `scripts/Set-AcaIngressRestrictions.ps1`
+- `tests/test_repo_contract.py`
+- `change.md`
+- `docs/changes.md`
+
+### Umgesetzter Fix
+
+1. **Shared library** (`VaultwardenDeployment.Common.ps1`): Two new `# SHARED LOGIC:`
+   functions were added:
+   - `Get-AcaCustomDomains` – reads the current `customDomains` array from a live ACA
+     container app via `az containerapp show`. Returns an empty array if the app does not
+     exist or has no custom domains.
+   - `Restore-AcaCustomDomains` – re-applies a previously captured array of custom domain
+     bindings using `az containerapp hostname bind` / `az containerapp hostname add`.
+     Silently no-ops on empty input.
+
+2. **Invoke-CustomerDeployment.ps1**: Before `Deploy-AzureStack.ps1`, the live custom
+   domain state is captured and persisted to `deployment.config.json` under a clearly
+   separated `preservedInfraState.customDomains` key. After the deploy, for `basic` mode,
+   the captured domains are immediately restored. The `GenerateOnly` guard remains before
+   the capture, so file-only generation never queries Azure.
+
+3. **Set-AcaIngressRestrictions.ps1**: When `-Redeploy` is active, the current custom
+   domain state is captured before the redeploy and restored afterwards. This fixes the
+   `cloudflare-managed` flow where the ingress-restrictions redeploy was dropping the
+   domain just bound by `Bind-AcaCustomDomain.ps1`.
+
+4. **Tests** (`tests/test_repo_contract.py`): 14 new tests were added covering:
+   - Presence and `# SHARED LOGIC:` marking of the two new functions
+   - Contract that `Invoke-CustomerDeployment.ps1` and `Set-AcaIngressRestrictions.ps1`
+     call both new functions
+   - `preservedInfraState` key written to config
+   - `Get-AcaCustomDomains` defensive empty-array behaviour
+   - `Restore-AcaCustomDomains` no-op on empty input
+   - `GenerateOnly` path does not attempt live Azure queries
+   - New `GenerateOnly` deployment does not produce a `preservedInfraState` section
+
+### Design-Entscheide
+
+- **Custom domain setup stays manual**: New deployments are unaffected. The first
+  domain binding is still a manual post-deployment step (only live state is read and
+  preserved – nothing is auto-generated).
+- **`preservedInfraState` section**: Adopted runtime state is stored separately from
+  user-authored business config. It is clearly marked as a technical state section.
+- **Generic, not customer-specific**: The implementation loops over whatever custom
+  domains the live app has, without hardcoding any hostname.
+- **Graceful degradation**: If the app does not yet exist or has no custom domains, both
+  helper functions return/noop without error.
+
+### Risiken / Nebenwirkungen
+
+- For `cloudflare-managed` mode the certificate ID used by `Restore-AcaCustomDomains`
+  must still be valid in the ACA environment. If the certificate was deleted manually,
+  the restore falls back to `az containerapp hostname add` (without cert binding) and
+  emits a warning.
+- No ARM/Bicep changes – the ingress definition is unchanged.
+
+### Test / Validierung
+
+- `python3 -m pytest tests/test_repo_contract.py -v` → all tests pass.
+
+---
+
 
 ### Problem / Ursache
 The previous change incorrectly renamed `resourceGroupName` from `rg-musef-prod-neu` to

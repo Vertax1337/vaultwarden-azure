@@ -1880,6 +1880,163 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(temp_root, ignore_errors=True)
             shutil.rmtree(current_root, ignore_errors=True)
 
+    # -----------------------------------------------------------------------
+    # ACA Custom Domain Preservation
+    # -----------------------------------------------------------------------
+
+    def test_get_aca_custom_domains_function_present(self):
+        """Get-AcaCustomDomains must be defined in the common library."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Get-AcaCustomDomains', content,
+                      'Get-AcaCustomDomains must be defined in VaultwardenDeployment.Common.ps1')
+
+    def test_restore_aca_custom_domains_function_present(self):
+        """Restore-AcaCustomDomains must be defined in the common library."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Restore-AcaCustomDomains', content,
+                      'Restore-AcaCustomDomains must be defined in VaultwardenDeployment.Common.ps1')
+
+    def test_get_aca_custom_domains_has_shared_logic_comment(self):
+        """Get-AcaCustomDomains must have a # SHARED LOGIC: comment above it."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        idx = content.find('function Get-AcaCustomDomains')
+        self.assertGreater(idx, 0, 'Get-AcaCustomDomains not found')
+        context = content[max(0, idx - 600):idx]
+        self.assertIn('# SHARED LOGIC:', context,
+                      'Get-AcaCustomDomains must have a # SHARED LOGIC: comment above it')
+
+    def test_restore_aca_custom_domains_has_shared_logic_comment(self):
+        """Restore-AcaCustomDomains must have a # SHARED LOGIC: comment above it."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        idx = content.find('function Restore-AcaCustomDomains')
+        self.assertGreater(idx, 0, 'Restore-AcaCustomDomains not found')
+        context = content[max(0, idx - 600):idx]
+        self.assertIn('# SHARED LOGIC:', context,
+                      'Restore-AcaCustomDomains must have a # SHARED LOGIC: comment above it')
+
+    def test_deploy_script_calls_get_aca_custom_domains(self):
+        """Invoke-CustomerDeployment.ps1 must call Get-AcaCustomDomains before deploy."""
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('Get-AcaCustomDomains', content,
+                      'Invoke-CustomerDeployment.ps1 must call Get-AcaCustomDomains')
+
+    def test_deploy_script_calls_restore_aca_custom_domains(self):
+        """Invoke-CustomerDeployment.ps1 must call Restore-AcaCustomDomains after deploy."""
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('Restore-AcaCustomDomains', content,
+                      'Invoke-CustomerDeployment.ps1 must call Restore-AcaCustomDomains')
+
+    def test_deploy_script_stores_preserved_infra_state(self):
+        """Invoke-CustomerDeployment.ps1 must store custom domains in preservedInfraState."""
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn('preservedInfraState', content,
+                      'Invoke-CustomerDeployment.ps1 must store state in preservedInfraState')
+
+    def test_ingress_restrictions_script_calls_get_aca_custom_domains(self):
+        """Set-AcaIngressRestrictions.ps1 must call Get-AcaCustomDomains before redeploy."""
+        content = (REPO_ROOT / 'scripts' / 'Set-AcaIngressRestrictions.ps1').read_text(encoding='utf-8')
+        self.assertIn('Get-AcaCustomDomains', content,
+                      'Set-AcaIngressRestrictions.ps1 must call Get-AcaCustomDomains')
+
+    def test_ingress_restrictions_script_calls_restore_aca_custom_domains(self):
+        """Set-AcaIngressRestrictions.ps1 must call Restore-AcaCustomDomains after redeploy."""
+        content = (REPO_ROOT / 'scripts' / 'Set-AcaIngressRestrictions.ps1').read_text(encoding='utf-8')
+        self.assertIn('Restore-AcaCustomDomains', content,
+                      'Set-AcaIngressRestrictions.ps1 must call Restore-AcaCustomDomains')
+
+    def test_get_aca_custom_domains_returns_empty_for_nonexistent_app(self):
+        """Get-AcaCustomDomains must return an empty array when the app does not exist."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        idx = content.find('function Get-AcaCustomDomains')
+        self.assertGreater(idx, 0, 'Get-AcaCustomDomains not found')
+        body_start = content.find('{', idx)
+        self.assertGreater(body_start, 0)
+        depth = 0
+        body_end = body_start
+        for i, ch in enumerate(content[body_start:], start=body_start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    body_end = i
+                    break
+        func_body = content[body_start:body_end + 1]
+        self.assertIn('LASTEXITCODE', func_body,
+                      'Get-AcaCustomDomains must check $LASTEXITCODE for graceful error handling')
+        self.assertIn('return @()', func_body,
+                      'Get-AcaCustomDomains must return an empty array on failure')
+
+    def test_restore_aca_custom_domains_noop_on_empty(self):
+        """Restore-AcaCustomDomains must silently no-op when CustomDomains is empty."""
+        content = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        idx = content.find('function Restore-AcaCustomDomains')
+        self.assertGreater(idx, 0)
+        # Extract function body
+        body_start = content.find('{', idx)
+        self.assertGreater(body_start, 0)
+        # Find matching closing brace
+        depth = 0
+        body_end = body_start
+        for i, ch in enumerate(content[body_start:], start=body_start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    body_end = i
+                    break
+        func_body = content[body_start:body_end + 1]
+        self.assertIn('.Count -eq 0', func_body,
+                      'Restore-AcaCustomDomains must short-circuit on empty CustomDomains')
+
+    @requires_pwsh
+    def test_get_aca_custom_domains_is_valid_powershell(self):
+        """Get-AcaCustomDomains must be syntactically valid PowerShell."""
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        run_ps(f". '{common_lib}'; Write-Host 'OK'")
+
+    @requires_pwsh
+    def test_generate_only_does_not_capture_custom_domains(self):
+        """GenerateOnly path must not attempt to query Azure (no Get-AcaCustomDomains call after GenerateOnly guard)."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        # The GenerateOnly early-return must appear BEFORE the Get-AcaCustomDomains call
+        generate_only_idx = script_text.find("if ($GenerateOnly)")
+        get_domains_idx = script_text.find('Get-AcaCustomDomains')
+        self.assertGreater(generate_only_idx, 0, 'GenerateOnly guard not found')
+        self.assertGreater(get_domains_idx, 0, 'Get-AcaCustomDomains call not found')
+        self.assertLess(generate_only_idx, get_domains_idx,
+                        'GenerateOnly return guard must appear BEFORE Get-AcaCustomDomains call '
+                        'so that file-only generation does not attempt live Azure queries')
+
+    @requires_pwsh
+    def test_generate_only_new_deployment_no_preserved_state(self):
+        """GenerateOnly for a new deployment must not produce a preservedInfraState section."""
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-preserve-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            cmd = (
+                f"& '{REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1'}'"
+                " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+                f" -CustomersRoot '{str(customers_root)}' -GenerateOnly -NonInteractive"
+                " -CustomerNumber '9900' -VaultwardenDomain 'vault.preserve-test.de'"
+                " -CloudflareZone 'preserve-test.de'"
+                " -MailMode 'direct_send' -MailRootDomain 'preserve-test.de'"
+                " -SmtpHost 'mx01.preserve-test.de'"
+            )
+            run_ps(cmd)
+            config_path = customers_root / 'vault-preserve-test-de' / 'deployment.config.json'
+            self.assertTrue(config_path.exists(), 'deployment.config.json must be created')
+            config = json.loads(config_path.read_text(encoding='utf-8'))
+            self.assertNotIn('preservedInfraState', config,
+                             'New deployment config must not have preservedInfraState section '
+                             '(no live Azure query occurs in GenerateOnly mode)')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
 
 if __name__ == '__main__':
     unittest.main()
