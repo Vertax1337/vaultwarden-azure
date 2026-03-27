@@ -1,5 +1,61 @@
 # Change Log
 
+## Fix: Menu crash in Select-CustomerCodeInteractive + normalize stored RG artifacts
+
+### Problem / Ursache
+
+**1. Menu crash: `Select-CustomerCodeInteractive` (.Count on non-array)**
+Running action `3` (Vorhandene Konfiguration bearbeiten und deployen) could immediately crash with:
+
+    Select-CustomerCodeInteractive : Die Eigenschaft "Count" wurde für dieses Objekt nicht gefunden.
+
+Root cause: PowerShell unwraps a pipeline result to a scalar when only one item is returned.
+`$customers = Get-AvailableCustomerCodes ...` was not guaranteed to be an array type when exactly one customer directory exists, so `.Count` failed under StrictMode.
+
+**2. Stored resource group artifact not normalized**
+Both `customers/vault-50er-jahre-museum-de/deployment.config.json` and `current/deployment.config.json` contained the old/abbreviated resource group name `rg-musef-prod-neu`, which does not match the repo's intended CAF-like naming convention `rg-{customer}-vault-{env}-{region}`.
+The contract test `test_rg_default_in_stored_configs` was failing because of this.
+
+### Betroffene Dateien
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `customers/vault-50er-jahre-museum-de/deployment.config.json`
+- `current/deployment.config.json`
+- `change.md`
+
+### Umgesetzter Fix
+
+**1. `Select-CustomerCodeInteractive` – array normalization**
+Changed:
+
+    $customers = Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot
+
+to:
+
+    $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
+
+The `@()` array sub-expression operator guarantees that `$customers` is always an array, regardless of whether zero, one, or multiple customer directories exist. All subsequent `.Count` checks and index-based accesses now work correctly in all cases.
+
+**2. Stored RG artifact normalization**
+Updated `resourceGroupName` in both checked-in config files from:
+
+    rg-musef-prod-neu
+
+to the fully normalized value derived from domain `vault.50er-jahre-museum.de`, environment `prod`, location `northeurope`:
+
+    rg-50er-jahre-museum-vault-prod-neu
+
+### Risiken / Nebenwirkungen
+- The array-normalization fix is purely defensive; `Get-AvailableCustomerCodes` already wraps its return value in `@()` in the library, but the call-site guard eliminates any pipeline-unwrapping risk.
+- The RG rename in stored artifacts is a checked-in config correction only. No deployed Azure resources are affected (the config is a local artifact, not a deployed resource).
+- Existing menu rendering, selection by index, and selection by folder name are all unaffected.
+
+### Test / Validierung
+- `python3 -m pytest tests/test_repo_contract.py -v` → 101 passed, 0 failures.
+- `test_rg_default_in_stored_configs` now passes.
+- Zero/one/multiple customer dir logic verified by code review of `Select-CustomerCodeInteractive`.
+
+---
+
 ## Fix: ARM template syntax error + smtp_auth SMTP host override
 
 ### Problem / Ursache
