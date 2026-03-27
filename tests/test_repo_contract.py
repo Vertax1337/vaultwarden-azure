@@ -915,5 +915,352 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('Direct Send', script_text)
         self.assertIn('erfordert einen expliziten -SmtpHost-Parameter', script_text)
 
+    # -----------------------------------------------------------------------
+    # Mail-Modus-Zustandswechsel: ARM-Template-Struktur (Pure Python)
+    # -----------------------------------------------------------------------
+
+    def test_main_json_smtp_secrets_conditional_on_smtp_use_auth(self):
+        """ACA container app secrets must include smtp-password only when smtpUseAuth=true.
+
+        Transition SMTP Auth → Direct Send: smtp-password SecretRef must be absent.
+        Transition Direct Send → SMTP Auth: smtp-password SecretRef must be present.
+        Verified via the ARM concat/if expression in the container app resource.
+        """
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        variables = data['variables']
+
+        # vwSecretsSmtp must contain exactly the smtp-password entry
+        smtp_secrets = variables['vwSecretsSmtp']
+        self.assertIsInstance(smtp_secrets, list)
+        smtp_secret_names = [s['name'] for s in smtp_secrets]
+        self.assertIn('smtp-password', smtp_secret_names, 'vwSecretsSmtp must contain smtp-password')
+
+        # The container app secrets expression must conditionally include vwSecretsSmtp
+        container_app = next(
+            r for r in data['resources'] if r.get('type') == 'Microsoft.App/containerApps'
+        )
+        secrets_expr = container_app['properties']['configuration']['secrets']
+        self.assertIsInstance(secrets_expr, str, 'Container app secrets must be an ARM expression')
+        # Must use if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), ...) pattern
+        self.assertIn("if(parameters('smtpUseAuth'), variables('vwSecretsSmtp')", secrets_expr,
+                      'smtp-password secret must be conditional on smtpUseAuth in the ACA secrets list')
+        # Direct Send (smtpUseAuth=false) must result in empty array for smtp secrets
+        self.assertIn("json('[]')", secrets_expr,
+                      'ACA secrets must fall back to empty array when smtpUseAuth=false')
+
+    def test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth(self):
+        """SMTP_USERNAME and SMTP_PASSWORD (secretRef) env vars must only appear when smtpUseAuth=true.
+
+        Transition SMTP Auth → Direct Send: these env vars must be absent from ACA env.
+        Transition Direct Send → SMTP Auth: these env vars must be present.
+        Verified via vwEnvSmtpAuthCore variable and the conditional env concat expression.
+        """
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        variables = data['variables']
+
+        # vwEnvSmtpAuthCore must contain SMTP_USERNAME and SMTP_PASSWORD (secretRef)
+        smtp_auth_env = variables['vwEnvSmtpAuthCore']
+        self.assertIsInstance(smtp_auth_env, list)
+        env_names = [e['name'] for e in smtp_auth_env]
+        self.assertIn('SMTP_USERNAME', env_names, 'vwEnvSmtpAuthCore must contain SMTP_USERNAME')
+        self.assertIn('SMTP_PASSWORD', env_names, 'vwEnvSmtpAuthCore must contain SMTP_PASSWORD')
+
+        # SMTP_PASSWORD must be a secretRef (not a plain value)
+        smtp_password_entry = next(e for e in smtp_auth_env if e['name'] == 'SMTP_PASSWORD')
+        self.assertIn('secretRef', smtp_password_entry,
+                      'SMTP_PASSWORD env var must use secretRef, not a plain value')
+        self.assertEqual(smtp_password_entry['secretRef'], 'smtp-password')
+
+        # The container app env expression must conditionally include vwEnvSmtpAuthCore
+        container_app = next(
+            r for r in data['resources'] if r.get('type') == 'Microsoft.App/containerApps'
+        )
+        env_expr = container_app['properties']['template']['containers'][0]['env']
+        self.assertIsInstance(env_expr, str, 'Container app env must be an ARM expression')
+        self.assertIn("if(parameters('smtpUseAuth'), variables('vwEnvSmtpAuthCore')", env_expr,
+                      'SMTP_USERNAME/SMTP_PASSWORD env vars must be conditional on smtpUseAuth')
+
+    def test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth(self):
+        """SMTP_AUTH_MECHANISM env var must only appear when smtpUseAuth=true and smtpAuthMechanism is set.
+
+        Direct Send: SMTP_AUTH_MECHANISM must never be active.
+        Verified via vwEnvSmtpAuthMechanism variable expression.
+        """
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        variables = data['variables']
+
+        mechanism_expr = variables['vwEnvSmtpAuthMechanism']
+        self.assertIsInstance(mechanism_expr, str, 'vwEnvSmtpAuthMechanism must be a conditional ARM expression')
+        # Must be disabled when smtpUseAuth=false (Direct Send)
+        self.assertIn("not(parameters('smtpUseAuth'))", mechanism_expr,
+                      'SMTP_AUTH_MECHANISM must be suppressed when smtpUseAuth=false')
+        # Must be disabled when smtpAuthMechanism is empty
+        self.assertIn("empty(parameters('smtpAuthMechanism'))", mechanism_expr,
+                      'SMTP_AUTH_MECHANISM must be suppressed when smtpAuthMechanism is empty')
+
+    def test_deployment_script_smtp_password_secret_only_in_auth_mode(self):
+        """Deployment script must create/update smtp-password KV secret only in SMTP Auth mode.
+
+        Direct Send (smtpUseAuth=false): secret creation must be skipped.
+        SMTP Auth (smtpUseAuth=true): secret must be created/updated.
+        """
+        data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
+        script = next(
+            r['properties']['scriptContent']
+            for r in data['resources'] if r.get('type') == 'Microsoft.Resources/deploymentScripts'
+        )
+        # SMTP password block must be guarded by SMTP_USE_AUTH check
+        self.assertIn('if [ "${SMTP_USE_AUTH:-false}" = "true" ]; then', script)
+        # The skip message for Direct Send must be present
+        self.assertIn('SMTP auth disabled (Direct Send). Skipping SMTP password secret.', script)
+        # The KV secret set command must be inside the SMTP Auth guard
+        smtp_auth_block_start = script.find('# --- SMTP password ---')
+        smtp_auth_block_end = script.find('# --- SSO client secret', smtp_auth_block_start)
+        smtp_block = script[smtp_auth_block_start:smtp_auth_block_end]
+        self.assertIn('az keyvault secret set', smtp_block,
+                      'az keyvault secret set for smtp-password must be inside SMTP Auth guard')
+        self.assertIn('SMTP_PASSWORD_SECRET', smtp_block)
+
+    def test_main_json_smtp_shared_logic_comment_in_deploy_script(self):
+        """Key SMTP state-transition functions in Invoke-CustomerDeployment.ps1 must have SHARED LOGIC comments."""
+        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        # New-CustomerConfigObject must be marked shared logic (smtp section definition)
+        self.assertIn('New-CustomerConfigObject', script_text)
+        # New-CustomerAzureParameters must be marked shared logic (arm param generation)
+        self.assertIn('New-CustomerAzureParameters', script_text)
+        # Get-RuntimeSecretParameters must be marked shared logic (smtp password prompt)
+        self.assertIn('Get-RuntimeSecretParameters', script_text)
+        # Save-CustomerFiles must be marked shared logic (orchestration)
+        self.assertIn('Save-CustomerFiles', script_text)
+        # All key functions above must have the SHARED LOGIC marker nearby
+        for func_name in ['New-CustomerConfigObject', 'Get-RuntimeSecretParameters',
+                          'New-CustomerConfigInteractive', 'New-CustomerAzureParameters',
+                          'Save-CustomerFiles']:
+            idx = script_text.find(f'function {func_name}')
+            self.assertGreater(idx, 0, f'function {func_name} not found in script')
+            # The SHARED LOGIC comment must appear within 600 chars before the function keyword
+            context = script_text[max(0, idx - 600):idx]
+            self.assertIn('# SHARED LOGIC:', context,
+                          f'function {func_name} must have a # SHARED LOGIC: comment above it')
+
+    # -----------------------------------------------------------------------
+    # Mail-Modus-Zustandswechsel: Parameter-Generierung (pwsh-abhängig)
+    # -----------------------------------------------------------------------
+
+    @requires_pwsh
+    def test_generate_only_smtp_auth_params_include_all_auth_fields(self):
+        """GenerateOnly with -SmtpUseAuth must produce ARM parameters with all SMTP Auth fields.
+
+        Scenario: Direct Send → SMTP Auth transition.
+        Expected: smtpHost, smtpPort, smtpSecurity, smtpUsername present; smtpUseAuth=true.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-smtpauth-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            command = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            command += " -CustomerNumber '8001' -VaultwardenDomain 'vault.smtpauth.de' -CloudflareZone 'smtpauth.de'"
+            command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            command += " -MailRootDomain 'smtpauth.de' -SmtpUseAuth -SmtpFrom 'vaultwarden@smtpauth.de'"
+            command += " -SmtpHost 'smtp.office365.com' -SmtpPort '587' -SmtpSecurity 'starttls'"
+            command += " -SmtpUsername 'vaultwarden@smtpauth.de'"
+            command += " -SmtpPassword (ConvertTo-SecureString 'secret' -AsPlainText -Force)"
+            run_ps(command)
+            params = json.loads(
+                (customers_root / 'vault-smtpauth-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            config = json.loads(
+                (customers_root / 'vault-smtpauth-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            # SMTP Auth mode: all auth fields must be present
+            self.assertTrue(p['smtpUseAuth']['value'], 'smtpUseAuth must be true in ARM params')
+            self.assertEqual(p['smtpHost']['value'], 'smtp.office365.com')
+            self.assertEqual(p['smtpPort']['value'], '587')
+            self.assertEqual(p['smtpSecurity']['value'], 'starttls')
+            self.assertEqual(p['smtpUsername']['value'], 'vaultwarden@smtpauth.de')
+            # smtpPassword not in non-secure params (requires -IncludeSecureParameters)
+            self.assertNotIn('smtpPassword', p)
+            # Config must reflect SMTP Auth state
+            self.assertTrue(config['smtp']['useAuth'])
+            self.assertEqual(config['smtp']['passwordSource'], 'prompt')
+            self.assertEqual(config['secrets']['smtpPasswordSource'], 'prompt')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_direct_send_params_exclude_smtp_auth_fields(self):
+        """GenerateOnly without -SmtpUseAuth must produce ARM parameters with no SMTP Auth fields.
+
+        Scenario: SMTP Auth → Direct Send transition.
+        Expected: smtpHost present; smtpPort, smtpSecurity, smtpUsername, smtpPassword absent.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-directsend-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            command = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            command += " -CustomerNumber '8002' -VaultwardenDomain 'vault.directsend.de' -CloudflareZone 'directsend.de'"
+            command += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            command += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            command += " -MailRootDomain 'directsend.de' -SmtpFrom 'vaultwarden@directsend.de'"
+            command += " -SmtpHost 'mx01.directsend-de.mail.protection.outlook.com'"
+            run_ps(command)
+            params = json.loads(
+                (customers_root / 'vault-directsend-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            config = json.loads(
+                (customers_root / 'vault-directsend-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            # Direct Send mode: smtpUseAuth=false, only smtpHost present
+            self.assertFalse(p['smtpUseAuth']['value'], 'smtpUseAuth must be false in ARM params')
+            self.assertEqual(p['smtpHost']['value'], 'mx01.directsend-de.mail.protection.outlook.com')
+            # No SMTP Auth fields must be present in ARM params
+            self.assertNotIn('smtpPort', p, 'smtpPort must not be in ARM params for Direct Send')
+            self.assertNotIn('smtpSecurity', p, 'smtpSecurity must not be in ARM params for Direct Send')
+            self.assertNotIn('smtpUsername', p, 'smtpUsername must not be in ARM params for Direct Send')
+            self.assertNotIn('smtpPassword', p, 'smtpPassword must not be in ARM params for Direct Send')
+            # Config must reflect Direct Send state
+            self.assertFalse(config['smtp']['useAuth'])
+            self.assertEqual(config['smtp']['username'], '')
+            self.assertEqual(config['smtp']['passwordSource'], 'none')
+            self.assertEqual(config['secrets']['smtpPasswordSource'], 'none')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_mode_switch_smtp_auth_to_direct_send_clears_auth_fields(self):
+        """Switching from SMTP Auth to Direct Send must produce a clean Direct Send config.
+
+        Scenario: Existing SMTP Auth config → new GenerateOnly run with Direct Send.
+        Expected: config.smtp has no stale SMTP Auth values; ARM params have no auth fields.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-switch-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base_cmd = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base_cmd += " -CustomerNumber '8003' -VaultwardenDomain 'vault.switchtest.de' -CloudflareZone 'switchtest.de'"
+            base_cmd += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base_cmd += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            base_cmd += " -MailRootDomain 'switchtest.de' -SmtpFrom 'vaultwarden@switchtest.de'"
+
+            # Step 1: Generate SMTP Auth config
+            cmd_auth = base_cmd + " -SmtpUseAuth -SmtpHost 'smtp.office365.com' -SmtpPort '587' -SmtpSecurity 'starttls' -SmtpUsername 'vw@switchtest.de'"
+            cmd_auth += " -SmtpPassword (ConvertTo-SecureString 'secret' -AsPlainText -Force)"
+            run_ps(cmd_auth)
+            auth_config = json.loads(
+                (customers_root / 'vault-switchtest-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            self.assertTrue(auth_config['smtp']['useAuth'], 'Step 1: config must be SMTP Auth')
+
+            # Step 2: Switch to Direct Send – re-run with same customer code
+            cmd_direct = base_cmd + " -SmtpHost 'mx01.switchtest-de.mail.protection.outlook.com'"
+            run_ps(cmd_direct)
+            direct_config = json.loads(
+                (customers_root / 'vault-switchtest-de' / 'deployment.config.json').read_text(encoding='utf-8')
+            )
+            direct_params = json.loads(
+                (customers_root / 'vault-switchtest-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            p = direct_params['parameters']
+            # Config: SMTP Auth fields must be cleared
+            self.assertFalse(direct_config['smtp']['useAuth'], 'After switch: useAuth must be false')
+            self.assertEqual(direct_config['smtp']['username'], '', 'After switch: username must be empty')
+            self.assertEqual(direct_config['smtp']['port'], '', 'After switch: port must be empty')
+            self.assertEqual(direct_config['smtp']['passwordSource'], 'none',
+                             'After switch: passwordSource must be none')
+            self.assertEqual(direct_config['secrets']['smtpPasswordSource'], 'none',
+                             'After switch: smtpPasswordSource must be none')
+            # ARM params: no SMTP Auth fields
+            self.assertFalse(p['smtpUseAuth']['value'])
+            self.assertNotIn('smtpPort', p, 'smtpPort must not remain in ARM params after mode switch')
+            self.assertNotIn('smtpUsername', p, 'smtpUsername must not remain in ARM params after mode switch')
+            self.assertNotIn('smtpPassword', p, 'smtpPassword must not remain in ARM params after mode switch')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_existing_smtp_auth_redeploy_no_regression(self):
+        """Re-running GenerateOnly for an existing SMTP Auth config must not lose auth fields.
+
+        Scenario: Existing SMTP Auth deployment → redeploy with same config.
+        Expected: All SMTP Auth ARM params preserved; no regression.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-redeploy-auth-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base_cmd = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base_cmd += " -CustomerNumber '8004' -VaultwardenDomain 'vault.redeploy.de' -CloudflareZone 'redeploy.de'"
+            base_cmd += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base_cmd += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            base_cmd += " -MailRootDomain 'redeploy.de' -SmtpFrom 'vaultwarden@redeploy.de'"
+            base_cmd += " -SmtpUseAuth -SmtpHost 'smtp.office365.com' -SmtpPort '587' -SmtpSecurity 'starttls' -SmtpUsername 'vw@redeploy.de'"
+            base_cmd += " -SmtpPassword (ConvertTo-SecureString 'secret' -AsPlainText -Force)"
+
+            # Run twice to simulate redeploy
+            run_ps(base_cmd)
+            run_ps(base_cmd)
+
+            params = json.loads(
+                (customers_root / 'vault-redeploy-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            self.assertTrue(p['smtpUseAuth']['value'])
+            self.assertEqual(p['smtpHost']['value'], 'smtp.office365.com')
+            self.assertEqual(p['smtpPort']['value'], '587')
+            self.assertEqual(p['smtpSecurity']['value'], 'starttls')
+            self.assertEqual(p['smtpUsername']['value'], 'vw@redeploy.de')
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
+    @requires_pwsh
+    def test_generate_only_existing_direct_send_redeploy_no_smtp_auth_ballast(self):
+        """Re-running GenerateOnly for an existing Direct Send config must not activate SMTP Auth fields.
+
+        Scenario: Existing Direct Send deployment → redeploy with same config.
+        Expected: No SMTP Auth fields in ARM params; no regression.
+        """
+        temp_root = pathlib.Path(tempfile.mkdtemp(prefix='vw-test-redeploy-direct-'))
+        current_root = REPO_ROOT / 'current'
+        try:
+            customers_root = temp_root / 'customers'
+            customers_root.mkdir(parents=True, exist_ok=True)
+            base_cmd = '& ' + "'{}'".format(REPO_ROOT / 'scripts/Invoke-CustomerDeployment.ps1')
+            base_cmd += " -CustomerNumber '8005' -VaultwardenDomain 'vault.directredo.de' -CloudflareZone 'directredo.de'"
+            base_cmd += " -Environment 'prod' -Location 'germanywestcentral' -Mode 'basic'"
+            base_cmd += f" -CustomersRoot '{str(customers_root).replace(chr(39), chr(39)*2)}' -GenerateOnly -NonInteractive"
+            base_cmd += " -MailRootDomain 'directredo.de' -SmtpFrom 'vaultwarden@directredo.de'"
+            base_cmd += " -SmtpHost 'mx01.directredo-de.mail.protection.outlook.com'"
+
+            # Run twice to simulate redeploy
+            run_ps(base_cmd)
+            run_ps(base_cmd)
+
+            params = json.loads(
+                (customers_root / 'vault-directredo-de' / 'azure.parameters.json').read_text(encoding='utf-8')
+            )
+            p = params['parameters']
+            self.assertFalse(p['smtpUseAuth']['value'])
+            self.assertIn('smtpHost', p)
+            self.assertNotIn('smtpPort', p)
+            self.assertNotIn('smtpSecurity', p)
+            self.assertNotIn('smtpUsername', p)
+            self.assertNotIn('smtpPassword', p)
+        finally:
+            shutil.rmtree(temp_root, ignore_errors=True)
+            shutil.rmtree(current_root, ignore_errors=True)
+
 if __name__ == '__main__':
     unittest.main()

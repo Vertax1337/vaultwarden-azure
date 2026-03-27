@@ -90,6 +90,12 @@ function New-EmptyAdvancedArmParameters {
     }
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Betroffen: Wizard (New-CustomerConfigInteractive), CLI-Pfad, GenerateOnly.
+# Enthält die kanonische SMTP-Zustandsdefinition (useAuth, host, port, security,
+# username, passwordSource). Beim Mail-Modus-Wechsel (Direct Send ↔ SMTP Auth)
+# müssen die nicht mehr gültigen Felder hier explizit leer gesetzt werden.
 function New-CustomerConfigObject {
     param(
         [Parameter(Mandatory)][string]$CustomerNumber,
@@ -282,6 +288,11 @@ function New-AdvancedArmParametersInteractive {
     return $advanced
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Betroffen: Hauptpfad (interaktiv + CLI + GenerateOnly).
+# Beim Wechsel SMTP Auth → Direct Send: smtp.useAuth=false → kein SMTP-Passwort anfordern.
+# Beim Wechsel Direct Send → SMTP Auth: smtp.useAuth=true → SMTP-Passwort wird hier angefordert.
 function Get-RuntimeSecretParameters {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -313,6 +324,13 @@ function Get-RuntimeSecretParameters {
     return $result
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Betroffen: Wizard-Pfade 1 (Neu), 3 (Bearbeiten+Deployen), 6 (GenerateOnly interaktiv).
+# Mail-Modus-Wechsel-Logik:
+#   Direct Send → SMTP Auth: port/security/username werden aktiv abgefragt; host = smtp.office365.com (Default).
+#   SMTP Auth → Direct Send: host wird als MX-Endpunkt abgefragt; port/security/username bleiben leer.
+#   Stale SMTP-Auth-Felder werden durch explizite Initialisierung ($smtpPortValue = '', usw.) bereinigt.
 function New-CustomerConfigInteractive {
     param([hashtable]$ExistingConfig)
 
@@ -407,6 +425,13 @@ function New-CustomerConfigInteractive {
     return New-CustomerConfigObject -CustomerNumber $customerNumber -VaultwardenDomain $vaultwardenDomain -ZoneName $zoneName -ResourceGroupName $resourceGroupName -Environment $environment -Location $location -Mode $mode -MailRootDomain $mailRootDomain -SmtpUseAuth:$smtpUseAuthValue -SmtpFrom $smtpFrom -SmtpFromName $smtpFromNameValue -SmtpHost $smtpHostValue -SmtpPort $smtpPortValue -SmtpSecurity $smtpSecurityValue -SmtpUsername $smtpUsernameValue -EnableWaf:$enableWafValue -EnableRateLimit:$enableRateLimitValue -AdvancedArmParameters $advancedArm -Secrets $secrets
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Betroffen: Save-CustomerFiles (alle Pfade), temporärer Deploy-Pfad (Hauptpfad mit Secrets).
+# Mail-Modus-Zielzustand:
+#   SMTP Auth (useAuth=true):  smtpHost/Port/Security/Username/Password alle in ARM-Params geschrieben.
+#   Direct Send (useAuth=false): NUR smtpHost (kein Port, Security, Username, Password).
+#   ACA erhält damit immer den vollständigen, mode-korrekten Parameter-Satz.
 function New-CustomerAzureParameters {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -519,6 +544,10 @@ Achtung:
 "@
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Betroffen: Alle Pfade (Wizard, CLI, GenerateOnly, Repair, Update).
+# Schreibt deployment.config.json, azure.parameters.json und current/-Kopien.
 function Save-CustomerFiles {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -654,7 +683,7 @@ elseif (-not $config) {
     $secretMeta = @{}
     if ($advanced.ssoEnabled) { $secretMeta.ssoClientSecretSource = 'prompt-or-cli' }
     if ($advanced.pushEnabled) { $secretMeta.pushInstallationKeySource = 'prompt-or-cli' }
-    $config = New-CustomerConfigObject -CustomerNumber $CustomerNumber -VaultwardenDomain $VaultwardenDomain -ZoneName $CloudflareZone -ResourceGroupName $ResourceGroupName -Environment $Environment -Location $Location -Mode $Mode -MailRootDomain $MailRootDomain -SmtpUseAuth:$effectiveSmtpUseAuth -SmtpFrom $SmtpFrom -SmtpFromName $SmtpFromName -SmtpHost $SmtpHost -SmtpPort $(if ($SmtpPort) { $SmtpPort } else { '587' }) -SmtpSecurity $(if ($SmtpSecurity) { $SmtpSecurity } else { 'starttls' }) -SmtpUsername $SmtpUsername -EnableWaf:$effectiveEnableWaf -EnableRateLimit:$effectiveEnableRateLimit -AdvancedArmParameters $advanced -Secrets $secretMeta
+    $config = New-CustomerConfigObject -CustomerNumber $CustomerNumber -VaultwardenDomain $VaultwardenDomain -ZoneName $CloudflareZone -ResourceGroupName $ResourceGroupName -Environment $Environment -Location $Location -Mode $Mode -MailRootDomain $MailRootDomain -SmtpUseAuth:$effectiveSmtpUseAuth -SmtpFrom $SmtpFrom -SmtpFromName $SmtpFromName -SmtpHost $SmtpHost -SmtpPort $(if ($SmtpPort) { $SmtpPort } elseif ($effectiveSmtpUseAuth) { '587' } else { '' }) -SmtpSecurity $(if ($SmtpSecurity) { $SmtpSecurity } else { 'starttls' }) -SmtpUsername $SmtpUsername -EnableWaf:$effectiveEnableWaf -EnableRateLimit:$effectiveEnableRateLimit -AdvancedArmParameters $advanced -Secrets $secretMeta
 }
 
 if ([string]::IsNullOrWhiteSpace($config.smtp.from)) {
