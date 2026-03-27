@@ -575,6 +575,9 @@ $spinnerAcaName = $config.azure.appName
 $preservedCustomDomains = Invoke-WithSpinner -Message 'ACA Custom Domain State wird gesichert' -ScriptBlock {
     @(Get-AcaCustomDomains -ResourceGroupName $using:spinnerRgName -AppName $using:spinnerAcaName)
 }
+# Receive-Job returns $null (not @()) when the job output is an empty array.
+# Normalise here so that .Count can be used safely under Set-StrictMode -Version Latest.
+if ($null -eq $preservedCustomDomains) { $preservedCustomDomains = @() }
 if ($preservedCustomDomains.Count -gt 0) {
     Write-Step ("  {0} vorhandene Custom Domain(s) gefunden und im Config gespeichert." -f $preservedCustomDomains.Count)
     if (-not $config.ContainsKey('preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }

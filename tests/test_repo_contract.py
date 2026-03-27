@@ -2215,6 +2215,20 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('$ErrorActionPreference = $prevEap', body,
                       'Get-AcaCustomDomains must restore $ErrorActionPreference after the az call')
 
+    def test_preserved_custom_domains_null_normalized_after_spinner(self):
+        """Invoke-CustomerDeployment.ps1 must normalize the spinner result to @() when null.
+
+        Receive-Job returns $null (not @()) when a background job's output is an empty
+        array.  Without the explicit null check, accessing .Count on $null raises a
+        PropertyNotFoundException under Set-StrictMode -Version Latest (Windows PS 5.1).
+        """
+        content = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        self.assertIn(
+            "if ($null -eq $preservedCustomDomains) { $preservedCustomDomains = @() }",
+            content,
+            "Invoke-CustomerDeployment.ps1 must normalise $preservedCustomDomains to @() "
+            "after the spinner call so that .Count is safe under Set-StrictMode -Version Latest"
+        )
 
     def test_invoke_with_spinner_has_threadjob_fallback(self):
         """Invoke-WithSpinner must not unconditionally depend on Start-ThreadJob.
