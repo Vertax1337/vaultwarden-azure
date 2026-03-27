@@ -1,6 +1,14 @@
 ﻿Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# Capture this file's path so Invoke-WithSpinner can pass it as a Start-Job
+# initialization script when Start-ThreadJob is not available.
+$Script:_InvokeWithSpinnerCommonPath = $PSCommandPath
+
+# Try to load the optional ThreadJob module (built into PS 7+; installable on PS 5.1).
+# This is best-effort; Invoke-WithSpinner falls back gracefully if ThreadJob is absent.
+Import-Module ThreadJob -ErrorAction SilentlyContinue
+
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-RepoRoot {
@@ -46,6 +54,9 @@ function Write-Step {
 # Prints: [OK] <Message> (<mm:ss>)          on success
 # Prints: [FEHLER] <Message> (<mm:ss>)       on error, then re-throws
 # Returns the value produced by ScriptBlock.
+# Compatibility: prefers Start-ThreadJob; falls back to Start-Job (with Common.ps1
+# re-sourced as InitializationScript so helper functions are available); last resort
+# is synchronous direct execution without a spinner.
 function Invoke-WithSpinner {
     param(
         [Parameter(Mandatory)][string]$Message,
@@ -58,8 +69,35 @@ function Invoke-WithSpinner {
     $lineWidth   = 82   # wide enough to cover [~] + message + spinner char + mm:ss
     $stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
 
-    # Run the block on a background thread so the spinner can tick on the main thread.
-    $job = Start-ThreadJob -ScriptBlock $ScriptBlock -ErrorAction Stop
+    # Determine the best available job mechanism. Check each time so that late-loaded
+    # modules (e.g. ThreadJob installed by an earlier step) are picked up.
+    $hasThreadJob = $null -ne (Get-Command -Name 'Start-ThreadJob' -ErrorAction SilentlyContinue)
+    $hasStartJob  = $null -ne (Get-Command -Name 'Start-Job'       -ErrorAction SilentlyContinue)
+
+    if (-not $hasThreadJob -and -not $hasStartJob) {
+        # No job infrastructure at all – run synchronously without spinner.
+        Write-Host ('[~] {0} (kein Hintergrundjob verfügbar, direkte Ausführung)' -f $Message)
+        $result  = & $ScriptBlock
+        $elapsed = $stopwatch.Elapsed
+        Write-Host ('[OK] {0} ({1})' -f $Message, $elapsed.ToString('mm\:ss')) -ForegroundColor Green
+        return $result
+    }
+
+    if ($hasThreadJob) {
+        # Run the block on a background thread so the spinner can tick on the main thread.
+        $job = Start-ThreadJob -ScriptBlock $ScriptBlock -ErrorAction Stop
+    } else {
+        # Start-Job fallback: spawns a new PS process, so helper functions defined in
+        # the current session are not inherited. Re-source Common.ps1 via InitializationScript.
+        $commonPath = $Script:_InvokeWithSpinnerCommonPath
+        if ($commonPath -and (Test-Path -LiteralPath $commonPath)) {
+            $escapedPath = $commonPath.Replace("'", "''")
+            $initScript  = [scriptblock]::Create(". '$escapedPath'")
+            $job = Start-Job -ScriptBlock $ScriptBlock -InitializationScript $initScript -ErrorAction Stop
+        } else {
+            $job = Start-Job -ScriptBlock $ScriptBlock -ErrorAction Stop
+        }
+    }
 
     $consoleAvailable = $true
     try { $null = [Console]::CursorVisible } catch { $consoleAvailable = $false }

@@ -2166,7 +2166,7 @@ class RepoContractTests(unittest.TestCase):
     def test_get_aca_custom_domains_is_robust_for_first_deploy(self):
         """Get-AcaCustomDomains must silently return empty for missing RG / app (first-deploy robustness).
 
-        The function is called inside Start-ThreadJob (via Invoke-WithSpinner) where
+        The function may be called inside a background job (via Invoke-WithSpinner) where
         $ErrorActionPreference is 'Stop'. A terminating NativeCommandExitException from
         az CLI must never escape the function.  The outer try/catch and temporary
         ErrorActionPreference reset ensure this.
@@ -2188,6 +2188,52 @@ class RepoContractTests(unittest.TestCase):
         # Must restore ErrorActionPreference after the az call
         self.assertIn('$ErrorActionPreference = $prevEap', body,
                       'Get-AcaCustomDomains must restore $ErrorActionPreference after the az call')
+
+
+    def test_invoke_with_spinner_has_threadjob_fallback(self):
+        """Invoke-WithSpinner must not unconditionally depend on Start-ThreadJob.
+
+        On Windows PowerShell 5.1 without the ThreadJob module, Start-ThreadJob is
+        unavailable. The function must detect availability via Get-Command, fall back
+        to Start-Job (with Common.ps1 re-sourced so helper functions are available),
+        and ultimately support a direct-execution path if no job infrastructure exists.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+
+        # Locate the Invoke-WithSpinner function body
+        idx = common_text.find('function Invoke-WithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found in Common.ps1')
+        # Extract enough body to cover all three paths
+        body = common_text[idx:idx + 3000]
+
+        # Must NOT unconditionally call Start-ThreadJob
+        # (it must be guarded by a Get-Command check)
+        self.assertNotIn('$job = Start-ThreadJob', body.split('Get-Command')[0],
+                         'Start-ThreadJob must only be called after a Get-Command availability check')
+
+        # Must check Start-ThreadJob availability via Get-Command
+        self.assertIn("Get-Command -Name 'Start-ThreadJob'", body,
+                      "Invoke-WithSpinner must check Start-ThreadJob availability via Get-Command")
+
+        # Must have a Start-Job fallback
+        self.assertIn('Start-Job', body,
+                      'Invoke-WithSpinner must fall back to Start-Job when Start-ThreadJob is unavailable')
+
+        # Must have a direct-execution (no-job) fallback
+        self.assertIn('kein Hintergrundjob', body,
+                      'Invoke-WithSpinner must have a direct-execution fallback when no job cmdlet is available')
+
+        # Optional ThreadJob import must be present at module level (best-effort)
+        import_idx = common_text.find('Import-Module ThreadJob')
+        self.assertGreater(import_idx, 0,
+                           'Common.ps1 must attempt a silent Import-Module ThreadJob at load time')
+        # The import must come before the function definition
+        self.assertLess(import_idx, idx,
+                        'Import-Module ThreadJob must appear before Invoke-WithSpinner in Common.ps1')
+
+        # Common.ps1 path must be captured for Start-Job initialization
+        self.assertIn('_InvokeWithSpinnerCommonPath', common_text,
+                      'Common.ps1 must capture its own path for Start-Job InitializationScript')
 
 
 if __name__ == '__main__':
