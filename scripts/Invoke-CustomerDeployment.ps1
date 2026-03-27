@@ -567,6 +567,9 @@ if ($GenerateOnly) {
     return
 }
 
+# Ensure Azure login is active before the live ACA custom-domain lookup.
+Ensure-AzCliReady
+
 # --- Preserve existing ACA custom domain state before redeploy ---
 # Pre-resolve nested config values into simple scalars for $using: compatibility
 # (Start-ThreadJob and Start-Job only support top-level variable references).
@@ -575,9 +578,11 @@ $spinnerAcaName = $config.azure.appName
 $preservedCustomDomains = Invoke-WithSpinner -Message 'ACA Custom Domain State wird gesichert' -ScriptBlock {
     @(Get-AcaCustomDomains -ResourceGroupName $using:spinnerRgName -AppName $using:spinnerAcaName)
 }
-# Receive-Job returns $null (not @()) when the job output is an empty array.
-# Normalise here so that .Count can be used safely under Set-StrictMode -Version Latest.
+# Receive-Job may unwrap a single-item array to a scalar, or return $null for an empty
+# array.  Wrapping with @() normalises all three cases (null/scalar/array) so that
+# .Count is always safe under Set-StrictMode -Version Latest.
 if ($null -eq $preservedCustomDomains) { $preservedCustomDomains = @() }
+$preservedCustomDomains = @($preservedCustomDomains)
 if ($preservedCustomDomains.Count -gt 0) {
     Write-Step ("  {0} vorhandene Custom Domain(s) gefunden und im Config gespeichert." -f $preservedCustomDomains.Count)
     if (-not $config.ContainsKey('preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }
@@ -590,7 +595,19 @@ if ($preservedCustomDomains.Count -gt 0) {
     $config.preservedInfraState.customDomainsLastCapturedAt = (Get-Date).ToString('o')
     Save-JsonUtf8 -Data $config -Path $paths.ConfigPath
 } else {
-    Write-Step '  Keine Custom Domains vorhanden (Neudeployment oder noch nicht konfiguriert).'
+    # Live lookup returned nothing.  Fall back to the last captured state from the config
+    # (covers transient az errors or lookup failures that silently return empty).
+    $_storedDomains = $null
+    if ($config.ContainsKey('preservedInfraState') -and $config.preservedInfraState -and
+            $config.preservedInfraState.customDomains) {
+        $_storedDomains = @($config.preservedInfraState.customDomains)
+    }
+    if ($_storedDomains -and $_storedDomains.Count -gt 0) {
+        Write-Step ('  Live-Lookup ergab 0 Domains – zuletzt gespeicherter Zustand wird verwendet ({0} Domain(s)).' -f $_storedDomains.Count)
+        $preservedCustomDomains = $_storedDomains
+    } else {
+        Write-Step '  Keine Custom Domains vorhanden (Neudeployment oder noch nicht konfiguriert).'
+    }
 }
 
 $deploymentParametersPath = $paths.AzureParametersPath
@@ -611,8 +628,12 @@ finally {
 }
 
 if ($config.edge.mode -eq 'basic') {
-    $appNameBasic = if ($result -and $result.properties.outputs.containerAppName.value) { $result.properties.outputs.containerAppName.value } else { $config.azure.appName }
-    $envNameBasic = if ($result -and $result.properties.outputs.containerAppEnvironmentName.value) { $result.properties.outputs.containerAppEnvironmentName.value } else { ('{0}-env' -f $config.azure.appName) }
+    # Access deploy outputs safely under Set-StrictMode -Version Latest:
+    # $result.properties may not exist if the ARM output structure differs.
+    $_outBasic = $null
+    try { $_outBasic = $result.properties.outputs } catch {}
+    $appNameBasic = if ($_outBasic -and $_outBasic.containerAppName) { [string]$_outBasic.containerAppName.value } else { $config.azure.appName }
+    $envNameBasic = if ($_outBasic -and $_outBasic.containerAppEnvironmentName) { [string]$_outBasic.containerAppEnvironmentName.value } else { ('{0}-env' -f $config.azure.appName) }
     if ($preservedCustomDomains -and $preservedCustomDomains.Count -gt 0) {
         Restore-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $appNameBasic -EnvironmentName $envNameBasic -CustomDomains $preservedCustomDomains
     }
@@ -621,11 +642,12 @@ if ($config.edge.mode -eq 'basic') {
 }
 
 $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-$appName = $result.properties.outputs.containerAppName.value
-$envName = $result.properties.outputs.containerAppEnvironmentName.value
-$appFqdn = $result.properties.outputs.containerAppFqdn.value
-if (-not $appName) { $appName = $config.azure.appName }
-if (-not $envName) { $envName = ('{0}-env' -f $config.azure.appName) }
+# Access deploy outputs safely under Set-StrictMode -Version Latest.
+$_out = $null
+try { $_out = $result.properties.outputs } catch {}
+$appName = if ($_out -and $_out.containerAppName) { [string]$_out.containerAppName.value } else { $config.azure.appName }
+$envName = if ($_out -and $_out.containerAppEnvironmentName) { [string]$_out.containerAppEnvironmentName.value } else { ('{0}-env' -f $config.azure.appName) }
+$appFqdn = if ($_out -and $_out.containerAppFqdn) { [string]$_out.containerAppFqdn.value } else { '' }
 
 # Pre-resolve nested config/path values for $using: in Cloudflare spinner scriptblocks.
 # Both Start-ThreadJob and Start-Job only support simple top-level $using:varname references.
