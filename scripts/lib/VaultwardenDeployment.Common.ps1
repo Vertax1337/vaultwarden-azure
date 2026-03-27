@@ -131,9 +131,18 @@ function Invoke-WithSpinner {
     $elapsed = $stopwatch.Elapsed
     $elapsedStr = $elapsed.ToString('mm\:ss')
 
-    # Collect output and check for errors.
+    # Read job errors BEFORE calling Receive-Job. With Start-ThreadJob,
+    # Receive-Job -ErrorAction SilentlyContinue replays error records from the
+    # job's stream into the current session's (suppressed) error stream, which
+    # can clear $job.Error before we ever read it. Reading it first – plus
+    # falling back to $job.ChildJobs errors for the ThreadJob case – ensures
+    # exceptions in the job are never silently discarded.
+    $jobError = $job.Error
+    if (-not ($jobError -and $jobError.Count -gt 0) -and
+        ($job.ChildJobs -and $job.ChildJobs.Count -gt 0)) {
+        $jobError = @($job.ChildJobs | ForEach-Object { $_.Error } | Where-Object { $_ })
+    }
     $jobResult = Receive-Job -Job $job -Wait -ErrorAction SilentlyContinue
-    $jobError  = $job.Error
 
     Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
 

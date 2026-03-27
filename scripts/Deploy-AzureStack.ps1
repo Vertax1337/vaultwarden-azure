@@ -42,13 +42,22 @@ try {
         # $using: references pass captured variables into the thread job.
         $args_capture = $using:deployArgs
         $tmpFile      = $using:_azJsonFile
+        # Explicit null check: if $using:_azJsonFile failed to resolve, fail here
+        # with a clear message rather than letting WriteAllText throw an
+        # ArgumentNullException that is harder to diagnose.
+        if ([string]::IsNullOrWhiteSpace($tmpFile)) {
+            throw 'Interner Fehler: Temp-Dateipfad wurde nicht uebertragen ($using:_azJsonFile ist null).'
+        }
         $output = az @args_capture
         if ($LASTEXITCODE -ne 0) { throw 'Azure deployment failed.' }
         # Persist to file – bypasses Start-Job CliXml serialisation for large payloads.
-        if ($null -ne $output) {
-            $text = if ($output -is [array]) { $output -join [System.Environment]::NewLine } else { [string]$output }
-            [System.IO.File]::WriteAllText($tmpFile, $text, [System.Text.UTF8Encoding]::new($false))
-        }
+        # Write unconditionally: if $output is null/empty the file still gets created so
+        # the main thread receives a clear ConvertFrom-Json error rather than a
+        # misleading "no JSON output" message.
+        $text = if ($output -is [array]) { $output -join [System.Environment]::NewLine } `
+                elseif ($null -ne $output) { [string]$output } `
+                else { '' }
+        [System.IO.File]::WriteAllText($tmpFile, $text, [System.Text.UTF8Encoding]::new($false))
     }
     if (-not (Test-Path -LiteralPath $_azJsonFile)) {
         throw 'Azure-Deployment: az CLI hat keine JSON-Ausgabe geliefert.'

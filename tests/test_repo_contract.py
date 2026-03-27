@@ -2205,6 +2205,63 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn("if ($null -eq $result)", deploy_text,
                       'Deploy-AzureStack.ps1 must guard against null $result after ConvertFrom-Json')
 
+    def test_deploy_azure_stack_scriptblock_null_guards(self):
+        """Deploy-AzureStack.ps1 ScriptBlock must have null guards for robustness.
+
+        Two failure modes must be guarded against:
+        1. $using:_azJsonFile resolves to $null (PS scoping edge-case) → WriteAllText($null, ...) throws
+           an ArgumentNullException that is very hard to diagnose. An explicit null check at the start
+           of the ScriptBlock gives a clear, actionable error message.
+        2. az CLI returns $null output (can happen in some thread-job contexts) → the file is silently
+           never created. Writing unconditionally (even an empty string) means the file always exists
+           and the caller gets a clear ConvertFrom-Json error instead of a misleading "no output" msg.
+        """
+        deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
+        self.assertIn('[string]::IsNullOrWhiteSpace($tmpFile)', deploy_text,
+                      'Deploy-AzureStack.ps1 ScriptBlock must guard against null $tmpFile')
+        # The old pattern wrapped WriteAllText in "if ($null -ne $output) { ... }" so that a null
+        # output would silently skip the write.  The replacement uses a ternary-style $text assignment
+        # so WriteAllText is always called – check for the unconditional write marker.
+        self.assertIn("else { '' }", deploy_text,
+                      "Deploy-AzureStack.ps1 must have an else-branch for null output "
+                      "in the ternary $text assignment, ensuring WriteAllText is always called")
+        # Verify the standalone block-guard form is gone (pattern: if-null guard with newline after {)
+        self.assertNotIn("if ($null -ne $output) {\n", deploy_text.replace('\r\n', '\n'),
+                         'Deploy-AzureStack.ps1 must not guard WriteAllText with a standalone '
+                         '"if ($null -ne $output) { ... }" block')
+
+    def test_invoke_with_spinner_reads_job_error_before_receive_job(self):
+        """Invoke-WithSpinner must read $job.Error BEFORE calling Receive-Job.
+
+        With Start-ThreadJob, Receive-Job -ErrorAction SilentlyContinue replays error records from
+        the job's stream into the current session's error stream and then clears them.  If $job.Error
+        is read AFTER Receive-Job, it will appear empty even when the job threw an exception – so the
+        spinner shows [OK] and the error is silently discarded.
+
+        The fix reads $job.Error (and, as fallback, $job.ChildJobs[0].Error for the ThreadJob case)
+        BEFORE calling Receive-Job so the error is never missed.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        # Locate the job-based path of Invoke-WithSpinner (after the "Start-ThreadJob/Start-Job" branch)
+        idx = common_text.find('function Invoke-WithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-WithSpinner not found in Common.ps1')
+        # Use a large enough window to cover the whole function body (~5000 chars is ample)
+        _WINDOW = 5000
+        body = common_text[idx:idx + _WINDOW]
+        # $job.Error must appear before the actual Receive-Job invocation in the function body
+        error_pos   = body.find('$jobError = $job.Error')
+        # Use the specific assignment form to avoid matching the comment that mentions 'Receive-Job'
+        receive_pos = body.find('$jobResult = Receive-Job')
+        self.assertGreater(error_pos, 0,
+                           'Invoke-WithSpinner must assign $jobError = $job.Error')
+        self.assertGreater(receive_pos, 0,
+                           'Invoke-WithSpinner must assign $jobResult = Receive-Job ...')
+        self.assertLess(error_pos, receive_pos,
+                        'Invoke-WithSpinner must read $job.Error BEFORE calling Receive-Job')
+        # Must also check ChildJobs for Start-ThreadJob compatibility
+        self.assertIn('ChildJobs', body,
+                      'Invoke-WithSpinner must fall back to $job.ChildJobs errors for Start-ThreadJob')
+
     def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
         """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""
         deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
