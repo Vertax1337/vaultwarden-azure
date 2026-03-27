@@ -409,10 +409,10 @@ function New-CustomerConfigInteractive {
     $smtpFrom = Read-TextWithDefault -Label 'SMTP From' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from } else { 'vaultwarden@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
 
-    # SMTP Host is NOT prompted in the main wizard flow for smtp_auth.
-    # The default (smtp.office365.com) is used unless the existing config already has a custom host.
-    # For acs_smtp, smtp.azurecomm.net is auto-set.
-    # For direct_send, the MX endpoint is always prompted explicitly.
+    # SMTP host prompting depends on mail mode:
+    #   smtp_auth:    prompts with default smtp.office365.com (or existing host if editing)
+    #   acs_smtp:     smtp.azurecomm.net is auto-set (no prompt)
+    #   direct_send:  MX endpoint is always prompted explicitly (no sensible default)
     $smtpHostValue = ''
     $smtpPortValue = ''
     $smtpSecurityValue = 'starttls'
@@ -424,10 +424,12 @@ function New-CustomerConfigInteractive {
         $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z.B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
     }
     elseif ($mailModeValue -eq 'smtp_auth') {
-        # SMTP Auth: silently preserve existing host or default to smtp.office365.com.
-        # No interactive prompt for host in the main wizard path.
+        # SMTP Auth: prompt for SMTP host with default smtp.office365.com.
+        # If an existing smtp_auth config already has a custom host, use that as the default.
+        # The operator can override it to use any SMTP relay.
         $existingSmtpHost = if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { [string]$ExistingConfig.smtp.host } else { '' }
-        $smtpHostValue = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
+        $smtpHostDefault = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
+        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (smtp_auth-Relay, z.B. smtp.office365.com)' -Default $smtpHostDefault -Required
         $smtpPortValue = Read-TextWithDefault -Label 'SMTP Port' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.port } else { '587' })) -Required
         $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
         $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required
