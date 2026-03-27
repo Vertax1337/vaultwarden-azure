@@ -1,5 +1,63 @@
 # Change Log
 
+## Feature: Vendor ConsoleMenu module and prepare menu integration layer
+
+### Problem / Ursache
+
+The ConsoleMenu template existed only as a ZIP archive in `code_templates/` and was not
+available as a runtime module. A structured integration layer for the deployment wizard
+menu was missing, making it impossible to incrementally introduce the new menu without
+touching the active deployment flow.
+
+### Betroffene Dateien
+
+- `scripts/modules/ConsoleMenu/ConsoleMenu.psm1` (new – vendored from ZIP)
+- `scripts/modules/ConsoleMenu/ConsoleMenu.psd1` (new – vendored from ZIP)
+- `scripts/lib/VaultwardenDeployment.Menu.ps1` (new – integration layer)
+- `scripts/Invoke-CustomerDeployment.ps1` (dot-source of new menu lib added)
+- `change.md`
+
+### Umgesetzter Fix
+
+1. Extracted `ConsoleMenu.psm1` and `ConsoleMenu.psd1` from
+   `code_templates/console-menu-template-stack-selection-memory.zip` into
+   `scripts/modules/ConsoleMenu/`.
+2. Created `scripts/lib/VaultwardenDeployment.Menu.ps1` which imports the vendored module
+   and defines an empty placeholder function `Show-DeploymentMainMenu` for future use.
+3. Added a dot-source of `VaultwardenDeployment.Menu.ps1` in
+   `scripts/Invoke-CustomerDeployment.ps1`, immediately after the existing Common lib
+   dot-source.
+
+### Design-Entscheide
+
+- The active menu implementation is **not** changed. This change is purely structural.
+- The `Show-DeploymentMainMenu` placeholder function is a no-op; it will be wired up in a
+  follow-up issue.
+- The ConsoleMenu module is loaded with `-Force -ErrorAction Stop` so failures are
+  surfaced immediately rather than silently ignored.
+
+### Risiken / Nebenwirkungen
+
+- `Import-Module ConsoleMenu` runs at dot-source time for every invocation of
+  `Invoke-CustomerDeployment.ps1`. The module itself has no side effects on load, so
+  this does not change any existing behavior.
+- Side-effect review for affected workflows:
+  - **Wizard** – no change (placeholder function is never called)
+  - **GenerateOnly** – no change
+  - **Existing Config Deploy** – no change
+  - **Existing Config Edit+Deploy** – no change
+  - **Repair** – no change
+  - **Update** – no change
+  - **Deploy-to-Azure Wrapper** – no change
+  - **current/…** – no change
+
+### Test / Validierung
+
+- `python3 -m pytest tests/test_repo_contract.py -v` → all existing tests pass.
+- Manual check: module files exist at expected paths and are syntactically valid.
+
+---
+
 ## Fix: Preserve existing ACA custom domain bindings on redeploy
 
 ### Problem / Ursache

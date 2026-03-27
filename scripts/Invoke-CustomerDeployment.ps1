@@ -56,6 +56,7 @@ param(
 )
 
 . (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Common.ps1')
+. (Join-Path $PSScriptRoot 'lib/VaultwardenDeployment.Menu.ps1')
 $script:InvocationBoundParameters = $PSBoundParameters
 
 function Get-AdvancedParameterValue {
