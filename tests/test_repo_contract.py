@@ -2038,5 +2038,51 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(current_root, ignore_errors=True)
 
 
+    def test_consolemenu_back_does_not_update_menu_state(self):
+        """Start-ConsoleMenuApplication must not persist the Back key as last submenu position.
+
+        The unconditional $menuState update that previously ran before the switch
+        statement would overwrite the last meaningful selection with the 'Zurueck'
+        key whenever a user left a submenu via Back.  The fix moves the state update
+        into each individual case so that the 'back' branch is deliberately excluded.
+        """
+        content = (REPO_ROOT / 'scripts/modules/ConsoleMenu/ConsoleMenu.psm1').read_text(encoding='utf-8')
+
+        # The 'back' case must NOT contain a menuState assignment.
+        # Extract the text of the 'back' branch from Start-ConsoleMenuApplication.
+        # We look for the block between "'back' {" and the next matching closing brace.
+        back_match = re.search(r"'back'\s*\{([^}]*)\}", content)
+        self.assertIsNotNone(back_match, "Start-ConsoleMenuApplication must have a 'back' case")
+        back_body = back_match.group(1)
+        self.assertNotIn('$menuState[', back_body,
+                         "Start-ConsoleMenuApplication 'back' branch must not update menuState "
+                         "(Back key must not overwrite the last meaningful submenu selection)")
+
+        # The 'action' and 'submenu' cases must update menuState.
+        self.assertIn("$menuState[$currentMenuId] = [string]$selectedItem.Key", content,
+                      "Start-ConsoleMenuApplication must persist selection for action/submenu items")
+
+    def test_deployment_menu_back_does_not_update_menu_state(self):
+        """Show-DeploymentMainMenu must not persist the Back key as last submenu position.
+
+        When a user leaves a submenu via 'Zurueck', the MenuState for that submenu
+        must remain unchanged so that on re-entry the last meaningful action is
+        pre-selected rather than the Back item.
+        """
+        content = (REPO_ROOT / 'scripts/lib/VaultwardenDeployment.Menu.ps1').read_text(encoding='utf-8')
+
+        # The 'back' case must NOT contain a MenuState assignment.
+        back_match = re.search(r"'back'\s*\{([^}]*)\}", content)
+        self.assertIsNotNone(back_match, "Show-DeploymentMainMenu must have a 'back' case")
+        back_body = back_match.group(1)
+        self.assertNotIn('$MenuState[', back_body,
+                         "Show-DeploymentMainMenu 'back' branch must not update MenuState "
+                         "(Back key must not overwrite the last meaningful submenu selection)")
+
+        # The 'action' case must update MenuState.
+        self.assertIn("$MenuState[$currentMenuId] = [string]$selectedItem.Key", content,
+                      "Show-DeploymentMainMenu must persist selection for action items")
+
+
 if __name__ == '__main__':
     unittest.main()

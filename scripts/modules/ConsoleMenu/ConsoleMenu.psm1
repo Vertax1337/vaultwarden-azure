@@ -393,8 +393,6 @@ function Start-ConsoleMenuApplication {
             -ClearScreenOnOpen:$clearOnOpen `
             -InitialSelectedKey $initialSelectedKey
 
-        $menuState[$currentMenuId] = [string]$selectedItem.Key
-
         $clearOnOpen = $false
 
         switch ($selectedItem.ItemType) {
@@ -403,12 +401,16 @@ function Start-ConsoleMenuApplication {
                     throw ('Zielmenue nicht gefunden: {0}' -f $selectedItem.TargetMenuId)
                 }
 
+                # Save the submenu-entry position so it is pre-selected on re-entry.
+                $menuState[$currentMenuId] = [string]$selectedItem.Key
                 [void]$menuStack.Add($selectedItem.TargetMenuId)
                 $clearOnOpen = $true
                 continue
             }
 
             'back' {
+                # Do NOT update menuState: preserve the last meaningful position
+                # so the submenu pre-selects it on re-entry instead of 'Zurueck'.
                 if ($menuStack.Count -gt 1) {
                     $menuStack.RemoveAt($menuStack.Count - 1)
                 }
@@ -417,6 +419,8 @@ function Start-ConsoleMenuApplication {
             }
 
             'action' {
+                # Save the last meaningful selection so it is pre-selected on re-entry.
+                $menuState[$currentMenuId] = [string]$selectedItem.Key
                 if ($ActionHandler) {
                     & $ActionHandler $selectedItem $currentMenu $MenuRegistry $menuStack $menuState
                 }
@@ -425,6 +429,7 @@ function Start-ConsoleMenuApplication {
             }
 
             'exit' {
+                $menuState[$currentMenuId] = [string]$selectedItem.Key
                 [System.Console]::Clear()
                 return [pscustomobject]@{
                     ExitRequested = $true
