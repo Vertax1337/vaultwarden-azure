@@ -133,6 +133,8 @@ class RepoContractTests(unittest.TestCase):
             'scripts/Bind-AcaCustomDomain.ps1',
             'scripts/Set-AcaIngressRestrictions.ps1',
             'scripts/lib/VaultwardenDeployment.Common.ps1',
+            'scripts/lib/VaultwardenDeployment.Flows.ps1',
+            'scripts/lib/VaultwardenDeployment.Menu.ps1',
             'scripts/cloudflare/Get-CloudflareIpRanges.ps1',
             'scripts/deploy.ps1',
         ]
@@ -953,14 +955,14 @@ class RepoContractTests(unittest.TestCase):
     @requires_pwsh
     def test_wizard_direct_send_prompts_for_smtp_host(self):
         """Interactive wizard must prompt for SMTP Host in Direct Send path."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         self.assertIn('MX-Endpunkt', script_text)
 
     @requires_pwsh
     def test_wizard_smtp_auth_prompts_for_host_with_default(self):
         """Interactive wizard must prompt for SMTP Host in the smtp_auth flow with a default of smtp.office365.com.
         Operator can accept the default or type a custom host. direct_send still uses its own explicit MX prompt."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         # smtp_auth block must contain a Read-TextWithDefault prompt that exposes the SMTP host
         self.assertIn("smtp_auth-Relay", script_text)
         # Default must be smtp.office365.com
@@ -1113,16 +1115,19 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('Get-RuntimeSecretParameters', script_text)
         # Save-CustomerFiles must be marked shared logic (orchestration)
         self.assertIn('Save-CustomerFiles', script_text)
-        # All key functions above must have the SHARED LOGIC marker nearby
+        # All key shared functions must have the SHARED LOGIC marker nearby
         for func_name in ['New-CustomerConfigObject', 'Get-RuntimeSecretParameters',
-                          'New-CustomerConfigInteractive', 'New-CustomerAzureParameters',
-                          'Save-CustomerFiles']:
+                          'New-CustomerAzureParameters', 'Save-CustomerFiles']:
             idx = script_text.find(f'function {func_name}')
             self.assertGreater(idx, 0, f'function {func_name} not found in script')
             # The SHARED LOGIC comment must appear within 600 chars before the function keyword
             context = script_text[max(0, idx - 600):idx]
             self.assertIn('# SHARED LOGIC:', context,
                           f'function {func_name} must have a # SHARED LOGIC: comment above it')
+        # New-CustomerConfigInteractive is an interactive-wizard function; it lives in Flows.ps1
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        self.assertIn('function New-CustomerConfigInteractive', flows_text,
+                      'New-CustomerConfigInteractive must be defined in VaultwardenDeployment.Flows.ps1')
 
     # -----------------------------------------------------------------------
     # Mail-Modus-Zustandswechsel: Parameter-Generierung (pwsh-abhängig)
@@ -1474,7 +1479,10 @@ class RepoContractTests(unittest.TestCase):
 
     def test_hardened_envs_not_in_wizard_prompt(self):
         """The 7 hardened ENVs must not be interactively prompted in the Wizard."""
-        ps_script = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        wizard_scripts = [
+            (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8'),
+            (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8'),
+        ]
         # These ENVs should never appear in Read-Host prompts
         hardened_env_names = [
             'EMAIL_2FA_AUTO_FALLBACK',
@@ -1485,16 +1493,14 @@ class RepoContractTests(unittest.TestCase):
             'SIGNUPS_VERIFY',
             'SHOW_PASSWORD_HINT',
         ]
-        for env_name in hardened_env_names:
-            # Check that this ENV name doesn't appear in Read-Host context
-            lower = ps_script.lower()
-            env_lower = env_name.lower()
-            # We check that it's not in Read-Host calls (prompt text)
-            for line in ps_script.splitlines():
-                if 'read-host' in line.lower() and env_lower in line.lower():
-                    self.fail(
-                        f'Hardened ENV {env_name} should not be in a Read-Host prompt: {line.strip()}'
-                    )
+        for ps_script in wizard_scripts:
+            for env_name in hardened_env_names:
+                env_lower = env_name.lower()
+                for line in ps_script.splitlines():
+                    if 'read-host' in line.lower() and env_lower in line.lower():
+                        self.fail(
+                            f'Hardened ENV {env_name} should not be in a Read-Host prompt: {line.strip()}'
+                        )
 
 
     # ------------------------------------------------------------------
@@ -1503,15 +1509,15 @@ class RepoContractTests(unittest.TestCase):
 
     def test_wizard_has_three_mail_mode_choices(self):
         """The wizard must expose exactly 3 mail mode choices: direct_send, smtp_auth, acs_smtp."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
-        self.assertIn("'direct_send'", script_text,
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        self.assertIn("'direct_send'", flows_text,
                       "Wizard must have 'direct_send' as a mail mode choice")
-        self.assertIn("'smtp_auth'", script_text,
+        self.assertIn("'smtp_auth'", flows_text,
                       "Wizard must have 'smtp_auth' as a mail mode choice")
-        self.assertIn("'acs_smtp'", script_text,
+        self.assertIn("'acs_smtp'", flows_text,
                       "Wizard must have 'acs_smtp' as a mail mode choice")
         # Choices must appear near the 3-way mail mode selector (Read-ChoiceWithDefault for Mail-Modus)
-        self.assertIn('Mail-Modus', script_text,
+        self.assertIn('Mail-Modus', flows_text,
                       "Wizard must prompt 'Mail-Modus' for the 3-way mode selection")
 
     def test_acs_smtp_mode_auto_sets_host_and_acs_foundation(self):
@@ -1545,7 +1551,7 @@ class RepoContractTests(unittest.TestCase):
 
     def test_acs_smtp_wizard_prompts_for_acs_username(self):
         """Wizard acs_smtp path must prompt for ACS SMTP Username, not for a generic SMTP Host."""
-        script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+        script_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         self.assertIn('ACS SMTP Username', script_text,
                       'acs_smtp wizard path must prompt for ACS SMTP Username')
 
@@ -2082,6 +2088,40 @@ class RepoContractTests(unittest.TestCase):
         # The 'action' case must update MenuState.
         self.assertIn("$MenuState[$currentMenuId] = [string]$selectedItem.Key", content,
                       "Show-DeploymentMainMenu must persist selection for action items")
+
+    def test_wizard_functions_live_in_flows_ps1(self):
+        """Interactive wizard helper functions must be defined in VaultwardenDeployment.Flows.ps1.
+
+        After the Issue-5 wizard decoupling refactor, all interactive-wizard orchestration
+        belongs in Flows.ps1, not in Invoke-CustomerDeployment.ps1.
+        """
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+
+        for func_name in ['Select-CustomerCodeInteractive', 'New-AdvancedArmParametersInteractive',
+                          'New-CustomerConfigInteractive']:
+            self.assertIn(f'function {func_name}', flows_text,
+                          f'{func_name} must be defined in VaultwardenDeployment.Flows.ps1')
+            self.assertNotIn(f'function {func_name}', deploy_text,
+                             f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
+                             f'(it belongs in VaultwardenDeployment.Flows.ps1)')
+
+    def test_shared_data_factories_live_in_common_ps1(self):
+        """Get-AdvancedParameterValue and New-EmptyAdvancedArmParameters must live in Common.ps1.
+
+        These are pure data/utility helpers with no interactive UI coupling and are
+        used by both the CLI path (Build-AdvancedArmParametersFromCli) and the
+        interactive wizard (New-AdvancedArmParametersInteractive).
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        deploy_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
+
+        for func_name in ['Get-AdvancedParameterValue', 'New-EmptyAdvancedArmParameters']:
+            self.assertIn(f'function {func_name}', common_text,
+                          f'{func_name} must be defined in VaultwardenDeployment.Common.ps1')
+            self.assertNotIn(f'function {func_name}', deploy_text,
+                             f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
+                             f'(it belongs in VaultwardenDeployment.Common.ps1)')
 
 
 if __name__ == '__main__':

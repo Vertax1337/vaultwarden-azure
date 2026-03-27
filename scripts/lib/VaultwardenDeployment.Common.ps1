@@ -679,6 +679,39 @@ function Invoke-CloudflareApi {
     }
 }
 
+function Get-AdvancedParameterValue {
+    param([hashtable]$Advanced, [string]$Name, $Default = $null)
+    if ($Advanced -and $Advanced.ContainsKey($Name)) { return $Advanced[$Name] }
+    return $Default
+}
+
+function New-EmptyAdvancedArmParameters {
+    return [ordered]@{
+        adminPanelEnabled = $true
+        invitationOrgName = ''
+        signupsDomainsWhitelist = ''
+        orgCreationUsers = ''
+        diagnosticsEnabled = $true
+        allowInsecureHttp = $true
+        ssoEnabled = $false
+        ssoOnly = $false
+        ssoAuthority = ''
+        ssoClientId = ''
+        ssoScopes = 'openid profile email offline_access User.Read'
+        pushEnabled = $false
+        pushInstallationId = ''
+        pushUseEuServers = $false
+        acsDeployFoundation = $false
+        acsDataLocation = 'Germany'
+        acsDomainName = ''
+        storageAccountSku = 'Standard_LRS'
+        postgresSkuName = 'Standard_B1ms'
+        postgresStorageGB = 32
+        postgresBackupRetentionDays = 14
+        allowAzureServicesToPostgres = $true
+    }
+}
+
 function Get-SuggestedInvitationOrgName {
     param([Parameter(Mandatory)][string]$ZoneName)
     return $ZoneName
