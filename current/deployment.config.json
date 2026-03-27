@@ -31,7 +31,7 @@
                  "lockOriginToCloudflare":  false
              },
     "azure":  {
-                  "resourceGroupName":  "rg-50er-jahre-museum-vault-prod-neu",
+                  "resourceGroupName":  "rg-musef-prod-neu",
                   "location":  "northeurope",
                   "environment":  "prod",
                   "appName":  "vault",
