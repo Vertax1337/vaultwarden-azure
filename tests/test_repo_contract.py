@@ -2172,36 +2172,54 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('[OK]', common_text, 'Invoke-WithSpinner must output [OK] on success')
         self.assertIn('[FEHLER]', common_text, 'Invoke-WithSpinner must output [FEHLER] on error')
 
-    def test_deploy_azurestack_runs_az_directly_in_main_thread(self):
-        """Deploy-AzureStack.ps1 must run az deployment group create directly in the main thread.
+    def test_deploy_azurestack_uses_native_process_spinner(self):
+        """Deploy-AzureStack.ps1 must call Invoke-NativeProcessWithSpinner for the az deployment.
 
-        The az deployment command must NOT be wrapped in Invoke-WithSpinner, Start-Job,
-        Start-ThreadJob, or any other background-job mechanism.  Running az directly avoids all
-        PS 5.1 CliXml serialization edge-cases and guarantees the real exit-code and JSON output
-        are available immediately in the caller's scope.
-
-        Expected pattern (matches master branch):
-            $json = az @deployArgs
-            if ($LASTEXITCODE -ne 0) { throw ... }
-            $result = $json | ConvertFrom-Json ...
+        The az deployment command must NOT be wrapped in Start-ThreadJob or Start-Job.
+        Instead, Invoke-NativeProcessWithSpinner starts az as a native OS process via
+        System.Diagnostics.Process, drains stdout/stderr asynchronously via .NET Tasks,
+        and drives the spinner on the main thread.  This avoids all PS 5.1 CliXml
+        serialisation issues while still providing a live spinner UI.
         """
         deploy_text = (REPO_ROOT / 'scripts' / 'Deploy-AzureStack.ps1').read_text(encoding='utf-8')
-        # Must invoke az and capture output directly (not inside a ScriptBlock)
-        self.assertIn('$json = az @deployArgs', deploy_text,
-                      'Deploy-AzureStack.ps1 must capture az output directly: $json = az @deployArgs')
-        # Must check exit code in the main thread
-        self.assertIn('$LASTEXITCODE -ne 0', deploy_text,
-                      'Deploy-AzureStack.ps1 must check $LASTEXITCODE after az call')
-        # Must pipe directly to ConvertFrom-Json (no temp-file round-trip)
-        self.assertIn('$json | ConvertFrom-Json', deploy_text,
-                      'Deploy-AzureStack.ps1 must pipe $json directly to ConvertFrom-Json')
-        # Must NOT use any background-job or temp-file mechanism for the az call
-        self.assertNotIn('$using:_azJsonFile', deploy_text,
-                         'Deploy-AzureStack.ps1 must not use a $using:_azJsonFile temp-file transfer')
-        self.assertNotIn('WriteAllText', deploy_text,
-                         'Deploy-AzureStack.ps1 must not write az output to a temp file')
-        self.assertNotIn('ReadAllText', deploy_text,
-                         'Deploy-AzureStack.ps1 must not read az output from a temp file')
+        # Must call the native-process spinner helper
+        self.assertIn('Invoke-NativeProcessWithSpinner', deploy_text,
+                      'Deploy-AzureStack.ps1 must call Invoke-NativeProcessWithSpinner for az deployment')
+        # Must still pipe the returned stdout to ConvertFrom-Json
+        self.assertIn('ConvertFrom-Json', deploy_text,
+                      'Deploy-AzureStack.ps1 must parse the returned output with ConvertFrom-Json')
+        # Must NOT use any background-job mechanism for the az deployment
+        self.assertNotIn('Start-ThreadJob', deploy_text,
+                         'Deploy-AzureStack.ps1 must not use Start-ThreadJob for az deployment')
+        self.assertNotIn('Start-Job', deploy_text,
+                         'Deploy-AzureStack.ps1 must not use Start-Job for az deployment')
+
+    def test_invoke_native_process_with_spinner_defined_in_common(self):
+        """Invoke-NativeProcessWithSpinner must be defined in VaultwardenDeployment.Common.ps1.
+
+        It must use System.Diagnostics.Process (not Start-Job/ThreadJob) to start the
+        native process, and must display [OK] / [FEHLER] lines like Invoke-WithSpinner.
+        """
+        common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Invoke-NativeProcessWithSpinner', common_text,
+                      'Invoke-NativeProcessWithSpinner must be defined in Common.ps1')
+        idx = common_text.find('function Invoke-NativeProcessWithSpinner')
+        self.assertGreater(idx, 0, 'Invoke-NativeProcessWithSpinner not found')
+        body = common_text[idx:idx + 4000]
+        # Must use System.Diagnostics.Process (native process, not a PS job)
+        self.assertIn('System.Diagnostics.Process', body,
+                      'Invoke-NativeProcessWithSpinner must use System.Diagnostics.Process')
+        # Must drain streams asynchronously to prevent deadlock on large output
+        self.assertIn('ReadToEndAsync', body,
+                      'Invoke-NativeProcessWithSpinner must use ReadToEndAsync to drain stdout/stderr')
+        # Must NOT use Start-ThreadJob or Start-Job for the subprocess
+        self.assertNotIn('Start-ThreadJob', body,
+                         'Invoke-NativeProcessWithSpinner must not use Start-ThreadJob')
+        self.assertNotIn('Start-Job', body,
+                         'Invoke-NativeProcessWithSpinner must not use Start-Job')
+        # Must show [OK] on success and [FEHLER] on failure
+        self.assertIn('[OK]', body,   'Invoke-NativeProcessWithSpinner must output [OK] on success')
+        self.assertIn('[FEHLER]', body, 'Invoke-NativeProcessWithSpinner must output [FEHLER] on failure')
 
     def test_invoke_customer_deployment_uses_spinner_for_key_steps(self):
         """Invoke-CustomerDeployment.ps1 must use Invoke-WithSpinner for the key operative steps."""

@@ -33,10 +33,22 @@ $deployArgs = @(
     '-o','json'
 )
 
-$json = az @deployArgs
-if ($LASTEXITCODE -ne 0) {
-    throw 'Azure deployment failed.'
+# Resolve the az executable. On Windows az ships as a .cmd batch wrapper that must be
+# invoked via cmd.exe /c; on Linux/macOS az is a direct binary.
+$_azSource = (Get-Command az -ErrorAction SilentlyContinue).Source
+$_isWin    = -not ($IsLinux -or $IsMacOS)   # $IsLinux/$IsMacOS absent in PS 5.1 → treats as Windows
+if ($_isWin -and ($_azSource -like '*.cmd' -or $_azSource -like '*.bat')) {
+    $_azExe  = 'cmd.exe'
+    $_azArgs = @('/c', $_azSource) + $deployArgs
+} else {
+    $_azExe  = $_azSource
+    $_azArgs = $deployArgs
 }
+
+$json = Invoke-NativeProcessWithSpinner `
+    -Message      ('Azure-Deployment laeuft: {0}' -f $DeploymentName) `
+    -Executable   $_azExe `
+    -ArgumentList $_azArgs
 if ($PSVersionTable.PSVersion.Major -ge 6) {
     $result = $json | ConvertFrom-Json -Depth 100
 } else {

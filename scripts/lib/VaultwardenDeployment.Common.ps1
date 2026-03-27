@@ -156,6 +156,101 @@ function Invoke-WithSpinner {
     return $jobResult
 }
 
+# Runs a native (OS-level) process while displaying a live spinner with elapsed time.
+# Unlike Invoke-WithSpinner this does NOT use Start-ThreadJob or Start-Job – it starts
+# the process with System.Diagnostics.Process, drains stdout/stderr asynchronously via
+# .NET Tasks, and polls HasExited on the main thread to drive the spinner animation.
+# This avoids all PowerShell job CliXml serialisation issues and is safe for large output.
+#
+# Parameters:
+#   Executable   – full path to the executable (or 'cmd.exe' when wrapping a .cmd/.bat)
+#   ArgumentList – ordered array of arguments (quoting is handled automatically)
+#   Message      – spinner label shown in [~] / [OK] / [FEHLER] lines
+#
+# Returns: stdout as a single string (suitable for | ConvertFrom-Json).
+# Throws on non-zero exit code.
+function Invoke-NativeProcessWithSpinner {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [Parameter(Mandatory)][string]$Executable,
+        [string[]]$ArgumentList       = @(),
+        [int]$RefreshMilliseconds     = 120
+    )
+
+    # Build a properly-quoted argument string for ProcessStartInfo.Arguments.
+    # Arguments containing whitespace are wrapped in double-quotes.
+    # Az CLI arguments never contain literal double-quotes, so no internal-quote
+    # escaping is needed.  (PS 5.1 / .NET Framework does not expose
+    # ProcessStartInfo.ArgumentList, so we must build the Arguments string manually.)
+    $quotedArgs = $ArgumentList | ForEach-Object {
+        if ($_ -match '\s') { '"' + $_ + '"' } else { $_ }
+    }
+    $argString = if ($quotedArgs) { $quotedArgs -join ' ' } else { '' }
+
+    $pinfo = [System.Diagnostics.ProcessStartInfo]::new()
+    $pinfo.FileName               = $Executable
+    $pinfo.Arguments              = $argString
+    $pinfo.RedirectStandardOutput = $true
+    $pinfo.RedirectStandardError  = $true
+    $pinfo.UseShellExecute        = $false
+
+    $proc = [System.Diagnostics.Process]::new()
+    $proc.StartInfo = $pinfo
+
+    $spinChars = @('|', '/', '-', '\')
+    $spinIdx   = 0
+    $lineWidth = 82
+    $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $stdout   = ''
+    $stderr   = ''
+    $exitCode = -1
+    try {
+        $null = $proc.Start()
+        # Drain both streams asynchronously via .NET Tasks to prevent buffer-fill deadlock.
+        # The Tasks run on the .NET thread-pool; the main PS thread drives the spinner below.
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+
+        $consoleAvailable = $true
+        try { $null = [Console]::CursorVisible } catch { $consoleAvailable = $false }
+
+        try {
+            while (-not $proc.HasExited) {
+                $elapsed = $stopwatch.Elapsed
+                $display = '[~] {0} {1} {2:mm\:ss}' -f $Message, $spinChars[$spinIdx % $spinChars.Count], $elapsed
+                if ($consoleAvailable) { [Console]::Write("`r{0,-$lineWidth}" -f $display) }
+                $spinIdx++
+                Start-Sleep -Milliseconds $RefreshMilliseconds
+            }
+        } finally {
+            if ($consoleAvailable) { [Console]::Write("`r{0}`r" -f (' ' * $lineWidth)) }
+        }
+
+        # WaitForExit() ensures all I/O is flushed; then collect both stream results.
+        $proc.WaitForExit()
+        [System.Threading.Tasks.Task]::WhenAll($stdoutTask, $stderrTask).GetAwaiter().GetResult()
+        $stdout   = $stdoutTask.Result
+        $stderr   = $stderrTask.Result
+        $exitCode = $proc.ExitCode
+    } finally {
+        $proc.Dispose()
+    }
+
+    $stopwatch.Stop()
+    $elapsedStr = $stopwatch.Elapsed.ToString('mm\:ss')
+
+    if ($exitCode -ne 0) {
+        $errTrimmed = if ($stderr) { $stderr.Trim() } else { '' }
+        if ($errTrimmed) { Write-Host $errTrimmed -ForegroundColor Red }
+        Write-Host ('[FEHLER] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Red
+        throw ('Azure-Deployment fehlgeschlagen (ExitCode {0}).' -f $exitCode)
+    }
+
+    Write-Host ('[OK] {0} ({1})' -f $Message, $elapsedStr) -ForegroundColor Green
+    return $stdout
+}
+
 function Read-TextWithDefault {
     param(
         [Parameter(Mandatory)][string]$Label,
