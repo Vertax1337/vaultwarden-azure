@@ -1,71 +1,73 @@
 {
-  "smtp": {
-    "useAuth": false,
-    "mailMode": "direct_send",
-    "mailRootDomain": "50er-jahre-museum.de",
-    "from": "vaultwarden@50er-jahre-museum.de",
-    "fromName": "Vaultwarden",
-    "host": "50erjahremuseum-de01be.mail.protection.outlook.com",
-    "port": "",
-    "security": "starttls",
-    "username": "",
-    "passwordSource": "none"
-  },
-  "customerNumber": "1309",
-  "customerCode": "vault-50er-jahre-museum-de",
-  "secrets": {
-    "smtpPasswordSource": "none",
-    "cloudflareApiTokenSource": "not-required",
-    "ssoClientSecretSource": "none",
-    "pushInstallationKeySource": "none"
-  },
-  "domain": {
-    "hostname": "vault.50er-jahre-museum.de",
-    "zoneName": "50er-jahre-museum.de",
-    "url": "https://vault.50er-jahre-museum.de"
-  },
-  "edge": {
-    "mode": "basic",
-    "enableWaf": true,
-    "enableRateLimit": true,
-    "lockOriginToCloudflare": false
-  },
-  "azure": {
-    "resourceGroupName": "rg-musef-prod-neu",
-    "location": "northeurope",
-    "environment": "prod",
-    "appName": "vault",
-    "edgeMode": "none",
-    "enableIngressIpRestrictions": false,
-    "ingressAllowedCidrs": [],
-    "advancedArmParameters": {
-      "orgCreationUsers": "",
-      "acsDomainName": "",
-      "allowAzureServicesToPostgres": true,
-      "pushInstallationId": "",
-      "storageAccountSku": "Standard_LRS",
-      "postgresSkuName": "Standard_B1ms",
-      "pushUseEuServers": false,
-      "ssoOnly": false,
-      "adminPanelEnabled": true,
-      "invitationOrgName": "50er-jahre-museum.de",
-      "ssoClientId": "",
-      "diagnosticsEnabled": true,
-      "acsDataLocation": "Germany",
-      "postgresBackupRetentionDays": 14,
-      "acsDeployFoundation": false,
-      "ssoScopes": "openid profile email offline_access User.Read",
-      "signupsDomainsWhitelist": "50er-jahre-museum.de",
-      "allowInsecureHttp": true,
-      "ssoEnabled": false,
-      "pushEnabled": false,
-      "ssoAuthority": "",
-      "postgresStorageGB": 32
-    }
-  },
-  "metadata": {
-    "createdAt": "2026-03-26T23:52:57.5255989+01:00",
-    "updatedAt": "2026-03-26T23:52:57.5401728+01:00",
-    "version": 3
-  }
+    "smtp":  {
+                 "mailMode":  "smtp_auth",
+                 "useAuth":  true,
+                 "mailRootDomain":  "50er-jahre-museum.de",
+                 "from":  "vaultwarden@50er-jahre-museum.de",
+                 "fromName":  "Vaultwarden",
+                 "host":  "smtp.office365.com",
+                 "port":  "587",
+                 "security":  "starttls",
+                 "username":  "noreply@50er-jahre-museum.de",
+                 "passwordSource":  "prompt"
+             },
+    "customerNumber":  "1309",
+    "customerCode":  "vault-50er-jahre-museum-de",
+    "secrets":  {
+                    "smtpPasswordSource":  "prompt",
+                    "cloudflareApiTokenSource":  "not-required",
+                    "ssoClientSecretSource":  "none",
+                    "pushInstallationKeySource":  "none"
+                },
+    "domain":  {
+                   "hostname":  "vault.50er-jahre-museum.de",
+                   "zoneName":  "50er-jahre-museum.de",
+                   "url":  "https://vault.50er-jahre-museum.de"
+               },
+    "edge":  {
+                 "mode":  "basic",
+                 "enableWaf":  true,
+                 "enableRateLimit":  true,
+                 "lockOriginToCloudflare":  false
+             },
+    "azure":  {
+                  "resourceGroupName":  "rg-musef-prod-neu",
+                  "location":  "northeurope",
+                  "environment":  "prod",
+                  "appName":  "vault",
+                  "edgeMode":  "none",
+                  "enableIngressIpRestrictions":  false,
+                  "ingressAllowedCidrs":  [
+
+                                          ],
+                  "advancedArmParameters":  {
+                                                "orgCreationUsers":  "",
+                                                "ssoEnabled":  false,
+                                                "acsDomainName":  "",
+                                                "allowAzureServicesToPostgres":  true,
+                                                "pushInstallationId":  "",
+                                                "storageAccountSku":  "Standard_LRS",
+                                                "postgresSkuName":  "Standard_B1ms",
+                                                "pushUseEuServers":  false,
+                                                "ssoOnly":  false,
+                                                "invitationOrgName":  "50er-jahre-museum.de",
+                                                "ssoClientId":  "",
+                                                "diagnosticsEnabled":  true,
+                                                "ssoAuthority":  "",
+                                                "postgresBackupRetentionDays":  14,
+                                                "acsDeployFoundation":  false,
+                                                "ssoScopes":  "openid profile email offline_access User.Read",
+                                                "signupsDomainsWhitelist":  "50er-jahre-museum.de",
+                                                "acsDataLocation":  "Germany",
+                                                "allowInsecureHttp":  true,
+                                                "adminPanelEnabled":  true,
+                                                "pushEnabled":  false,
+                                                "postgresStorageGB":  32
+                                            }
+              },
+    "metadata":  {
+                     "createdAt":  "2026-03-27T10:04:07.9698663+01:00",
+                     "updatedAt":  "2026-03-27T10:04:07.9803705+01:00",
+                     "version":  3
+                 }
 }
