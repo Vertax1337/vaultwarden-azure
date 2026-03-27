@@ -370,3 +370,108 @@ Geprüft für Seiteneffekte:
 - 1 neuer Test:
   - `test_wizard_smtp_auth_does_not_prompt_for_host_in_main_flow`: verifiziert, dass `Read-TextWithDefault -Label 'SMTP Host'` nicht mehr im Code ist, smtp.office365.com als Default vorhanden ist und der Kommentar die Design-Entscheidung dokumentiert
 - Bestehender Test `test_wizard_direct_send_prompts_for_smtp_host` angepasst: prüft jetzt auf `MX-Endpunkt` (bleibt im Direct-Send-Pfad erhalten)
+
+
+## Schritt 5 – Mail-Modus-Zustandswechsel: vollständige State-Migration, Shared-Logic-Marker, Tests
+
+### Problem / Ursache
+
+Der Deploy-/Wizard-Pfad behandelte den Mail-Modus-Wechsel (Direct Send ↔ SMTP Auth) nicht als vollständige Zustandsmigration:
+
+1. **Bug – CLI-Pfad: `smtpPort` defaultete auf '587' für Direct Send**: In der CLI-Path-Konfigurationserzeugung (`Invoke-CustomerDeployment.ps1`, Hauptausführungspfad) wurde `-SmtpPort` immer mit `$(if ($SmtpPort) { $SmtpPort } else { '587' })` defaultet – unabhängig vom Mail-Modus. Beim Wechsel SMTP Auth → Direct Send ohne expliziten `-SmtpPort`-Parameter verblieb '587' im gespeicherten Config-Objekt, obwohl Direct Send keinen Port verwendet. Das ARM-Template ignoriert den gespeicherten Port-Wert zwar für Direct Send, aber die `deployment.config.json` enthielt damit einen inkonsistenten Zielzustand.
+
+2. **Fehlende Shared-Logic-Marker**: Die zentralen SMTP-zustandsrelevanten Funktionen in `Invoke-CustomerDeployment.ps1` (`New-CustomerConfigObject`, `Get-RuntimeSecretParameters`, `New-CustomerConfigInteractive`, `New-CustomerAzureParameters`, `Save-CustomerFiles`) hatten keine `# SHARED LOGIC:`-Kommentare, obwohl sie von mehreren Deploy-/Wizard-Pfaden verwendet werden und Mail-Modus-Änderungen an diesen Stellen Seiteneffekte in allen Pfaden verursachen können.
+
+3. **Fehlende Tests für Zustandswechsel-Szenarien**: Es existierten keine Tests, die explizit prüfen, ob beim Wechsel zwischen Mail-Modi der korrekte Zielzustand hergestellt wird (ACA-Secrets, Env-Variablen, ARM-Parameter-Inhalt).
+
+### Betroffene Dateien
+
+#### Shared-Logic-Betroffenheit
+
+| Funktion | Verwendung | Mail-Modus-Relevanz |
+|---|---|---|
+| `New-CustomerConfigObject` | Wizard (New-CustomerConfigInteractive), CLI-Pfad, GenerateOnly | Kanonische SMTP-Zustandsdefinition; beim Moduswechsel werden useAuth, port, security, username, passwordSource gesetzt |
+| `Get-RuntimeSecretParameters` | Hauptausführungspfad (interaktiv + CLI + GenerateOnly) | smtpPassword wird nur bei useAuth=true angefordert |
+| `New-CustomerConfigInteractive` | Wizard-Pfade 1 (Neu), 3 (Bearbeiten+Deployen), 6 (GenerateOnly interaktiv) | SMTP-Auth-Felder werden im Wizard explizit initialisiert; bei Direct Send werden port/security/username leer gesetzt |
+| `New-CustomerAzureParameters` | Save-CustomerFiles (alle Pfade), temporärer Deploy-Pfad | ARM-Parameter-Erzeugung für Direct Send (nur smtpHost) vs. SMTP Auth (alle Auth-Felder) |
+| `Save-CustomerFiles` | Alle Pfade | Orchestriert Config, ARM-Parameter, current/-Kopien |
+
+#### Konkrete Dateiänderungen
+
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzte Fixes
+
+**1. `scripts/Invoke-CustomerDeployment.ps1` – Bug-Fix: SmtpPort-Default im CLI-Pfad**
+
+Vorher:
+```powershell
+-SmtpPort $(if ($SmtpPort) { $SmtpPort } else { '587' })
+```
+
+Nachher:
+```powershell
+-SmtpPort $(if ($SmtpPort) { $SmtpPort } elseif ($effectiveSmtpUseAuth) { '587' } else { '' })
+```
+
+Erklärung: Der Port-Default '587' ist nur für SMTP Auth sinnvoll. Direct Send verwendet Port 25 (das ARM-Template setzt diesen fest im `vwEnvSmtpCommon`-Array, unabhängig vom Parameter). Im Config-Objekt muss Port für Direct Send leer bleiben, damit der Zielzustand sauber und korrekt persistiert wird.
+
+**2. `scripts/Invoke-CustomerDeployment.ps1` – Shared-Logic-Marker ergänzt**
+
+Folgende Funktionen erhielten `# SHARED LOGIC:`-Kommentare mit Beschreibung der Mail-Modus-relevanten Logik:
+- `New-CustomerConfigObject`
+- `Get-RuntimeSecretParameters`
+- `New-CustomerConfigInteractive`
+- `New-CustomerAzureParameters`
+- `Save-CustomerFiles`
+
+**3. `tests/test_repo_contract.py` – 10 neue Tests**
+
+Pure-Python-Tests (keine pwsh-Abhängigkeit):
+- `test_main_json_smtp_secrets_conditional_on_smtp_use_auth`: Verifiziert, dass die ACA-Container-App-Secrets smtp-password nur bei `smtpUseAuth=true` enthält (ARM-`if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), json('[]'))`-Muster)
+- `test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth`: Verifiziert, dass SMTP_USERNAME und SMTP_PASSWORD (secretRef) Env-Variablen nur bei `smtpUseAuth=true` aktiv sind
+- `test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth`: Verifiziert, dass SMTP_AUTH_MECHANISM bei Direct Send niemals aktiv ist
+- `test_deployment_script_smtp_password_secret_only_in_auth_mode`: Verifiziert, dass das Deployment Script `az keyvault secret set` für smtp-password nur bei SMTP Auth ausführt und für Direct Send überspringt
+- `test_main_json_smtp_shared_logic_comment_in_deploy_script`: Verifiziert, dass alle SMTP-zustandsrelevanten Funktionen einen `# SHARED LOGIC:`-Kommentar haben
+
+pwsh-abhängige Tests:
+- `test_generate_only_smtp_auth_params_include_all_auth_fields`: Szenario Direct Send → SMTP Auth; prüft, dass ARM-Parameter smtpHost/Port/Security/Username enthalten
+- `test_generate_only_direct_send_params_exclude_smtp_auth_fields`: Szenario SMTP Auth → Direct Send; prüft, dass ARM-Parameter kein smtpPort/Security/Username/Password mehr enthalten
+- `test_generate_only_mode_switch_smtp_auth_to_direct_send_clears_auth_fields`: Vollständiger Wechsel-Test; prüft config.smtp und ARM-Parameter vor und nach dem Moduswechsel
+- `test_generate_only_existing_smtp_auth_redeploy_no_regression`: Redeploy SMTP Auth; prüft, dass bestehende Auth-Felder erhalten bleiben
+- `test_generate_only_existing_direct_send_redeploy_no_smtp_auth_ballast`: Redeploy Direct Send; prüft, dass kein SMTP-Auth-Ballast aktiviert wird
+
+### Zielzustand: Direct Send (smtpUseAuth=false)
+- `deployment.config.json`: `useAuth=false`, `port=''`, `security='starttls'`, `username=''`, `passwordSource='none'`
+- `azure.parameters.json`: `smtpUseAuth=false`, `smtpHost=<MX-Endpunkt>`, kein smtpPort/Security/Username/Password
+- ACA: kein smtp-password Secret, kein SMTP_USERNAME/SMTP_PASSWORD/SMTP_AUTH_MECHANISM Env-Var
+
+### Zielzustand: SMTP AUTH (smtpUseAuth=true)
+- `deployment.config.json`: `useAuth=true`, `port='587'`, `security='starttls'`, `username='...'`, `passwordSource='prompt'`
+- `azure.parameters.json`: `smtpUseAuth=true`, alle SMTP-Auth-Felder vorhanden
+- ACA: smtp-password Secret aktiv, SMTP_USERNAME/SMTP_PASSWORD Env-Vars aktiv
+
+### Vaultwarden /data/config.json – Hinweis
+Vaultwarden persistiert SMTP-Konfiguration intern in `/data/config.json` (Admin-Panel-Einstellungen). Beim Mail-Modus-Wechsel werden diese internen Werte NICHT automatisch durch das ARM-Deployment bereinigt. Da Azure Container Apps aber SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM im Direct-Send-Modus nicht mehr als Env-Variablen setzt, werden Vaultwarden-interne SMTP-Auth-Einstellungen nicht verwendet. Dies ist kein Bug, aber ein dokumentierter Hinweis: Falls der Admin-Panel zuvor manuelle SMTP-Einstellungen hatte, könnten diese in `/data/config.json` verbleiben. Eine strukturelle Architekturentscheidung (z.B. Reset via Vaultwarden-ENV `ADMIN_TOKEN`) ist hier nicht nötig, da Env-Variablen die Admin-Panel-Konfiguration überschreiben.
+
+### Relevante Nebenwirkungen / Risiken
+- **Bestehende CLI-Deployments mit explizitem `-SmtpPort` für Direct Send**: Funktionieren weiterhin korrekt (der übergebene Wert wird verwendet).
+- **Repair/Update-Pfade**: Lesen den gespeicherten Config-Wert – ein zuvor fehlerhaft mit port='587' gespeicherter Direct-Send-Config könnte nach dem Fix korrekt leer gesetzt werden, wenn eine neue `New-CustomerConfigObject`-Erzeugung stattfindet.
+- **Keine ACA-Fehler durch verwaiste Secret-Refs**: Das ARM-Template schließt smtp-password aus der ACA-Secrets-Liste aus, sobald `smtpUseAuth=false` – unabhängig davon, ob das KV-Secret noch existiert.
+
+### Test / Validierung
+- Vollständiger Repo-Testlauf: 69/70 Tests grün (60 bestehend + 10 neue).
+- 1 vor-existierender Fehler (`test_rg_default_in_stored_configs`) unverändert – betrifft einen gespeicherten Kundenkonfig mit abweichendem RG-Namensschema, nicht diesen Fix.
+- 10 neue Tests alle grün:
+  - `test_main_json_smtp_secrets_conditional_on_smtp_use_auth`
+  - `test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth`
+  - `test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth`
+  - `test_deployment_script_smtp_password_secret_only_in_auth_mode`
+  - `test_main_json_smtp_shared_logic_comment_in_deploy_script`
+  - `test_generate_only_smtp_auth_params_include_all_auth_fields`
+  - `test_generate_only_direct_send_params_exclude_smtp_auth_fields`
+  - `test_generate_only_mode_switch_smtp_auth_to_direct_send_clears_auth_fields`
+  - `test_generate_only_existing_smtp_auth_redeploy_no_regression`
+  - `test_generate_only_existing_direct_send_redeploy_no_smtp_auth_ballast`
