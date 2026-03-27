@@ -1268,3 +1268,51 @@ Manuelle Validierungsschritte (in interaktiver PowerShell-Sitzung):
 - `0` / Beenden → Skript endet sauber
 - Nach einer Aktion (Wizard) → Menü erscheint wieder am letzten Submenu-Stand
 - CLI-Aufruf mit `-CustomerNumber`, `-NonInteractive` etc. → Verhalten unverändert
+
+---
+
+## Issue 4 – Selection-Memory bei „Zurück" im ConsoleMenu korrigiert
+
+### Problem / Ursache
+
+In `Show-DeploymentMainMenu` wurde `$MenuState[$currentMenuId]` unmittelbar nach jeder Auswahl aktualisiert – auch dann, wenn der Nutzer **„Zurück"** wählte. Damit wurde der `back`-Eintrag (Taste `0`) als letzte Position gespeichert.
+
+Beim erneuten Öffnen des Untermenüs wurde dadurch nicht die zuletzt sinnvoll gewählte Aktion vorselektiert, sondern direkt wieder **„Zurück"**.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Menu.ps1` – Selection-Memory-Logik korrigiert
+- `scripts/lib/VaultwardenDeployment.Flows.ps1` – veralteter Kommentar entfernt
+- `change.md` – dieser Eintrag
+
+### Umgesetzter Fix
+
+#### `VaultwardenDeployment.Menu.ps1`
+
+`$MenuState[$currentMenuId] = [string]$selectedItem.Key` aus der gemeinsamen Position vor dem `switch`-Block entfernt. Die Zuweisung erfolgt jetzt **selektiv** innerhalb der `switch`-Cases:
+
+| `ItemType` | `MenuState`-Update? | Begründung |
+|---|---|---|
+| `action` | ✅ Ja | Letzte fachliche Auswahl soll gespeichert werden |
+| `submenu` | ✅ Ja | Auswahl im übergeordneten Menü soll gespeichert werden |
+| `back` | ❌ Nein | Rücksprung ist kein fachlicher Zustand – bisherige Position erhalten |
+| `exit` | ✅ Ja | Vollständig, kein UX-Impact |
+
+#### `VaultwardenDeployment.Flows.ps1`
+
+Veralteten Kommentar entfernt (`# Do not activate Show-DeploymentMainMenu here; that belongs to a follow-up issue.`). `Show-DeploymentMainMenu` ist seit Issue 3 aktiv – der Kommentar war nicht mehr zutreffend.
+
+### Risiken / Nebenwirkungen
+
+- Keine Verhaltensänderung für `action`-, `submenu`- und `exit`-Einträge.
+- Kein Einfluss auf den CLI/NonInteractive-Pfad.
+- Kein Einfluss auf die `Start-*Flow`-Funktionen.
+
+### Test / Validierung
+
+115/115 Tests grün.
+
+Manuelles Testszenario:
+1. Wizard öffnen → Untermenü „Vorhandene Konfigurationen" → Eintrag „2" (Bearbeiten) wählen
+2. Untermenü erneut öffnen → Cursor steht auf „2" (Bearbeiten), nicht auf „0" (Zurück) ✓
+3. Untermenü über „Zurück" verlassen → Root-Menü erscheint → Untermenü wieder öffnen → Cursor steht weiterhin auf „2" ✓

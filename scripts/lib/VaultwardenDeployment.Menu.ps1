@@ -100,11 +100,12 @@ function Show-DeploymentMainMenu {
             -ClearScreenOnOpen:$clearOnOpen `
             -InitialSelectedKey $initialKey
 
-        $MenuState[$currentMenuId] = [string]$selectedItem.Key
         $clearOnOpen = $false
 
         switch ($selectedItem.ItemType) {
             'action' {
+                # Save the last meaningful selection so it is pre-selected on re-entry.
+                $MenuState[$currentMenuId] = [string]$selectedItem.Key
                 return [pscustomobject]@{
                     ActionId  = $selectedItem.ActionId
                     MenuState = $MenuState
@@ -112,16 +113,21 @@ function Show-DeploymentMainMenu {
                 }
             }
             'submenu' {
+                # Save the submenu-entry position in the parent menu.
+                $MenuState[$currentMenuId] = [string]$selectedItem.Key
                 [void]$MenuStack.Add($selectedItem.TargetMenuId)
                 $clearOnOpen = $true
             }
             'back' {
+                # Do NOT update MenuState: preserve the last meaningful position
+                # so the submenu pre-selects it on re-entry instead of "Zurück".
                 if ($MenuStack.Count -gt 1) {
                     $MenuStack.RemoveAt($MenuStack.Count - 1)
                 }
                 $clearOnOpen = $true
             }
             'exit' {
+                $MenuState[$currentMenuId] = [string]$selectedItem.Key
                 [System.Console]::Clear()
                 return [pscustomobject]@{
                     ActionId  = 'Exit'
