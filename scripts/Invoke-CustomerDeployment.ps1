@@ -249,7 +249,7 @@ function Get-InteractiveAction {
 
 function Select-CustomerCodeInteractive {
     param([Parameter(Mandatory)][string]$CustomersRoot)
-    $customers = Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot
+    $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
     if ($customers.Count -eq 0) {
         throw 'Keine vorhandenen Kundenkonfigurationen gefunden.'
     }

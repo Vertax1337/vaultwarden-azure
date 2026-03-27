@@ -1,10 +1,80 @@
 # Change Log
 
-## Fix: ARM template syntax error + smtp_auth SMTP host override
+## Revert: RG artifact name restored to custom wizard-override value
 
 ### Problem / Ursache
+The previous change incorrectly renamed `resourceGroupName` from `rg-musef-prod-neu` to
+`rg-50er-jahre-museum-vault-prod-neu` in both checked-in config files. This was wrong: the
+wizard intentionally allows operators to override the derived default resource group name.
+`rg-musef-prod-neu` is a valid, operator-chosen name and must be preserved as-is.
 
-**1. ARM template syntax error in `main.json`**
+The contract test `test_rg_default_in_stored_configs` was also incorrectly enforcing the
+full derived CAF pattern `^rg-.+-vault-.+-.+$`, which by design excludes custom override
+values.
+
+### Betroffene Dateien
+- `customers/vault-50er-jahre-museum-de/deployment.config.json`
+- `current/deployment.config.json`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+1. Reverted `resourceGroupName` in both config files back to `rg-musef-prod-neu`.
+2. Relaxed `test_rg_default_in_stored_configs` to only assert that the stored value is
+   non-empty and starts with `rg-`. Custom operator-chosen names that do not follow the
+   derived naming convention are valid and must pass this test.
+
+### Risiken / Nebenwirkungen
+- No deployed Azure resources are affected; `resourceGroupName` in these files is a
+  local config artifact only.
+- The relaxed test still catches clearly wrong values (empty, non-`rg-` prefix) while
+  allowing legitimate custom overrides.
+
+### Test / Validierung
+- `python3 -m pytest tests/test_repo_contract.py -v` → 101 passed, 0 failures.
+
+---
+
+## Fix: Menu crash in Select-CustomerCodeInteractive
+
+### Problem / Ursache
+Running action `3` (Vorhandene Konfiguration bearbeiten und deployen) crashed immediately with:
+
+    Select-CustomerCodeInteractive : Die Eigenschaft "Count" wurde für dieses Objekt nicht gefunden.
+
+Root cause: PowerShell pipeline unwraps a single-item result to a scalar, so `$customers`
+was not guaranteed to be an array when exactly one customer directory exists. Under
+StrictMode `.Count` fails on a plain string.
+
+### Betroffene Dateien
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `change.md`
+
+### Umgesetzter Fix
+Changed the call site in `Select-CustomerCodeInteractive` from:
+
+    $customers = Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot
+
+to:
+
+    $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
+
+The `@()` array sub-expression operator guarantees an array in all cases (0, 1, or many
+customer directories). All subsequent `.Count` checks and index-based accesses work
+correctly under StrictMode.
+
+### Risiken / Nebenwirkungen
+- Purely defensive fix. `Get-AvailableCustomerCodes` already returns `@()` in the library,
+  but the call-site guard eliminates any pipeline-unwrapping risk.
+- Existing menu rendering, selection by index, and selection by folder name are unaffected.
+
+### Test / Validierung
+- `python3 -m pytest tests/test_repo_contract.py -v` → 101 passed, 0 failures.
+- Zero/one/multiple customer dir behaviour verified by code review.
+
+---
+
+## Fix: ARM template syntax error + smtp_auth SMTP host override
 The ACA Container App `secrets` expression contained one extra closing parenthesis `)` in the `concat(...)` call that assembles `vwSecretsBase`, `vwSecretsSmtp`, `vwSecretsSso`, `vwSecretsPush`, and `vwSecretsHibp`. Azure Resource Manager rejected the template with:
 `InvalidTemplate: Unable to parse language expression … expected token 'EndOfData' and actual 'RightParenthesis'`
 
