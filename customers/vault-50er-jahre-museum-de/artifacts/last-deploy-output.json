@@ -1,9 +1,9 @@
 {
-    "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deployments/vaultwarden-20260326-235257",
+    "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deployments/vaultwarden-20260327-110928",
     "location":  null,
-    "name":  "vaultwarden-20260326-235257",
+    "name":  "vaultwarden-20260327-110928",
     "properties":  {
-                       "correlationId":  "fbe46ce2-7455-4dfd-8ef4-80326869b371",
+                       "correlationId":  "de695359-6a95-4868-bf87-f51e52013716",
                        "debugSetting":  null,
                        "dependencies":  [
                                             {
@@ -300,13 +300,6 @@
                                                                       "resourceGroup":  "rg-musef-prod-neu",
                                                                       "resourceName":  "vault-pg-vwwkoov3olkba/vaultwarden",
                                                                       "resourceType":  "Microsoft.DBforPostgreSQL/flexibleServers/databases"
-                                                                  },
-                                                                  {
-                                                                      "apiVersion":  "2023-08-01",
-                                                                      "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.Resources/deploymentScripts/vault-ensure-kv-secrets",
-                                                                      "resourceGroup":  "rg-musef-prod-neu",
-                                                                      "resourceName":  "vault-ensure-kv-secrets",
-                                                                      "resourceType":  "Microsoft.Resources/deploymentScripts"
                                                                   }
                                                               ],
                                                 "id":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/containerApps/vault",
@@ -422,7 +415,7 @@
                                             }
                                         ],
                        "diagnostics":  null,
-                       "duration":  "PT38M1.0147935S",
+                       "duration":  "PT35M36.2927036S",
                        "error":  null,
                        "extensions":  [
 
@@ -684,7 +677,7 @@
                                                      },
                                        "smtpServerResolved":  {
                                                                   "type":  "String",
-                                                                  "value":  "50erjahremuseum-de01be.mail.protection.outlook.com:25"
+                                                                  "value":  "smtp.office365.com:587"
                                                               }
                                    },
                        "parameters":  {
@@ -791,6 +784,9 @@
                                                            "type":  "String",
                                                            "value":  ""
                                                        },
+                                          "hibpApiKey":  {
+                                                             "type":  "SecureString"
+                                                         },
                                           "ingressAllowedCidrs":  {
                                                                       "type":  "Array",
                                                                       "value":  [
@@ -804,6 +800,10 @@
                                           "location":  {
                                                            "type":  "String",
                                                            "value":  "northeurope"
+                                                       },
+                                          "mailMode":  {
+                                                           "type":  "String",
+                                                           "value":  "smtp_auth"
                                                        },
                                           "mailRootDomain":  {
                                                                  "type":  "String",
@@ -857,7 +857,7 @@
                                                                 },
                                           "smtpFrom":  {
                                                            "type":  "String",
-                                                           "value":  "vaultwarden@50er-jahre-museum.de"
+                                                           "value":  "noreply@50er-jahre-museum.de"
                                                        },
                                           "smtpFromName":  {
                                                                "type":  "String",
@@ -865,7 +865,7 @@
                                                            },
                                           "smtpHost":  {
                                                            "type":  "String",
-                                                           "value":  "50erjahremuseum-de01be.mail.protection.outlook.com"
+                                                           "value":  "smtp.office365.com"
                                                        },
                                           "smtpPassword":  {
                                                                "type":  "SecureString"
@@ -880,11 +880,11 @@
                                                            },
                                           "smtpUseAuth":  {
                                                               "type":  "Bool",
-                                                              "value":  false
+                                                              "value":  true
                                                           },
                                           "smtpUsername":  {
                                                                "type":  "String",
-                                                               "value":  ""
+                                                               "value":  "noreply@50er-jahre-museum.de"
                                                            },
                                           "ssoAuthority":  {
                                                                "type":  "String",
@@ -1278,9 +1278,9 @@
                                          }
                                      ],
                        "provisioningState":  "Succeeded",
-                       "templateHash":  "14442573856050579418",
+                       "templateHash":  "9831859412371485185",
                        "templateLink":  null,
-                       "timestamp":  "2026-03-26T23:31:18.728320+00:00",
+                       "timestamp":  "2026-03-27T10:45:15.968670+00:00",
                        "validatedResources":  null,
                        "validationLevel":  null
                    },
