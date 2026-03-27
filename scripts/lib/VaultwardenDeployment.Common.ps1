@@ -9,6 +9,11 @@ $Script:_InvokeWithSpinnerCommonPath = $PSCommandPath
 # This is best-effort; Invoke-WithSpinner falls back gracefully if ThreadJob is absent.
 Import-Module ThreadJob -ErrorAction SilentlyContinue
 
+# Cache job-mechanism availability so Invoke-WithSpinner does not call Get-Command
+# on every invocation. Refreshed at dot-source time; callers may re-dot-source to refresh.
+$Script:_SpinnerHasThreadJob = $null -ne (Get-Command -Name 'Start-ThreadJob' -ErrorAction SilentlyContinue)
+$Script:_SpinnerHasStartJob  = $null -ne (Get-Command -Name 'Start-Job'       -ErrorAction SilentlyContinue)
+
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 function Get-RepoRoot {
@@ -69,10 +74,9 @@ function Invoke-WithSpinner {
     $lineWidth   = 82   # wide enough to cover [~] + message + spinner char + mm:ss
     $stopwatch   = [System.Diagnostics.Stopwatch]::StartNew()
 
-    # Determine the best available job mechanism. Check each time so that late-loaded
-    # modules (e.g. ThreadJob installed by an earlier step) are picked up.
-    $hasThreadJob = $null -ne (Get-Command -Name 'Start-ThreadJob' -ErrorAction SilentlyContinue)
-    $hasStartJob  = $null -ne (Get-Command -Name 'Start-Job'       -ErrorAction SilentlyContinue)
+    # Use cached job-mechanism availability (set at module load time after ThreadJob import).
+    $hasThreadJob = $Script:_SpinnerHasThreadJob
+    $hasStartJob  = $Script:_SpinnerHasStartJob
 
     if (-not $hasThreadJob -and -not $hasStartJob) {
         # No job infrastructure at all – run synchronously without spinner.

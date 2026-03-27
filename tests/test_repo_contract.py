@@ -2194,9 +2194,10 @@ class RepoContractTests(unittest.TestCase):
         """Invoke-WithSpinner must not unconditionally depend on Start-ThreadJob.
 
         On Windows PowerShell 5.1 without the ThreadJob module, Start-ThreadJob is
-        unavailable. The function must detect availability via Get-Command, fall back
-        to Start-Job (with Common.ps1 re-sourced so helper functions are available),
-        and ultimately support a direct-execution path if no job infrastructure exists.
+        unavailable. The function must detect availability via cached script-scoped variables
+        (set at module load time), fall back to Start-Job (with Common.ps1 re-sourced so
+        helper functions are available), and ultimately support a direct-execution path if no
+        job infrastructure exists.
         """
         common_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1').read_text(encoding='utf-8')
 
@@ -2206,14 +2207,17 @@ class RepoContractTests(unittest.TestCase):
         # Extract enough body to cover all three paths
         body = common_text[idx:idx + 3000]
 
-        # Must NOT unconditionally call Start-ThreadJob
-        # (it must be guarded by a Get-Command check)
-        self.assertNotIn('$job = Start-ThreadJob', body.split('Get-Command')[0],
-                         'Start-ThreadJob must only be called after a Get-Command availability check')
+        # The function must read job-availability from the cached script-scoped variable,
+        # not call Start-ThreadJob unconditionally without a guard.
+        self.assertIn('_SpinnerHasThreadJob', body,
+                      'Invoke-WithSpinner must read the cached _SpinnerHasThreadJob flag')
 
-        # Must check Start-ThreadJob availability via Get-Command
-        self.assertIn("Get-Command -Name 'Start-ThreadJob'", body,
-                      "Invoke-WithSpinner must check Start-ThreadJob availability via Get-Command")
+        # The cached availability flags must be set at module level (before the function).
+        module_header = common_text[:idx]
+        self.assertIn("Get-Command -Name 'Start-ThreadJob'", module_header,
+                      "Common.ps1 module level must cache Start-ThreadJob availability via Get-Command")
+        self.assertIn('_SpinnerHasThreadJob', module_header,
+                      'Common.ps1 must set $Script:_SpinnerHasThreadJob at module load time')
 
         # Must have a Start-Job fallback
         self.assertIn('Start-Job', body,
@@ -2234,6 +2238,27 @@ class RepoContractTests(unittest.TestCase):
         # Common.ps1 path must be captured for Start-Job initialization
         self.assertIn('_InvokeWithSpinnerCommonPath', common_text,
                       'Common.ps1 must capture its own path for Start-Job InitializationScript')
+
+
+    def test_spinner_scriptblocks_have_no_using_member_chains(self):
+        """Spinner scriptblocks must not use $using:obj.property member-chain expressions.
+
+        Both Start-ThreadJob and Start-Job only support simple top-level $using:varname
+        references. Member chains like $using:config.azure.resourceGroupName cause:
+          "Cannot get the value of the Using expression $using:config.azure.resourceGroupName.
+           Start-ThreadJob only supports using variable expressions."
+
+        All nested values must be pre-resolved into simple scalar variables before the
+        Invoke-WithSpinner call and passed via $using:simpleVar.
+        """
+        import re
+        for script_name in ('Invoke-CustomerDeployment.ps1', 'Deploy-AzureStack.ps1'):
+            script_text = (REPO_ROOT / 'scripts' / script_name).read_text(encoding='utf-8')
+            # Find $using:identifier.something – the identifier part is a word, then a dot follows
+            bad_refs = re.findall(r'\$using:[A-Za-z_][A-Za-z0-9_]*\.', script_text)
+            self.assertEqual(bad_refs, [],
+                             f'{script_name} must not contain nested $using: member-chain expressions; '
+                             f'found: {bad_refs}')
 
 
 if __name__ == '__main__':
