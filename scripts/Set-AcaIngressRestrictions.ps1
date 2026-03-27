@@ -37,5 +37,12 @@ Save-JsonUtf8 -Data $paramsDoc -Path $paths.AzureParametersPath
 
 if ($Redeploy) {
     if (-not $TemplateFile) { $TemplateFile = Join-Path $repoRoot 'main.json' }
+    # Preserve existing custom domain bindings before the ingress-restrictions redeploy
+    $domainsToRestore = @(Get-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $config.azure.appName)
     & (Join-Path $PSScriptRoot 'Deploy-AzureStack.ps1') -ResourceGroupName $config.azure.resourceGroupName -TemplateFile $TemplateFile -ParametersFile $paths.AzureParametersPath -OutputPath $OutputPath
+    # Restore custom domain bindings removed by the redeploy
+    if ($domainsToRestore.Count -gt 0) {
+        $envName = ('{0}-env' -f $config.azure.appName)
+        Restore-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $config.azure.appName -EnvironmentName $envName -CustomDomains $domainsToRestore
+    }
 }

@@ -795,6 +795,24 @@ if ($GenerateOnly) {
     return
 }
 
+# --- Preserve existing ACA custom domain state before redeploy ---
+Write-Step 'ACA Custom Domain State wird vor dem Deployment gesichert.'
+$preservedCustomDomains = @(Get-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $config.azure.appName)
+if ($preservedCustomDomains.Count -gt 0) {
+    Write-Step ("  {0} vorhandene Custom Domain(s) gefunden und im Config gespeichert." -f $preservedCustomDomains.Count)
+    if (-not $config.ContainsKey('preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }
+    $config.preservedInfraState.customDomains = @($preservedCustomDomains | ForEach-Object {
+        [ordered]@{
+            name          = [string]$_.name
+            certificateId = if ($null -ne $_.certificateId) { [string]$_.certificateId } else { '' }
+        }
+    })
+    $config.preservedInfraState.customDomainsLastCapturedAt = (Get-Date).ToString('o')
+    Save-JsonUtf8 -Data $config -Path $paths.ConfigPath
+} else {
+    Write-Step '  Keine Custom Domains vorhanden (Neudeployment oder noch nicht konfiguriert).'
+}
+
 $deploymentParametersPath = $paths.AzureParametersPath
 $tempDeploymentParametersPath = $null
 try {
@@ -813,6 +831,11 @@ finally {
 }
 
 if ($config.edge.mode -eq 'basic') {
+    $appNameBasic = if ($result -and $result.properties.outputs.containerAppName.value) { $result.properties.outputs.containerAppName.value } else { $config.azure.appName }
+    $envNameBasic = if ($result -and $result.properties.outputs.containerAppEnvironmentName.value) { $result.properties.outputs.containerAppEnvironmentName.value } else { ('{0}-env' -f $config.azure.appName) }
+    if ($preservedCustomDomains -and $preservedCustomDomains.Count -gt 0) {
+        Restore-AcaCustomDomains -ResourceGroupName $config.azure.resourceGroupName -AppName $appNameBasic -EnvironmentName $envNameBasic -CustomDomains $preservedCustomDomains
+    }
     Write-Step 'Basic-Modus abgeschlossen. Kein Cloudflare-Postdeploy ausgeführt.'
     return $result
 }

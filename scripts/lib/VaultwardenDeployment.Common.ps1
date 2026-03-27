@@ -689,6 +689,71 @@ function Get-SuggestedSignupsDomainsWhitelist {
     return $ZoneName
 }
 
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Liest die aktuell an eine ACA-App gebundenen Custom Domains aus der Live-Umgebung.
+# Gibt ein (möglicherweise leeres) Array von Custom-Domain-Objekten zurück.
+# Gibt ein leeres Array zurück, wenn die App nicht existiert oder keine Custom Domains hat.
+function Get-AcaCustomDomains {
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroupName,
+        [Parameter(Mandatory)][string]$AppName
+    )
+    $json = az containerapp show -g $ResourceGroupName -n $AppName `
+        --query 'properties.configuration.ingress.customDomains' `
+        -o json --only-show-errors 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($json) -or $json.Trim() -eq 'null') {
+        return @()
+    }
+    try {
+        if ($PSVersionTable.PSVersion.Major -ge 6) {
+            $parsed = $json | ConvertFrom-Json -Depth 20
+        } else {
+            $parsed = $json | ConvertFrom-Json
+        }
+        if ($null -eq $parsed) { return @() }
+        return @($parsed)
+    }
+    catch {
+        return @()
+    }
+}
+
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Stellt zuvor gespeicherte ACA Custom Domain Bindings nach einem Redeploy wieder her.
+# Für jede Custom Domain wird 'az containerapp hostname bind' aufgerufen.
+# Ist $CustomDomains leer, passiert nichts (kein Fehler).
+function Restore-AcaCustomDomains {
+    param(
+        [Parameter(Mandatory)][string]$ResourceGroupName,
+        [Parameter(Mandatory)][string]$AppName,
+        [Parameter(Mandatory)][string]$EnvironmentName,
+        [Parameter(Mandatory)][AllowEmptyCollection()][array]$CustomDomains
+    )
+    if (-not $CustomDomains -or $CustomDomains.Count -eq 0) {
+        return
+    }
+    Write-Step ("ACA Custom Domain Bindings werden nach Redeploy wiederhergestellt ({0} Einträge)." -f $CustomDomains.Count)
+    foreach ($domain in $CustomDomains) {
+        $hostname = if ($domain -is [string]) { $domain } else { [string]$domain.name }
+        $certId   = if ($domain -is [string]) { $null } else { [string]$domain.certificateId }
+        if ([string]::IsNullOrWhiteSpace($hostname)) { continue }
+        if ([string]::IsNullOrWhiteSpace($certId)) {
+            Write-Step ("  Hostname '{0}' wird ohne Zertifikat hinzugefügt (kein certificateId gespeichert)." -f $hostname)
+            az containerapp hostname add -g $ResourceGroupName -n $AppName --hostname $hostname --only-show-errors | Out-Null
+        } else {
+            Write-Step ("  Hostname '{0}' wird an Zertifikat gebunden." -f $hostname)
+            az containerapp hostname bind -g $ResourceGroupName -n $AppName `
+                --hostname $hostname --environment $EnvironmentName `
+                --certificate $certId --only-show-errors | Out-Null
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning ("Warnung: Custom Domain '{0}' konnte nicht wiederhergestellt werden (ExitCode: {1}). Bitte manuell prüfen." -f $hostname, $LASTEXITCODE)
+        }
+    }
+}
+
 function New-CustomerReadmeContent {
     param([Parameter(Mandatory)]$Config)
 @"

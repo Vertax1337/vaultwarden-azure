@@ -2,12 +2,45 @@
 
 Revisioniertes Änderungsprotokoll aller Änderungen und Optimierungen am ARM-Template `main.json` gegenüber der ursprünglichen Baseline.
 
-> Letzte Aktualisierung: **2026-03-26**
+> Letzte Aktualisierung: **2026-03-27**
 
 ---
 
 
-## Revision 15 – 2026-03-26
+## Revision 16 – 2026-03-27
+
+### Scripts / Wizard
+
+| Änderung | Detail |
+|---|---|
+| ACA Custom Domain Preservation | Redeployments (edit+deploy, update, repair) löschen bestehende ACA Custom Domain Bindings nicht mehr. Vor jedem Redeploy wird der aktuelle `customDomains`-Zustand der laufenden ACA-App gesichert und nach dem Deploy wiederhergestellt. |
+| `Get-AcaCustomDomains` | Neue SHARED LOGIC-Funktion in `VaultwardenDeployment.Common.ps1`. Liest `customDomains` aus einer laufenden ACA-App via `az containerapp show`. Gibt ein leeres Array zurück, wenn die App nicht existiert oder keine Custom Domains hat. |
+| `Restore-AcaCustomDomains` | Neue SHARED LOGIC-Funktion in `VaultwardenDeployment.Common.ps1`. Stellt eine gespeicherte Custom-Domain-Liste per `az containerapp hostname bind` wieder her. No-op bei leerem Input. |
+| `preservedInfraState` im Config | Vor einem Redeploy erfasster Custom-Domain-Zustand wird im `deployment.config.json` unter `preservedInfraState.customDomains` gespeichert. Klar getrennter technischer State-Bereich – nicht mit benutzer-eingepflegten Business-Config-Feldern vermischt. |
+| `Set-AcaIngressRestrictions.ps1 -Redeploy` | Bewahrt Custom Domain Bindings: Capture vor dem Ingress-Restrictions-Redeploy, Restore danach. Behebt den zweiten Drop-Punkt im `cloudflare-managed`-Deployment-Pfad. |
+| Erstes Deployment bleibt manuell | Neueinstallationen werden nicht verändert. Custom Domain Setup ist weiterhin ein manueller Post-Deployment-Schritt. Nur bestehende Bindings werden automatisch erhalten. |
+
+### Tests
+
+| Test | Zweck |
+|---|---|
+| `test_get_aca_custom_domains_function_present` | `Get-AcaCustomDomains` in Common-Library vorhanden |
+| `test_restore_aca_custom_domains_function_present` | `Restore-AcaCustomDomains` in Common-Library vorhanden |
+| `test_get_aca_custom_domains_has_shared_logic_comment` | SHARED LOGIC-Marker oberhalb der Funktion |
+| `test_restore_aca_custom_domains_has_shared_logic_comment` | SHARED LOGIC-Marker oberhalb der Funktion |
+| `test_deploy_script_calls_get_aca_custom_domains` | Aufruf in `Invoke-CustomerDeployment.ps1` |
+| `test_deploy_script_calls_restore_aca_custom_domains` | Aufruf in `Invoke-CustomerDeployment.ps1` |
+| `test_deploy_script_stores_preserved_infra_state` | `preservedInfraState` im Config-Schema referenziert |
+| `test_ingress_restrictions_script_calls_get_aca_custom_domains` | Aufruf in `Set-AcaIngressRestrictions.ps1` |
+| `test_ingress_restrictions_script_calls_restore_aca_custom_domains` | Aufruf in `Set-AcaIngressRestrictions.ps1` |
+| `test_get_aca_custom_domains_returns_empty_for_nonexistent_app` | Defensive Behandlung (leeres Array bei Fehler) |
+| `test_restore_aca_custom_domains_noop_on_empty` | Kein Fehler bei leerer Domain-Liste |
+| `test_get_aca_custom_domains_is_valid_powershell` | Syntaktisch valides PowerShell (pwsh) |
+| `test_generate_only_does_not_capture_custom_domains` | GenerateOnly-Guard vor Azure-Abfrage |
+| `test_generate_only_new_deployment_no_preserved_state` | Neues Deployment erhält kein `preservedInfraState` |
+
+---
+
 
 ### Template / ARM
 
