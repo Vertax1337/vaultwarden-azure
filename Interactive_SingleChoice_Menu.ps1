@@ -1,6 +1,60 @@
-function Show-SingleChoiceMenu {
+function Write-LineAt {
     param(
-        [string]$Title = 'Aktion waehlen',
+        [int]$Row,
+        [string]$Text
+    )
+
+    $width = 80
+    try {
+        $width = [System.Console]::WindowWidth
+    }
+    catch {
+    }
+
+    if ($width -lt 10) {
+        $width = 80
+    }
+
+    try {
+        if ([System.Console]::BufferHeight -lt ($Row + 2)) {
+            [System.Console]::BufferHeight = $Row + 2
+        }
+    }
+    catch {
+    }
+
+    $outputText = $Text
+    if ($outputText.Length -gt ($width - 1)) {
+        $outputText = $outputText.Substring(0, $width - 1)
+    }
+    else {
+        $outputText = $outputText.PadRight($width - 1)
+    }
+
+    [System.Console]::SetCursorPosition(0, $Row)
+    [System.Console]::Write($outputText)
+}
+
+function Draw-MenuItem {
+    param(
+        [int]$TopRow,
+        [object[]]$Items,
+        [int]$Index,
+        [int]$SelectedIndex
+    )
+
+    $prefix = ' '
+    if ($Index -eq $SelectedIndex) {
+        $prefix = '>'
+    }
+
+    $line = ('{0} [{1}] {2}' -f $prefix, $Items[$Index].Key, $Items[$Index].Text)
+    Write-LineAt -Row ($TopRow + $Index) -Text $line
+}
+
+function Show-SingleChoiceMenuSmooth {
+    param(
+        [string]$Title = 'Stammmenue',
         [Parameter(Mandatory)]
         [object[]]$Items,
         [string]$DefaultKey = '1'
@@ -10,18 +64,9 @@ function Show-SingleChoiceMenu {
         throw 'Keine Menueeintraege vorhanden.'
     }
 
-    $index = 0
-
-    for ($i = 0; $i -lt $Items.Count; $i++) {
-        if ([string]$Items[$i].Key -eq $DefaultKey) {
-            $index = $i
-            break
-        }
-    }
-
     function Invoke-FallbackMenu {
         while ($true) {
-            Clear-Host
+            Write-Host ''
             Write-Host $Title
             Write-Host ''
             foreach ($item in $Items) {
@@ -43,9 +88,7 @@ function Show-SingleChoiceMenu {
                 }
             }
 
-            Write-Host ''
-            Write-Host 'Ungueltige Auswahl. Enter zum Fortfahren...'
-            [void][System.Console]::ReadKey($true)
+            Write-Host 'Ungueltige Auswahl.'
         }
     }
 
@@ -53,9 +96,23 @@ function Show-SingleChoiceMenu {
         return Invoke-FallbackMenu
     }
 
+    $selectedIndex = 0
+    for ($i = 0; $i -lt $Items.Count; $i++) {
+        if ([string]$Items[$i].Key -eq $DefaultKey) {
+            $selectedIndex = $i
+            break
+        }
+    }
+
+    $titleRow = 0
+    $helpRow = 2
+    $menuTopRow = 4
+    $messageRow = $menuTopRow + $Items.Count + 1
     $oldCursorVisible = $true
 
     try {
+        [System.Console]::Clear()
+
         try {
             $oldCursorVisible = [System.Console]::CursorVisible
             [System.Console]::CursorVisible = $false
@@ -63,47 +120,55 @@ function Show-SingleChoiceMenu {
         catch {
         }
 
+        Write-LineAt -Row $titleRow -Text $Title
+        Write-LineAt -Row ($titleRow + 1) -Text ''
+        Write-LineAt -Row $helpRow -Text 'Pfeile = bewegen, Enter = waehlen, Zahl = direkt waehlen, Esc = beenden'
+        Write-LineAt -Row ($helpRow + 1) -Text ''
+
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            Draw-MenuItem -TopRow $menuTopRow -Items $Items -Index $i -SelectedIndex $selectedIndex
+        }
+
+        Write-LineAt -Row $messageRow -Text ''
+        Write-LineAt -Row ($messageRow + 1) -Text ''
+        Write-LineAt -Row ($messageRow + 2) -Text ''
+
         while ($true) {
-            Clear-Host
-            Write-Host $Title
-            Write-Host ''
-            Write-Host 'Pfeile = bewegen, Enter = waehlen, Zahl = direkt waehlen, Esc = beenden'
-            Write-Host ''
-
-            for ($i = 0; $i -lt $Items.Count; $i++) {
-                $prefix = ' '
-                if ($i -eq $index) {
-                    $prefix = '>'
-                }
-
-                Write-Host ('{0} [{1}] {2}' -f $prefix, $Items[$i].Key, $Items[$i].Text)
-            }
-
             $keyInfo = [System.Console]::ReadKey($true)
 
             switch ($keyInfo.Key) {
                 'UpArrow' {
-                    if ($index -gt 0) {
-                        $index--
+                    $oldIndex = $selectedIndex
+
+                    if ($selectedIndex -gt 0) {
+                        $selectedIndex--
                     }
                     else {
-                        $index = $Items.Count - 1
+                        $selectedIndex = $Items.Count - 1
                     }
+
+                    Draw-MenuItem -TopRow $menuTopRow -Items $Items -Index $oldIndex -SelectedIndex $selectedIndex
+                    Draw-MenuItem -TopRow $menuTopRow -Items $Items -Index $selectedIndex -SelectedIndex $selectedIndex
                     continue
                 }
 
                 'DownArrow' {
-                    if ($index -lt ($Items.Count - 1)) {
-                        $index++
+                    $oldIndex = $selectedIndex
+
+                    if ($selectedIndex -lt ($Items.Count - 1)) {
+                        $selectedIndex++
                     }
                     else {
-                        $index = 0
+                        $selectedIndex = 0
                     }
+
+                    Draw-MenuItem -TopRow $menuTopRow -Items $Items -Index $oldIndex -SelectedIndex $selectedIndex
+                    Draw-MenuItem -TopRow $menuTopRow -Items $Items -Index $selectedIndex -SelectedIndex $selectedIndex
                     continue
                 }
 
                 'Enter' {
-                    return [string]$Items[$index].Key
+                    return [string]$Items[$selectedIndex].Key
                 }
 
                 'Escape' {
@@ -133,82 +198,68 @@ function Show-SingleChoiceMenu {
     }
 }
 
+function Show-MenuMessage {
+    param(
+        [Parameter(Mandatory)][string]$Message,
+        [int]$MenuItemCount
+    )
+
+    $messageRow = 5 + $MenuItemCount
+
+    Write-LineAt -Row $messageRow -Text ''
+    Write-LineAt -Row ($messageRow + 1) -Text $Message
+    Write-LineAt -Row ($messageRow + 2) -Text 'Taste druecken zum Zurueckkehren ins Menue...'
+    [void][System.Console]::ReadKey($true)
+    Write-LineAt -Row $messageRow -Text ''
+    Write-LineAt -Row ($messageRow + 1) -Text ''
+    Write-LineAt -Row ($messageRow + 2) -Text ''
+}
+
 $menuItems = @(
-    [pscustomobject]@{
-        Key  = '1'
-        Text = 'Neues Kundendeployment anlegen und deployen'
-    }
-    [pscustomobject]@{
-        Key  = '2'
-        Text = 'Vorhandene Konfiguration deployen'
-    }
-    [pscustomobject]@{
-        Key  = '3'
-        Text = 'Vorhandene Konfiguration bearbeiten und deployen'
-    }
-    [pscustomobject]@{
-        Key  = '4'
-        Text = 'Repair mit vorhandener Konfiguration'
-    }
-    [pscustomobject]@{
-        Key  = '5'
-        Text = 'Update mit vorhandener Konfiguration'
-    }
-    [pscustomobject]@{
-        Key  = '6'
-        Text = 'Nur Kunden-/Parameterdateien erzeugen'
-    }
-    [pscustomobject]@{
-        Key  = '0'
-        Text = 'Beenden'
-    }
+    [pscustomobject]@{ Key = '1'; Text = 'Neues Kundendeployment anlegen und deployen' }
+    [pscustomobject]@{ Key = '2'; Text = 'Vorhandene Konfiguration deployen' }
+    [pscustomobject]@{ Key = '3'; Text = 'Vorhandene Konfiguration bearbeiten und deployen' }
+    [pscustomobject]@{ Key = '4'; Text = 'Repair mit vorhandener Konfiguration' }
+    [pscustomobject]@{ Key = '5'; Text = 'Update mit vorhandener Konfiguration' }
+    [pscustomobject]@{ Key = '6'; Text = 'Nur Kunden-/Parameterdateien erzeugen' }
+    [pscustomobject]@{ Key = '0'; Text = 'Beenden' }
 )
 
 while ($true) {
-    $choice = Show-SingleChoiceMenu -Title 'Stammmenue' -Items $menuItems -DefaultKey '1'
+    $choice = Show-SingleChoiceMenuSmooth -Title 'Stammmenue' -Items $menuItems -DefaultKey '1'
 
     switch ($choice) {
         '1' {
-            Clear-Host
-            Write-Host 'Aktion 1 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 1 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '2' {
-            Clear-Host
-            Write-Host 'Aktion 2 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 2 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '3' {
-            Clear-Host
-            Write-Host 'Aktion 3 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 3 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '4' {
-            Clear-Host
-            Write-Host 'Aktion 4 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 4 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '5' {
-            Clear-Host
-            Write-Host 'Aktion 5 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 5 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '6' {
-            Clear-Host
-            Write-Host 'Aktion 6 ausgewaehlt'
-            Read-Host 'Enter zum Zurueckkehren ins Menue'
+            Show-MenuMessage -Message 'Aktion 6 ausgewaehlt' -MenuItemCount $menuItems.Count
         }
 
         '0' {
+            [System.Console]::Clear()
             exit 0
         }
 
         default {
+            [System.Console]::Clear()
             exit 1
         }
     }
