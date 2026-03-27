@@ -363,6 +363,27 @@ class RepoContractTests(unittest.TestCase):
         not_forwarded = defined - forwarded
         self.assertEqual(not_forwarded, set(), f'Parameters defined but not forwarded: {sorted(not_forwarded)}')
 
+    def test_root_wrapper_forwards_all_params(self):
+        """Root main.deploytoazure.json wrapper must forward all defined params to nested main.json."""
+        root = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        resources = root['resources']
+        self.assertIsInstance(resources, list)
+        deployment = next(r for r in resources if r.get('type') == 'Microsoft.Resources/deployments')
+        forwarded = set(deployment['properties']['parameters'].keys())
+        defined = set(root['parameters'].keys()) - {'mainTemplateUri'}
+        not_forwarded = defined - forwarded
+        self.assertEqual(not_forwarded, set(), f'Root wrapper parameters defined but not forwarded: {sorted(not_forwarded)}')
+
+    def test_root_wrapper_forwards_mail_mode(self):
+        """Root main.deploytoazure.json must forward mailMode to nested deployment."""
+        root = json.loads((REPO_ROOT / 'main.deploytoazure.json').read_text(encoding='utf-8'))
+        deployment = next(r for r in root['resources'] if r.get('type') == 'Microsoft.Resources/deployments')
+        forwarded = deployment['properties']['parameters']
+        self.assertIn('mailMode', forwarded,
+                      'Root wrapper must forward mailMode to nested main.json deployment')
+        self.assertEqual(forwarded['mailMode']['value'], "[parameters('mailMode')]",
+                         'mailMode must be forwarded as a parameter reference')
+
     def test_customer_config_no_secrets(self):
         """Customer deployment.config.json must not contain real secrets."""
         for config_path in (REPO_ROOT / 'customers').rglob('deployment.config.json'):
@@ -484,6 +505,55 @@ class RepoContractTests(unittest.TestCase):
                                      f'Potential secret ({pattern}) found in {config_path}')
                 else:
                     self.assertNotIn(pattern, text, f'Potential secret ({pattern}) found in {config_path}')
+
+    def test_stored_customer_configs_have_mail_mode(self):
+        """Every checked-in deployment.config.json must have smtp.mailMode set to one of the 3 valid states.
+
+        This ensures the repo no longer relies on backward-compatibility fallback logic for mail mode detection.
+        Enforces the canonical 3-state model: direct_send | smtp_auth | acs_smtp.
+        """
+        valid_modes = {'direct_send', 'smtp_auth', 'acs_smtp'}
+        for config_path in list((REPO_ROOT / 'customers').rglob('deployment.config.json')) + [REPO_ROOT / 'current' / 'deployment.config.json']:
+            if not config_path.exists():
+                continue
+            config = json.loads(config_path.read_text(encoding='utf-8'))
+            smtp = config.get('smtp', {})
+            mail_mode = smtp.get('mailMode')
+            self.assertIsNotNone(
+                mail_mode,
+                f'{config_path}: smtp.mailMode is missing. Must be one of {sorted(valid_modes)}'
+            )
+            self.assertIn(
+                mail_mode, valid_modes,
+                f'{config_path}: smtp.mailMode={mail_mode!r} is invalid. Must be one of {sorted(valid_modes)}'
+            )
+
+    def test_stored_customer_configs_mail_mode_consistent_with_use_auth(self):
+        """smtp.mailMode must be consistent with smtp.useAuth in all stored configs.
+
+        direct_send → useAuth must be false
+        smtp_auth   → useAuth must be true
+        acs_smtp    → useAuth must be true
+        """
+        for config_path in list((REPO_ROOT / 'customers').rglob('deployment.config.json')) + [REPO_ROOT / 'current' / 'deployment.config.json']:
+            if not config_path.exists():
+                continue
+            config = json.loads(config_path.read_text(encoding='utf-8'))
+            smtp = config.get('smtp', {})
+            mail_mode = smtp.get('mailMode')
+            use_auth = smtp.get('useAuth')
+            if mail_mode is None:
+                continue  # caught by test_stored_customer_configs_have_mail_mode
+            if mail_mode == 'direct_send':
+                self.assertFalse(
+                    use_auth,
+                    f'{config_path}: mailMode=direct_send requires useAuth=false, got useAuth={use_auth}'
+                )
+            elif mail_mode in ('smtp_auth', 'acs_smtp'):
+                self.assertTrue(
+                    use_auth,
+                    f'{config_path}: mailMode={mail_mode} requires useAuth=true, got useAuth={use_auth}'
+                )
 
     def test_shared_logic_comment_present_in_common_library(self):
         """Shared helper library must mark sensitive shared logic explicitly."""

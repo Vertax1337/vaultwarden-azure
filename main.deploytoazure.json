@@ -545,6 +545,9 @@
           "smtpUseAuth": {
             "value": "[parameters('smtpUseAuth')]"
           },
+          "mailMode": {
+            "value": "[parameters('mailMode')]"
+          },
           "smtpFrom": {
             "value": "[parameters('smtpFrom')]"
           },

@@ -731,3 +731,84 @@ Wizard (Read-ChoiceWithDefault)
   → Deployment Script Bash (MAIL_MODE env var)
   → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
 ```
+
+---
+
+## Schritt 8 – mailMode-Forwarding im Root-Wrapper und Migration der gespeicherten Kundenkonfigurationen
+
+### Problem / Ursache
+
+Nach Schritt 7 war `mailMode` zwar in `main.json` (ARM-Template), `current/main.deploytoazure.json` und den Powershell-Pfaden korrekt verankert – aber zwei konkrete Lücken blieben:
+
+1. **`main.deploytoazure.json` (Root-Wrapper)**: Der Parameter `mailMode` war als Wrapper-Parameter definiert, wurde aber beim Forward in das nested Deployment `main.json` nicht übergeben. Ergebnis: Über den Deploy-to-Azure-Button oder direkte Wrapper-Deployments wurde `mailMode` nicht propagiert – der ARM-Default `smtp_auth` griff stattdessen immer, unabhängig von der tatsächlich gewählten Einstellung.
+
+2. **Gespeicherte Kundenkonfigurationen**: Alle bestehenden `deployment.config.json`-Dateien unter `customers/*/` und `current/deployment.config.json` enthielten kein `smtp.mailMode`-Feld. Das Repository lieferte damit gemischte Artefakte aus: die Skript-/Wizard-Schicht nutzte das neue 3-State-Modell, die gespeicherten Konfigurationen aber noch das alte implizite Modell (nur `useAuth`-Flag).
+
+### Betroffene Dateien
+
+- `main.deploytoazure.json` – Root-Wrapper: Forward-Tabelle erweitert
+- `customers/vault-50er-jahre-museum-de/deployment.config.json` – `smtp.mailMode = direct_send` hinzugefügt
+- `customers/vault-petri-network-de/deployment.config.json` – `smtp.mailMode = direct_send` hinzugefügt
+- `customers/vault-thermosun-de/deployment.config.json` – `smtp.mailMode = smtp_auth` hinzugefügt
+- `current/deployment.config.json` – `smtp.mailMode = smtp_auth` hinzugefügt
+- `tests/test_repo_contract.py` – 3 neue Tests hinzugefügt
+
+### Umgesetzter Fix
+
+#### 1. Root Wrapper: mailMode forwarding
+In `main.deploytoazure.json` wurde im Abschnitt `resources[0].properties.parameters` der Eintrag ergänzt:
+```json
+"mailMode": { "value": "[parameters('mailMode')]" }
+```
+Eingefügt direkt nach dem Forward für `smtpUseAuth`.
+
+#### 2. Kundenkonfigurationen: smtp.mailMode migriert
+Für jede gespeicherte Konfiguration wurde `smtp.mailMode` als explizites Feld eingefügt, abgeleitet aus dem bisherigen `smtp.useAuth`:
+- `useAuth: false` → `mailMode: "direct_send"`
+- `useAuth: true` und kein ACS → `mailMode: "smtp_auth"`
+
+Migrationslogik:
+| Datei | Basis | mailMode |
+|---|---|---|
+| `vault-50er-jahre-museum-de` | `useAuth: false` | `direct_send` |
+| `vault-petri-network-de` | `useAuth: false` | `direct_send` |
+| `vault-thermosun-de` | `useAuth: true` | `smtp_auth` |
+| `current/deployment.config.json` | `useAuth: true` | `smtp_auth` |
+
+#### 3. Neue Contract-Tests
+Drei neue Tests in `test_repo_contract.py`:
+- `test_root_wrapper_forwards_all_params`: Root-Wrapper muss alle definierten Parameter forwarden (allgemeiner Check)
+- `test_root_wrapper_forwards_mail_mode`: Spezifisch für `mailMode` im Root-Wrapper
+- `test_stored_customer_configs_have_mail_mode`: Jede gespeicherte `deployment.config.json` muss `smtp.mailMode` mit gültigem Wert enthalten
+- `test_stored_customer_configs_mail_mode_consistent_with_use_auth`: `mailMode` muss mit `useAuth` konsistent sein
+
+### Risiken / Nebenwirkungen
+
+- **Root-Wrapper-Fix**: Minimales Risiko. Der Default in `main.json` ist `smtp_auth`, daher war das Verhalten bisher das gleiche wie wenn `mailMode` nicht übergeben wurde. Der Fix macht nur explizit, was vorher implizit passierte.
+- **Kundenkonfigurationen**: Keine Runtime-Änderung für bestehende Deployments. `smtp.mailMode` ist ein reines Konfigurationsfeld – der bisherige `Get-MailModeFromConfig`-Fallback las den Wert aus `useAuth`. Der neue Wert im Feld überschreibt den Fallback, ist aber identisch mit dem Fallback-Ergebnis.
+- **Backward-Compatibility-Logik**: `Get-MailModeFromConfig` mit dem `useAuth`-Fallback bleibt erhalten – sie wird jetzt nur noch für ältere Konfigurationen außerhalb des Repos benötigt, die noch kein `mailMode`-Feld haben.
+
+### Test / Validierung
+
+100/101 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+Neue Tests:
+- `test_root_wrapper_forwards_all_params` ✓
+- `test_root_wrapper_forwards_mail_mode` ✓
+- `test_stored_customer_configs_have_mail_mode` ✓
+- `test_stored_customer_configs_mail_mode_consistent_with_use_auth` ✓
+
+### Vollständig abgeschlossene Source-of-Truth-Kette
+
+Nach Schritten 6, 7 und 8 ist der vollständige Stack konsistent:
+
+```
+Wizard (Read-ChoiceWithDefault: direct_send | smtp_auth | acs_smtp)
+  → deployment.config.json (smtp.mailMode) ← jetzt in allen gespeicherten Configs vorhanden
+  → azure.parameters.json (parameters.mailMode.value)
+  → ARM-Deploy via main.deploytoazure.json (mailMode forwarded) ← jetzt in Root-Wrapper
+  → ARM-Deploy via current/main.deploytoazure.json (mailMode forwarded) ← war bereits korrekt
+  → main.json (parameters('mailMode'))
+  → Deployment Script Bash (MAIL_MODE env var)
+  → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
+```
