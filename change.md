@@ -1,5 +1,56 @@
 # Change Log
 
+## Fix: Harden vendored ConsoleMenu import in VaultwardenDeployment.Menu.ps1
+
+### Problem / Ursache
+
+The previous `ConsoleMenu` import in `VaultwardenDeployment.Menu.ps1` only checked whether
+a module named `ConsoleMenu` was already loaded (`Get-Module -Name 'ConsoleMenu'`).  
+This is not robust: a module with the same name from a different path (e.g. from the
+system `$env:PSModulePath`) would silently satisfy the check, causing the wrong module
+to be used at runtime.
+
+### Betroffene Dateien
+
+- `scripts/lib/VaultwardenDeployment.Menu.ps1`
+- `change.md`
+
+### Umgesetzter Fix
+
+1. The vendored module path is now resolved to a **normalized absolute path** via
+   `[System.IO.Path]::GetFullPath(...)` before any comparison or import.
+2. If a `ConsoleMenu` module is already loaded, its `.Path` property is resolved to an
+   absolute path and compared against the expected vendored path.
+3. Only if the paths **differ** (i.e. a conflicting foreign module is present) is that
+   module instance removed with `Remove-Module -Name 'ConsoleMenu' -Force`.
+   Unrelated modules are never touched.
+4. After removing a conflicting instance (or when no module was loaded at all), the
+   vendored module is imported from the repo-local path.
+5. If the correct vendored module is already loaded from the right path, the import is
+   skipped entirely.
+
+### Risiken / Nebenwirkungen
+
+- No change to the active deployment flow; `Show-DeploymentMainMenu` remains a no-op
+  placeholder.
+- Side-effect review for affected workflows:
+  - **Wizard** – no change
+  - **GenerateOnly** – no change
+  - **Existing Config Deploy** – no change
+  - **Existing Config Edit+Deploy** – no change
+  - **Repair** – no change
+  - **Update** – no change
+  - **Deploy-to-Azure Wrapper** – no change
+  - **current/…** – no change
+- `Remove-Module -Force` is scoped to the `ConsoleMenu` name only and only triggered when
+  a path mismatch is detected, so it cannot interfere with unrelated modules.
+
+### Test / Validierung
+
+- `python3 -m pytest tests/test_repo_contract.py -v` → all existing tests pass.
+
+---
+
 ## Feature: Vendor ConsoleMenu module and prepare menu integration layer
 
 ### Problem / Ursache
