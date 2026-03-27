@@ -1,5 +1,55 @@
 # Change Log
 
+## Fix: ARM template syntax error + smtp_auth SMTP host override
+
+### Problem / Ursache
+
+**1. ARM template syntax error in `main.json`**
+The ACA Container App `secrets` expression contained one extra closing parenthesis `)` in the `concat(...)` call that assembles `vwSecretsBase`, `vwSecretsSmtp`, `vwSecretsSso`, `vwSecretsPush`, and `vwSecretsHibp`. Azure Resource Manager rejected the template with:
+`InvalidTemplate: Unable to parse language expression … expected token 'EndOfData' and actual 'RightParenthesis'`
+
+**2. `smtp_auth` wizard did not expose SMTP host override**
+The interactive wizard silently defaulted to `smtp.office365.com` without ever presenting the host field to the operator. Non-M365 SMTP relay users could not enter a custom host through the wizard.
+
+### Betroffene Dateien
+- `main.json`
+- `scripts/Invoke-CustomerDeployment.ps1`
+- `tests/test_repo_contract.py`
+- `change.md`
+
+### Umgesetzter Fix
+
+**1. ARM syntax fix (`main.json` line 1124)**
+Removed the extra `)` at the end of the `concat(...)` expression. The corrected expression ends with `variables('vwSecretsHibp'))]` instead of `variables('vwSecretsHibp')))]`. No behavioral change — all five secret groups are still assembled with the same conditional logic.
+
+**2. smtp_auth SMTP host prompt (`Invoke-CustomerDeployment.ps1`)**
+In the `smtp_auth` branch of `New-CustomerConfigInteractive`:
+- Added an explicit `Read-TextWithDefault` prompt with label `'SMTP Host (smtp_auth-Relay, z.B. smtp.office365.com)'`
+- Default value is the existing config's SMTP host (if set) or `smtp.office365.com`
+- Operator can accept the default (press Enter) or type any custom SMTP relay host
+- Updated the block comment to describe the new per-mode prompting behaviour
+- `direct_send` and `acs_smtp` paths are unchanged
+
+**Test update (`tests/test_repo_contract.py`)**
+Renamed `test_wizard_smtp_auth_does_not_prompt_for_host_in_main_flow` →
+`test_wizard_smtp_auth_prompts_for_host_with_default` and updated assertions to verify:
+- the `smtp_auth-Relay` prompt string is present
+- `smtp.office365.com` is still the default
+- the old "SMTP Host is NOT prompted" comment is gone
+
+### Risiken / Nebenwirkungen
+- The ARM fix removes a hard deployment blocker; no behavioral change to secret assembly.
+- The wizard change is interactive-path only. The CLI (`-NonInteractive`) path already accepted `-SmtpHost` explicitly and is unchanged.
+- Existing stored configs with a custom `smtp.host` keep their value as the wizard default (no silent overwrite).
+- `direct_send` MX prompt and `acs_smtp` auto-host are both untouched.
+
+### Test / Validierung
+- `python3 -m pytest tests/test_repo_contract.py -v` → 100 passed, 1 pre-existing failure (`test_rg_default_in_stored_configs`).
+- ARM expression parenthesis balance manually verified: 4 opens, 4 closes.
+- Wizard code paths for `direct_send`, `smtp_auth`, `acs_smtp` reviewed for regressions.
+
+---
+
 ## Schritt 1 – Problem 1: PostgreSQL-Connectivity im Deployment Script
 
 ### Problem / Ursache

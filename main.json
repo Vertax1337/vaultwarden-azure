@@ -1121,7 +1121,7 @@
             "allowInsecure": "[parameters('allowInsecureHttp')]",
             "ipSecurityRestrictions": "[variables('ingressIpSecurityRestrictions')]"
           },
-          "secrets": "[concat(variables('vwSecretsBase'), if(not(equals(parameters('mailMode'), 'direct_send')), variables('vwSecretsSmtp'), json('[]')), if(parameters('ssoEnabled'), variables('vwSecretsSso'), json('[]')), if(parameters('pushEnabled'), variables('vwSecretsPush'), json('[]')), variables('vwSecretsHibp')))]",
+          "secrets": "[concat(variables('vwSecretsBase'), if(not(equals(parameters('mailMode'), 'direct_send')), variables('vwSecretsSmtp'), json('[]')), if(parameters('ssoEnabled'), variables('vwSecretsSso'), json('[]')), if(parameters('pushEnabled'), variables('vwSecretsPush'), json('[]')), variables('vwSecretsHibp'))]",
           "activeRevisionsMode": "Single"
         },
         "template": {

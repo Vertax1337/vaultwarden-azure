@@ -958,16 +958,16 @@ class RepoContractTests(unittest.TestCase):
         self.assertIn('MX-Endpunkt', script_text)
 
     @requires_pwsh
-    def test_wizard_smtp_auth_does_not_prompt_for_host_in_main_flow(self):
-        """Interactive wizard must NOT prompt for SMTP Host in the SMTP Auth main flow.
-        The host is silently defaulted to smtp.office365.com; only Direct Send requires explicit input."""
+    def test_wizard_smtp_auth_prompts_for_host_with_default(self):
+        """Interactive wizard must prompt for SMTP Host in the smtp_auth flow with a default of smtp.office365.com.
+        Operator can accept the default or type a custom host. direct_send still uses its own explicit MX prompt."""
         script_text = (REPO_ROOT / 'scripts' / 'Invoke-CustomerDeployment.ps1').read_text(encoding='utf-8')
-        # SMTP Auth path must NOT contain an interactive Read-TextWithDefault for SMTP Host
-        self.assertNotIn("Read-TextWithDefault -Label 'SMTP Host'", script_text)
-        # SMTP Auth must silently default
+        # smtp_auth block must contain a Read-TextWithDefault prompt that exposes the SMTP host
+        self.assertIn("smtp_auth-Relay", script_text)
+        # Default must be smtp.office365.com
         self.assertIn("smtp.office365.com", script_text)
-        # A comment explaining the design must be present
-        self.assertIn('SMTP Host is NOT prompted in the main wizard flow', script_text)
+        # The old "silent default" comment must no longer be present
+        self.assertNotIn('SMTP Host is NOT prompted in the main wizard flow', script_text)
 
     @requires_pwsh
     def test_parameter_generation_writes_smtp_host_for_direct_send(self):
