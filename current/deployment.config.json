@@ -58,6 +58,7 @@
   },
   "smtp": {
     "useAuth": true,
+    "mailMode": "smtp_auth",
     "mailRootDomain": "smtpauth.de",
     "from": "vaultwarden@smtpauth.de",
     "fromName": "Vaultwarden",

@@ -13,6 +13,7 @@
   },
   "smtp": {
     "useAuth": true,
+    "mailMode": "smtp_auth",
     "mailRootDomain": "thermosun.de",
     "from": "vaultwarden@thermosun.de",
     "fromName": "Vaultwarden",

@@ -1,72 +1,71 @@
 {
-    "smtp":  {
-                 "useAuth":  false,
-                 "mailRootDomain":  "petri-network.de",
-                 "from":  "vaultwarden@petri-network.de",
-                 "fromName":  "Vaultwarden",
-                 "host":  "",
-                 "port":  "",
-                 "security":  "starttls",
-                 "username":  "",
-                 "passwordSource":  "none"
-             },
-    "customerNumber":  "1309",
-    "customerCode":  "vault-petri-network-de",
-    "secrets":  {
-                    "smtpPasswordSource":  "none",
-                    "cloudflareApiTokenSource":  "prompt-or-env",
-                    "ssoClientSecretSource":  "none",
-                    "pushInstallationKeySource":  "none"
-                },
-    "domain":  {
-                   "hostname":  "vault.petri-network.de",
-                   "zoneName":  "petri-network.de",
-                   "url":  "https://vault.petri-network.de"
-               },
-    "edge":  {
-                 "mode":  "cloudflare-managed",
-                 "enableWaf":  false,
-                 "enableRateLimit":  false,
-                 "lockOriginToCloudflare":  true
-             },
-    "azure":  {
-                  "resourceGroupName":  "rg-petri-network-vault-prod-gwc",
-                  "location":  "germanywestcentral",
-                  "environment":  "prod",
-                  "appName":  "vault",
-                  "edgeMode":  "cloudflare-managed",
-                  "enableIngressIpRestrictions":  false,
-                  "ingressAllowedCidrs":  [
-
-                                          ],
-                  "advancedArmParameters":  {
-                                                "orgCreationUsers":  "",
-                                                "pushUseEuServers":  false,
-                                                "acsDomainName":  "",
-                                                "allowAzureServicesToPostgres":  true,
-                                                "pushInstallationId":  "",
-                                                "ssoAuthority":  "",
-                                                "diagnosticsEnabled":  true,
-                                                "storageAccountSku":  "Standard_LRS",
-                                                "postgresSkuName":  "Standard_B1ms",
-                                                "acsDataLocation":  "Germany",
-                                                "ssoOnly":  false,
-                                                "allowInsecureHttp":  true,
-                                                "invitationOrgName":  "petri-network.de",
-                                                "ssoClientId":  "",
-                                                "postgresBackupRetentionDays":  14,
-                                                "postgresStorageGB":  32,
-                                                "acsDeployFoundation":  false,
-                                                "ssoScopes":  "openid profile email offline_access User.Read",
-                                                "signupsDomainsWhitelist":  "petri-network.de",
-                                                "ssoEnabled":  false,
-                                                "pushEnabled":  false,
-                                                "adminPanelEnabled":  true
-                                            }
-              },
-    "metadata":  {
-                     "createdAt":  "2026-03-26T17:05:04.5796213+01:00",
-                     "updatedAt":  "2026-03-26T17:05:04.5901457+01:00",
-                     "version":  3
-                 }
+  "smtp": {
+    "useAuth": false,
+    "mailMode": "direct_send",
+    "mailRootDomain": "petri-network.de",
+    "from": "vaultwarden@petri-network.de",
+    "fromName": "Vaultwarden",
+    "host": "",
+    "port": "",
+    "security": "starttls",
+    "username": "",
+    "passwordSource": "none"
+  },
+  "customerNumber": "1309",
+  "customerCode": "vault-petri-network-de",
+  "secrets": {
+    "smtpPasswordSource": "none",
+    "cloudflareApiTokenSource": "prompt-or-env",
+    "ssoClientSecretSource": "none",
+    "pushInstallationKeySource": "none"
+  },
+  "domain": {
+    "hostname": "vault.petri-network.de",
+    "zoneName": "petri-network.de",
+    "url": "https://vault.petri-network.de"
+  },
+  "edge": {
+    "mode": "cloudflare-managed",
+    "enableWaf": false,
+    "enableRateLimit": false,
+    "lockOriginToCloudflare": true
+  },
+  "azure": {
+    "resourceGroupName": "rg-petri-network-vault-prod-gwc",
+    "location": "germanywestcentral",
+    "environment": "prod",
+    "appName": "vault",
+    "edgeMode": "cloudflare-managed",
+    "enableIngressIpRestrictions": false,
+    "ingressAllowedCidrs": [],
+    "advancedArmParameters": {
+      "orgCreationUsers": "",
+      "pushUseEuServers": false,
+      "acsDomainName": "",
+      "allowAzureServicesToPostgres": true,
+      "pushInstallationId": "",
+      "ssoAuthority": "",
+      "diagnosticsEnabled": true,
+      "storageAccountSku": "Standard_LRS",
+      "postgresSkuName": "Standard_B1ms",
+      "acsDataLocation": "Germany",
+      "ssoOnly": false,
+      "allowInsecureHttp": true,
+      "invitationOrgName": "petri-network.de",
+      "ssoClientId": "",
+      "postgresBackupRetentionDays": 14,
+      "postgresStorageGB": 32,
+      "acsDeployFoundation": false,
+      "ssoScopes": "openid profile email offline_access User.Read",
+      "signupsDomainsWhitelist": "petri-network.de",
+      "ssoEnabled": false,
+      "pushEnabled": false,
+      "adminPanelEnabled": true
+    }
+  },
+  "metadata": {
+    "createdAt": "2026-03-26T17:05:04.5796213+01:00",
+    "updatedAt": "2026-03-26T17:05:04.5901457+01:00",
+    "version": 3
+  }
 }

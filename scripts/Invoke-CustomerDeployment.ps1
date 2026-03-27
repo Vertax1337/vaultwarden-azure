@@ -48,6 +48,7 @@ param(
     [switch]$AcsDeployFoundation,
     [string]$AcsDataLocation = 'Germany',
     [string]$AcsDomainName,
+    [ValidateSet('direct_send','smtp_auth','acs_smtp')][string]$MailMode,
     [string]$StorageAccountSku,
     [string]$PostgresSkuName,
     [int]$PostgresStorageGB,
@@ -92,10 +93,31 @@ function New-EmptyAdvancedArmParameters {
 
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
+# Leitet den Mail-Modus (direct_send | smtp_auth | acs_smtp) aus einer gespeicherten
+# Konfiguration ab. Wird für Backward-Compatibility beim Laden älterer Configs benötigt,
+# die noch kein smtp.mailMode-Feld haben.
+function Get-MailModeFromConfig {
+    param([Parameter(Mandatory)][hashtable]$Config)
+    $stored = [string]$Config.smtp.mailMode
+    if ($stored -in @('direct_send', 'smtp_auth', 'acs_smtp')) { return $stored }
+    # Backward compat: derive from smtp.useAuth + acsDeployFoundation
+    $useAuth = [bool]$Config.smtp.useAuth
+    $acsFoundation = if ($Config.azure -and $Config.azure.advancedArmParameters) {
+        [bool]$Config.azure.advancedArmParameters.acsDeployFoundation
+    } else { $false }
+    if ($useAuth -and $acsFoundation) { return 'acs_smtp' }
+    if ($useAuth) { return 'smtp_auth' }
+    return 'direct_send'
+}
+
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 # Betroffen: Wizard (New-CustomerConfigInteractive), CLI-Pfad, GenerateOnly.
-# Enthält die kanonische SMTP-Zustandsdefinition (useAuth, host, port, security,
-# username, passwordSource). Beim Mail-Modus-Wechsel (Direct Send ↔ SMTP Auth)
-# müssen die nicht mehr gültigen Felder hier explizit leer gesetzt werden.
+# Kanonische SMTP-Zustandsdefinition (smtp.mailMode ist Source of Truth):
+#   direct_send: useAuth=false, kein Passwort/Username
+#   smtp_auth:   useAuth=true, klassisches SMTP Relay
+#   acs_smtp:    useAuth=true, smtpHost=smtp.azurecomm.net, acsDeployFoundation=true
+# Beim Mail-Modus-Wechsel werden nicht mehr gültige Felder explizit leer gesetzt.
 function New-CustomerConfigObject {
     param(
         [Parameter(Mandatory)][string]$CustomerNumber,
@@ -107,6 +129,7 @@ function New-CustomerConfigObject {
         [Parameter(Mandatory)][ValidateSet('basic','cloudflare-managed')][string]$Mode,
         [Parameter(Mandatory)][string]$MailRootDomain,
         [bool]$SmtpUseAuth = $true,
+        [ValidateSet('direct_send','smtp_auth','acs_smtp')][string]$MailMode,
         [string]$SmtpFrom,
         [string]$SmtpFromName = 'Vaultwarden',
         [string]$SmtpHost,
@@ -140,6 +163,27 @@ function New-CustomerConfigObject {
     }
     if (-not $Secrets) { $Secrets = @{} }
 
+    # Derive effective mail mode.
+    # Priority: explicit $MailMode > derived from $SmtpUseAuth + $advanced.acsDeployFoundation.
+    $effectiveMailMode = if ($MailMode -in @('direct_send', 'smtp_auth', 'acs_smtp')) {
+        $MailMode
+    } elseif ([bool]$SmtpUseAuth -and [bool]$advanced.acsDeployFoundation) {
+        'acs_smtp'
+    } elseif ([bool]$SmtpUseAuth) {
+        'smtp_auth'
+    } else {
+        'direct_send'
+    }
+
+    # Derive SmtpUseAuth from effective mail mode.
+    $effectiveSmtpUseAuth = ($effectiveMailMode -ne 'direct_send')
+
+    # acs_smtp: auto-set host and ensure acsDeployFoundation=true.
+    if ($effectiveMailMode -eq 'acs_smtp') {
+        if ([string]::IsNullOrWhiteSpace($SmtpHost)) { $SmtpHost = 'smtp.azurecomm.net' }
+        $advanced.acsDeployFoundation = $true
+    }
+
     [ordered]@{
         customerCode = $customerCode
         customerNumber = $CustomerNumber
@@ -170,7 +214,8 @@ function New-CustomerConfigObject {
             lockOriginToCloudflare = if ($Mode -eq 'cloudflare-managed') { $true } else { $false }
         }
         smtp = [ordered]@{
-            useAuth = [bool]$SmtpUseAuth
+            mailMode = $effectiveMailMode
+            useAuth = [bool]$effectiveSmtpUseAuth
             mailRootDomain = $MailRootDomain
             from = $SmtpFrom
             fromName = $SmtpFromName
@@ -178,10 +223,10 @@ function New-CustomerConfigObject {
             port = $SmtpPort
             security = $SmtpSecurity
             username = $SmtpUsername
-            passwordSource = if ($SmtpUseAuth) { 'prompt' } else { 'none' }
+            passwordSource = if ($effectiveSmtpUseAuth) { 'prompt' } else { 'none' }
         }
         secrets = [ordered]@{
-            smtpPasswordSource = if ($SmtpUseAuth) { 'prompt' } else { 'none' }
+            smtpPasswordSource = if ($effectiveSmtpUseAuth) { 'prompt' } else { 'none' }
             cloudflareApiTokenSource = if ($Mode -eq 'cloudflare-managed') { 'prompt-or-env' } else { 'not-required' }
             ssoClientSecretSource = if ($Secrets.ContainsKey('ssoClientSecretSource')) { $Secrets.ssoClientSecretSource } else { 'none' }
             pushInstallationKeySource = if ($Secrets.ContainsKey('pushInstallationKeySource')) { $Secrets.pushInstallationKeySource } else { 'none' }
@@ -326,11 +371,9 @@ function Get-RuntimeSecretParameters {
 
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
-# Betroffen: Wizard-Pfade 1 (Neu), 3 (Bearbeiten+Deployen), 6 (GenerateOnly interaktiv).
-# Mail-Modus-Wechsel-Logik:
-#   Direct Send → SMTP Auth: port/security/username werden aktiv abgefragt; host = smtp.office365.com (Default).
-#   SMTP Auth → Direct Send: host wird als MX-Endpunkt abgefragt; port/security/username bleiben leer.
-#   Stale SMTP-Auth-Felder werden durch explizite Initialisierung ($smtpPortValue = '', usw.) bereinigt.
+# Betroffen: Wizard-Pfade 1 (Neu), 3 (Bearbeiten), 6 (GenerateOnly).
+# Mail-Modus (3 Zielzustände): direct_send / smtp_auth / acs_smtp.
+# Stale-Felder des vorherigen Modus werden durch explizite Initialisierung bereinigt.
 function New-CustomerConfigInteractive {
     param([hashtable]$ExistingConfig)
 
@@ -353,30 +396,49 @@ function New-CustomerConfigInteractive {
     $useCloudflare = Read-BooleanWithDefault -Label 'Cloudflare-managed Production Mode verwenden?' -Default ($currentMode -eq 'cloudflare-managed')
     $mode = if ($useCloudflare) { 'cloudflare-managed' } else { 'basic' }
     $mailRootDomain = (Read-TextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required).Trim().ToLowerInvariant()
-    $smtpUseAuthValue = Read-BooleanWithDefault -Label 'SMTP Auth verwenden?' -Default ([bool]$(if ($ExistingConfig) { $ExistingConfig.smtp.useAuth } else { $true }))
+
+    # --- Mail-Modus wählen (3 exklusive Zielzustände) ---
+    $mailModeChoices = [ordered]@{
+        'direct_send' = 'Direct Send (kein Auth, MX-Endpunkt direkt kontaktieren)'
+        'smtp_auth'   = 'SMTP Auth (klassisches SMTP Relay mit User/Passwort)'
+        'acs_smtp'    = 'ACS SMTP (Azure Communication Services SMTP Relay)'
+    }
+    $existingMailMode = if ($ExistingConfig) { Get-MailModeFromConfig -Config $ExistingConfig } else { 'smtp_auth' }
+    $mailModeValue = Read-ChoiceWithDefault -Label 'Mail-Modus' -Choices $mailModeChoices -DefaultKey $existingMailMode
+
     $smtpFrom = Read-TextWithDefault -Label 'SMTP From' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from } else { 'vaultwarden@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
-    # SMTP Auth: SMTP Host is NOT prompted in the main wizard flow.
+
+    # SMTP Host is NOT prompted in the main wizard flow for smtp_auth.
     # The default (smtp.office365.com) is used unless the existing config already has a custom host.
-    # To override, supply -SmtpHost via CLI or edit the deployment.config.json manually.
-    # Direct Send: SMTP Host (MX endpoint) is always prompted explicitly - it is mandatory and cannot be defaulted.
+    # For acs_smtp, smtp.azurecomm.net is auto-set.
+    # For direct_send, the MX endpoint is always prompted explicitly.
     $smtpHostValue = ''
     $smtpPortValue = ''
     $smtpSecurityValue = 'starttls'
     $smtpUsernameValue = ''
-    if ($smtpUseAuthValue) {
+
+    if ($mailModeValue -eq 'direct_send') {
+        # Direct Send: MX lookup is not supported at deployment time (Azure DeploymentScript lacks dig/nslookup).
+        # The MX endpoint (MX-Endpunkt) must be provided explicitly here and will be written directly to the parameter file.
+        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z.B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
+    }
+    elseif ($mailModeValue -eq 'smtp_auth') {
         # SMTP Auth: silently preserve existing host or default to smtp.office365.com.
         # No interactive prompt for host in the main wizard path.
-        $existingSmtpHost = if ($ExistingConfig) { [string]$ExistingConfig.smtp.host } else { '' }
+        $existingSmtpHost = if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { [string]$ExistingConfig.smtp.host } else { '' }
         $smtpHostValue = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
-        $smtpPortValue = Read-TextWithDefault -Label 'SMTP Port' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.port } else { '587' })) -Required
-        $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
-        $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required
+        $smtpPortValue = Read-TextWithDefault -Label 'SMTP Port' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.port } else { '587' })) -Required
+        $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
+        $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.username } else { $smtpFrom })) -Required
     }
     else {
-        # Direct Send: MX lookup is not supported at deployment time (Azure DeploymentScript lacks dig/nslookup).
-        # The MX endpoint must be provided explicitly here and will be written directly to the parameter file.
-        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z.B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
+        # acs_smtp: smtp.azurecomm.net is auto-set; acsDeployFoundation=true is implied.
+        # Prompt only for the ACS-specific username (connection string / access key user).
+        $smtpHostValue = 'smtp.azurecomm.net'
+        $smtpPortValue = '587'
+        $smtpSecurityValue = 'starttls'
+        $smtpUsernameValue = Read-TextWithDefault -Label 'ACS SMTP Username (Azure Communication Services Verbindungszeichenfolge)' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'acs_smtp') { $ExistingConfig.smtp.username } else { '' })) -Required
     }
 
     $enableWafValue = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableWaf } else { $true }
@@ -391,8 +453,13 @@ function New-CustomerConfigInteractive {
     $advancedArm.ssoEnabled = Read-BooleanWithDefault -Label 'SSO aktivieren?' -Default $ssoDefault
     $pushDefault = if ($ExistingConfig) { [bool]$advancedArm.pushEnabled } else { $true }
     $advancedArm.pushEnabled = Read-BooleanWithDefault -Label 'Push aktivieren?' -Default $pushDefault
-    $acsDefault = if ($ExistingConfig) { [bool]$advancedArm.acsDeployFoundation } else { $true }
-    $advancedArm.acsDeployFoundation = Read-BooleanWithDefault -Label 'ACS Foundation deployen?' -Default $acsDefault
+    # ACS Foundation: implied and auto-enabled for acs_smtp mode; prompt for other modes.
+    if ($mailModeValue -eq 'acs_smtp') {
+        $advancedArm.acsDeployFoundation = $true
+    } else {
+        $acsDefault = if ($ExistingConfig) { [bool]$advancedArm.acsDeployFoundation } else { $false }
+        $advancedArm.acsDeployFoundation = Read-BooleanWithDefault -Label 'ACS Foundation deployen?' -Default $acsDefault
+    }
 
     $existingOrAdvancedDefault = ($null -ne $ExistingConfig) -or $advancedArm.ssoEnabled -or $advancedArm.pushEnabled -or $advancedArm.acsDeployFoundation
     $editAdvanced = Read-BooleanWithDefault -Label 'Erweiterte Template-Optionen bearbeiten?' -Default $existingOrAdvancedDefault
@@ -422,16 +489,14 @@ function New-CustomerConfigInteractive {
     if ($advancedArm.ssoEnabled) { $secrets.ssoClientSecretSource = 'prompt' }
     if ($advancedArm.pushEnabled) { $secrets.pushInstallationKeySource = 'prompt' }
 
-    return New-CustomerConfigObject -CustomerNumber $customerNumber -VaultwardenDomain $vaultwardenDomain -ZoneName $zoneName -ResourceGroupName $resourceGroupName -Environment $environment -Location $location -Mode $mode -MailRootDomain $mailRootDomain -SmtpUseAuth:$smtpUseAuthValue -SmtpFrom $smtpFrom -SmtpFromName $smtpFromNameValue -SmtpHost $smtpHostValue -SmtpPort $smtpPortValue -SmtpSecurity $smtpSecurityValue -SmtpUsername $smtpUsernameValue -EnableWaf:$enableWafValue -EnableRateLimit:$enableRateLimitValue -AdvancedArmParameters $advancedArm -Secrets $secrets
+    return New-CustomerConfigObject -CustomerNumber $customerNumber -VaultwardenDomain $vaultwardenDomain -ZoneName $zoneName -ResourceGroupName $resourceGroupName -Environment $environment -Location $location -Mode $mode -MailRootDomain $mailRootDomain -MailMode $mailModeValue -SmtpFrom $smtpFrom -SmtpFromName $smtpFromNameValue -SmtpHost $smtpHostValue -SmtpPort $smtpPortValue -SmtpSecurity $smtpSecurityValue -SmtpUsername $smtpUsernameValue -EnableWaf:$enableWafValue -EnableRateLimit:$enableRateLimitValue -AdvancedArmParameters $advancedArm -Secrets $secrets
 }
 
 # SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 # Betroffen: Save-CustomerFiles (alle Pfade), temporärer Deploy-Pfad (Hauptpfad mit Secrets).
-# Mail-Modus-Zielzustand:
-#   SMTP Auth (useAuth=true):  smtpHost/Port/Security/Username/Password alle in ARM-Params geschrieben.
-#   Direct Send (useAuth=false): NUR smtpHost (kein Port, Security, Username, Password).
-#   ACA erhält damit immer den vollständigen, mode-korrekten Parameter-Satz.
+# mailMode ist Source of Truth: wird immer in ARM-Params geschrieben.
+# direct_send: nur smtpHost. smtp_auth/acs_smtp: Host+Port+Security+Username+Password.
 function New-CustomerAzureParameters {
     param(
         [Parameter(Mandatory)][hashtable]$Config,
@@ -451,6 +516,7 @@ function New-CustomerAzureParameters {
             customHostname = @{ value = $Config.domain.hostname }
             mailRootDomain = @{ value = $Config.smtp.mailRootDomain }
             smtpUseAuth = @{ value = [bool]$Config.smtp.useAuth }
+            mailMode = @{ value = [string]$Config.smtp.mailMode }
             smtpFrom = @{ value = $Config.smtp.from }
             smtpFromName = @{ value = $Config.smtp.fromName }
             edgeMode = @{ value = $Config.azure.edgeMode }
@@ -673,9 +739,23 @@ elseif (-not $config) {
     $customerCode = Convert-DomainToSlug -Domain $VaultwardenDomain
     if (-not $ResourceGroupName) { $ResourceGroupName = Get-DefaultResourceGroupName -Environment $Environment -Location $Location -VaultwardenDomain $VaultwardenDomain }
     $effectiveSmtpUseAuth = $SmtpUseAuth.IsPresent
+    # Derive effective mail mode from explicit -MailMode or fallback to -SmtpUseAuth switch.
+    $effectiveMailMode = if ($MailMode -in @('direct_send', 'smtp_auth', 'acs_smtp')) {
+        $MailMode
+    } elseif ($effectiveSmtpUseAuth) {
+        'smtp_auth'
+    } else {
+        'direct_send'
+    }
+    # Re-derive effectiveSmtpUseAuth from effective mail mode (acs_smtp also sets useAuth=true).
+    $effectiveSmtpUseAuth = ($effectiveMailMode -ne 'direct_send')
     # Early validation for CLI/NonInteractive path: Direct Send requires explicit smtpHost
     if (-not $effectiveSmtpUseAuth -and [string]::IsNullOrWhiteSpace($SmtpHost)) {
         throw 'Direct Send (SmtpUseAuth nicht gesetzt) erfordert einen expliziten -SmtpHost-Parameter (MX-Endpunkt). MX-Lookup wird zur Deployment-Zeit nicht unterstützt.'
+    }
+    # acs_smtp: ACS SMTP Username is required
+    if ($effectiveMailMode -eq 'acs_smtp' -and [string]::IsNullOrWhiteSpace($SmtpUsername)) {
+        throw 'ACS SMTP (MailMode=acs_smtp) erfordert einen expliziten -SmtpUsername-Parameter (ACS SMTP Verbindungszeichenfolge).'
     }
     $effectiveEnableWaf = if ($Mode -eq 'cloudflare-managed') { $EnableWaf.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableWaf')) } else { $false }
     $effectiveEnableRateLimit = if ($Mode -eq 'cloudflare-managed') { $EnableRateLimit.IsPresent -or (-not $script:InvocationBoundParameters.ContainsKey('EnableRateLimit')) } else { $false }
@@ -683,7 +763,7 @@ elseif (-not $config) {
     $secretMeta = @{}
     if ($advanced.ssoEnabled) { $secretMeta.ssoClientSecretSource = 'prompt-or-cli' }
     if ($advanced.pushEnabled) { $secretMeta.pushInstallationKeySource = 'prompt-or-cli' }
-    $config = New-CustomerConfigObject -CustomerNumber $CustomerNumber -VaultwardenDomain $VaultwardenDomain -ZoneName $CloudflareZone -ResourceGroupName $ResourceGroupName -Environment $Environment -Location $Location -Mode $Mode -MailRootDomain $MailRootDomain -SmtpUseAuth:$effectiveSmtpUseAuth -SmtpFrom $SmtpFrom -SmtpFromName $SmtpFromName -SmtpHost $SmtpHost -SmtpPort $(if ($SmtpPort) { $SmtpPort } elseif ($effectiveSmtpUseAuth) { '587' } else { '' }) -SmtpSecurity $(if ($SmtpSecurity) { $SmtpSecurity } else { 'starttls' }) -SmtpUsername $SmtpUsername -EnableWaf:$effectiveEnableWaf -EnableRateLimit:$effectiveEnableRateLimit -AdvancedArmParameters $advanced -Secrets $secretMeta
+    $config = New-CustomerConfigObject -CustomerNumber $CustomerNumber -VaultwardenDomain $VaultwardenDomain -ZoneName $CloudflareZone -ResourceGroupName $ResourceGroupName -Environment $Environment -Location $Location -Mode $Mode -MailRootDomain $MailRootDomain -MailMode $effectiveMailMode -SmtpFrom $SmtpFrom -SmtpFromName $SmtpFromName -SmtpHost $SmtpHost -SmtpPort $(if ($SmtpPort) { $SmtpPort } elseif ($effectiveSmtpUseAuth) { '587' } else { '' }) -SmtpSecurity $(if ($SmtpSecurity) { $SmtpSecurity } else { 'starttls' }) -SmtpUsername $SmtpUsername -EnableWaf:$effectiveEnableWaf -EnableRateLimit:$effectiveEnableRateLimit -AdvancedArmParameters $advanced -Secrets $secretMeta
 }
 
 if ([string]::IsNullOrWhiteSpace($config.smtp.from)) {

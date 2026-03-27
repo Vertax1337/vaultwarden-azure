@@ -475,3 +475,340 @@ Vaultwarden persistiert SMTP-Konfiguration intern in `/data/config.json` (Admin-
   - `test_generate_only_mode_switch_smtp_auth_to_direct_send_clears_auth_fields`
   - `test_generate_only_existing_smtp_auth_redeploy_no_regression`
   - `test_generate_only_existing_direct_send_redeploy_no_smtp_auth_ballast`
+
+---
+
+## Schritt 5 – Vaultwarden Default-ENVs fest integrieren
+
+### Problem / Ursache
+
+Mehrere sicherheitsrelevante Vaultwarden-ENVs waren entweder:
+- **Fehlend** (5 von 7 ENVs waren gar nicht im Template): `EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE`, `DISABLE_2FA_REMEMBER`, `ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY`, `PASSWORD_HINTS_ALLOWED`, `SIGNUPS_VERIFY`
+- **Mit falschem Wert** (1 von 7 ENVs): `EMAIL_2FA_AUTO_FALLBACK` war `false` statt `true`
+- **Korrekt** (bereits vorhanden): `SHOW_PASSWORD_HINT=false`
+
+Zusätzlich fehlte `HIBP_API_KEY` vollständig – weder als ENV-Variable noch als Key-Vault-Secret.
+
+Alle 7 genannten ENVs sind serverseitige Sicherheitshärtungs-Konfigurationen, die immer aktiv sein sollen – nicht optional per Wizard und nicht abhängig vom Deployment-Pfad.
+
+### Betroffene Dateien
+
+- `main.json` – Kern-Template (Haupt-Änderungsort)
+- `main.deploytoazure.json` – Root-Wrapper (Deploy-to-Azure-Button)
+- `current/main.deploytoazure.json` – Current-State-Wrapper
+- `tests/test_repo_contract.py` – Neue Contract-Tests
+
+### Umgesetzter Fix
+
+#### 1. `EMAIL_2FA_AUTO_FALLBACK` korrigiert
+In `vwEnvBase` von `"false"` auf `"true"` gesetzt.
+
+#### 2. 5 fehlende Härtungs-ENVs hinzugefügt (in `vwEnvBase`)
+```json
+{ "name": "DISABLE_2FA_REMEMBER",                    "value": "true"  }
+{ "name": "EMAIL_2FA_ENFORCE_ON_VERIFIED_INVITE",     "value": "true"  }
+{ "name": "ENFORCE_SINGLE_ORG_WITH_RESET_PW_POLICY",  "value": "true"  }
+{ "name": "PASSWORD_HINTS_ALLOWED",                   "value": "false" }
+{ "name": "SIGNUPS_VERIFY",                           "value": "true"  }
+```
+Alle in `vwEnvBase` – d.h. immer aktiv, unabhängig von SMTP-, SSO-, Push- oder anderen Optionen.
+
+#### 3. `HIBP_API_KEY` als Key-Vault-Secret eingebunden
+
+- **Parameter `hibpApiKey`** (securestring, default `''`) hinzugefügt
+- **Variable `kvSecretHibpApiKeyName`** = `"vw-hibp-api-key"` hinzugefügt
+- **Variable `vwSecretsHibp`** (KV-Secret-Referenz für Container App) hinzugefügt
+- **ENV-Variable `HIBP_API_KEY`** in `vwEnvBase` mit `secretRef: "hibp-api-key"` hinzugefügt
+- **Container-App-Secrets-Concat** aktualisiert: `vwSecretsHibp` wird immer (unconditional) eingeschlossen
+- **Deployment-Script** (`ensure-kv-secrets`) erweitert:
+  - Neue ENV-Vars: `HIBP_API_KEY_SECRET` (Wert: KV-Secret-Name), `HIBP_API_KEY_VALUE` (secureValue: Param)
+  - Neue Script-Logik: wenn `hibpApiKey`-Parameter vorhanden → in KV setzen; wenn leer → Placeholder `00000-00000-00000` in KV schreiben (nur wenn Secret noch nicht existiert)
+
+#### 4. Wrapper-Dateien aktualisiert
+`hibpApiKey` (securestring, default `''`) in beiden Wrappers hinzugefügt und an das Nested-Deployment weitergeleitet.
+
+### Shared-Logic-Analyse
+
+Die Änderungen betreffen ausschließlich:
+- `vwEnvBase`: Array-Variable in `main.json` – wird direkt per ARM-`concat` in alle Deployment-Pfade eingebunden (Wizard, GenerateOnly, DirectDeploy, Repair, Update, DeployToAzure-Button)
+- `ensure-kv-secrets`-Deployment-Script: wird in allen Deployment-Pfaden aufgerufen
+
+Da `vwEnvBase` in allen Pfaden über den identischen ARM-`concat`-Ausdruck eingebunden wird, sind alle Pfade gleichzeitig und konsistent betroffen. Kein Pfad-spezifischer Code wurde verändert.
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende Deployments (Redeploy/Update)**: `EMAIL_2FA_AUTO_FALLBACK=true` überschreibt den bisherigen Wert `false`. Dies ist gewollt (Security-Härtung). Alle anderen ENVs sind neu – keine Regression.
+- **HIBP_API_KEY beim Redeploy ohne hibpApiKey-Parameter**: Das Deployment-Script schreibt den Placeholder nur, wenn das Secret noch nicht existiert. Einmal gesetzter echter Key wird nicht überschrieben.
+- **HIBP_API_KEY in Container App Secrets immer aktiv**: Das Secret `hibp-api-key` muss im KV vorhanden sein, wenn der Container startet. Das Deployment-Script stellt dies sicher (immer Placeholder oder echter Key).
+- **Keine echten Secret-Werte in customers/ oder current/**: `hibpApiKey` hat im Wrapper leeren Default und wird nie in Konfig-Dateien persistiert.
+
+### Test / Validierung
+
+9 neue Contract-Tests (alle grün):
+- `test_vaultwarden_hardened_envs_in_vwEnvBase` – alle 7 ENVs mit korrekten Werten in `vwEnvBase`
+- `test_hibp_api_key_env_in_vwEnvBase_uses_secret_ref` – HIBP_API_KEY in `vwEnvBase` mit secretRef, kein Plaintext
+- `test_hibp_api_key_kv_secret_variable_defined` – `kvSecretHibpApiKeyName` und `vwSecretsHibp` definiert
+- `test_container_app_secrets_include_hibp` – Container-App-Secrets-Concat enthält `vwSecretsHibp`
+- `test_hibp_api_key_is_securestring_parameter` – `hibpApiKey` als securestring mit leerem Default
+- `test_hibp_api_key_deployment_script_env_vars` – Deployment-Script hat `HIBP_API_KEY_SECRET` und `HIBP_API_KEY_VALUE` (secureValue)
+- `test_hibp_api_key_placeholder_logic_in_deployment_script` – Deployment-Script enthält Placeholder-Logik
+- `test_wrapper_exposes_hibp_api_key` – Beide Wrapper-Dateien haben `hibpApiKey` als securestring
+- `test_hardened_envs_not_in_wizard_prompt` – Keine Wizard-Read-Host-Prompts für Härtungs-ENVs
+
+Gesamt: 78/79 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert – betrifft gespeicherte Kundenkonfig mit abweichendem RG-Namensschema).
+
+---
+
+## Schritt 6 – Mail-Architektur: 3 exklusive Mail-Zielzustände (direct_send / smtp_auth / acs_smtp)
+
+### Problem / Ursache
+
+Die bisherige Mail-Architektur verwendete einen binären `smtpUseAuth`-Flag und ein separates `acsDeployFoundation`-Flag. Es gab keine zentrale Source of Truth für den Mail-Modus. Insbesondere:
+- `acs_smtp` war nicht als eigener State modelliert (nur implizit via `smtpUseAuth=true` + `acsDeployFoundation=true`)
+- Kein `mailMode`-Feld in der gespeicherten Konfiguration
+- Wizard fragte nur „SMTP Auth verwenden? (j/n)" ohne ACS-SMTP als eigenständige Option
+- State-Übergänge konnten inkonsistente Kombinationen erzeugen (z.B. `acs_smtp` → `direct_send` ließ `acsDeployFoundation=true` in der Config stehen)
+
+### Betroffene Dateien
+
+- `scripts/Invoke-CustomerDeployment.ps1` – Hauptänderung (Wizard, Config-Erzeugung, CLI-Pfad)
+- `tests/test_repo_contract.py` – Neue Contract-Tests
+- `change.md`
+
+### Shared-Logic-Analyse
+
+Geänderte SHARED LOGIC-Funktionen:
+1. **`New-CustomerConfigObject`**: Neue `$MailMode`-Parameter; `smtp.mailMode` wird als kanonisches Feld geschrieben. `smtp.useAuth` wird aus `$MailMode` abgeleitet. `acs_smtp` setzt auto `smtpHost=smtp.azurecomm.net` und `acsDeployFoundation=true`.
+2. **`New-CustomerConfigInteractive`** (Wizard): Binäre „SMTP Auth verwenden?"-Frage durch 3-Wege-Modus-Selektor (`Read-ChoiceWithDefault`) ersetzt. ACS Foundation Prompt wird bei `acs_smtp` übersprungen (implizit gesetzt).
+3. **CLI-Pfad**: `$effectiveMailMode` wird aus `$MailMode` oder `$SmtpUseAuth` abgeleitet. Neue Validierung: `acs_smtp` erfordert `-SmtpUsername`.
+
+Neue Hilfsfunktion:
+- **`Get-MailModeFromConfig`** (SHARED LOGIC): Leitet `mailMode` aus gespeicherter Config ab (Backward-Compat: `smtp.mailMode` explizit → sonst via `smtp.useAuth` + `acsDeployFoundation`).
+
+### Umgesetzter Fix
+
+#### 1. `$MailMode` als Script-Parameter
+```powershell
+[ValidateSet('direct_send','smtp_auth','acs_smtp')][string]$MailMode,
+```
+
+#### 2. `Get-MailModeFromConfig` Hilfsfunktion
+Leitet `mailMode` aus gespeicherter Config ab. Ermöglicht nahtlose Backward-Compat beim Laden älterer Configs ohne `smtp.mailMode`-Feld.
+
+#### 3. `New-CustomerConfigObject` – Mail-Modus-Logik
+- `$MailMode` überschreibt `$SmtpUseAuth` wenn gesetzt
+- `$effectiveMailMode` → `smtp.mailMode` in Config
+- `acs_smtp`: `SmtpHost` auto-gesetzt auf `smtp.azurecomm.net`, `advanced.acsDeployFoundation = $true`
+
+#### 4. Wizard (`New-CustomerConfigInteractive`) – 3-Wege-Modus-Selektor
+- Ersetzte Binary-Prompt durch `Read-ChoiceWithDefault` mit Choices: `direct_send`, `smtp_auth`, `acs_smtp`
+- `direct_send`: Prompt für MX-Endpunkt (wie bisher)
+- `smtp_auth`: Host-Default bleibt `smtp.office365.com` (kein Prompt in Hauptpfad)
+- `acs_smtp`: Host auto-gesetzt auf `smtp.azurecomm.net`, Prompt für ACS-spezifischen Username; `acsDeployFoundation` wird ohne Prompt auf `$true` gesetzt
+
+#### 5. CLI-Pfad – `$effectiveMailMode` + Validierung
+- `$effectiveMailMode` abgeleitet aus `$MailMode` oder `$SmtpUseAuth`
+- Neue Validierung: `acs_smtp` erfordert `-SmtpUsername`
+- Backward-Compat: `-SmtpUseAuth` switch weiterhin funktional (leitet `smtp_auth` ab)
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende Configs ohne `smtp.mailMode`**: `Get-MailModeFromConfig` leitet den Modus aus `smtp.useAuth` + `acsDeployFoundation` ab. Backward-compat gewährleistet.
+- **ACS Foundation Default im Wizard geändert**: Für `direct_send`/`smtp_auth` ist der ACS-Foundation-Prompt-Default jetzt `$false` (war `$true` für neue Configs). Das ist konsistenter mit dem CLI-Default.
+- **`$SmtpUseAuth`-Switch bleibt funktional**: Alle Tests die `-SmtpUseAuth` übergeben, funktionieren weiterhin; `acs_smtp` ist nur via `-MailMode` erreichbar (nicht via `-SmtpUseAuth`).
+- **`smtp.mailMode` ist ein neues Pflichtfeld** in allen neuen Configs; `smtp.useAuth` bleibt als abgeleitetes Feld erhalten.
+
+### Test / Validierung
+
+10 neue Contract-Tests (alle grün):
+- `test_wizard_has_three_mail_mode_choices`
+- `test_acs_smtp_mode_auto_sets_host_and_acs_foundation`
+- `test_get_mail_mode_from_config_function_present`
+- `test_mail_mode_parameter_declared_in_script`
+- `test_new_customer_config_object_stores_mail_mode`
+- `test_acs_smtp_wizard_prompts_for_acs_username`
+- `test_acs_smtp_mode_cli_validation_requires_username`
+- `test_generate_only_acs_smtp_mode_produces_correct_params` (pwsh)
+- `test_generate_only_mail_mode_stored_for_all_three_modes` (pwsh)
+- `test_generate_only_smtp_auth_to_acs_smtp_transition` (pwsh)
+- `test_generate_only_acs_smtp_to_direct_send_transition` (pwsh)
+
+Gesamt: 89/90 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+### State-Transition-Matrix (vollständig getestet)
+
+| Von → | direct_send | smtp_auth | acs_smtp |
+|-------|-------------|-----------|----------|
+| **direct_send** | ✅ (Redeploy-Test) | ✅ | ✅ |
+| **smtp_auth** | ✅ | ✅ (Redeploy-Test) | ✅ (Transition-Test) |
+| **acs_smtp** | ✅ (Transition-Test) | n/a | ✅ |
+
+---
+
+## Schritt 7 – mailMode als Source of Truth durch alle ARM-Schichten propagiert
+
+### Problem / Ursache
+
+Schritt 6 etablierte `mailMode` als Source of Truth in der PowerShell/Config-Schicht. Aber die ARM-Template-Schicht (`main.json`, `main.deploytoazure.json`) und der Deployment-Script-Bash kannte `mailMode` noch nicht. Stattdessen verwendeten alle ARM-Ausdrücke noch das binäre `smtpUseAuth`-Flag:
+- ACA secrets: `if(parameters('smtpUseAuth'), vwSecretsSmtp, [])`
+- ACA env vwEnvSmtpAuthCore: `if(parameters('smtpUseAuth'), vwEnvSmtpAuthCore, [])`
+- vwEnvSmtpAuthMechanism: `if(or(not(parameters('smtpUseAuth')), empty(smtpAuthMechanism)), [], ...)`
+- SMTP_PORT: `if(smtpUseAuth, port, '25')`
+- SMTP_SECURITY: `if(smtpUseAuth, security, 'starttls')`
+- SMTP_HOST: verwendete `reference()` auf das Deployment Script für `direct_send`
+
+### Betroffene Dateien
+
+- `main.json` – Haupttemplate (Parameter, Variablen, ACA-Ressource, Deployment Script)
+- `main.deploytoazure.json` – Root-Wrapper
+- `current/main.deploytoazure.json` – Active-Current-Wrapper
+- `scripts/Invoke-CustomerDeployment.ps1` – `New-CustomerAzureParameters`
+- `tests/test_repo_contract.py` – 3 Tests aktualisiert, 7 neue Tests hinzugefügt
+
+### Umgesetzter Fix
+
+#### 1. `main.json` – `mailMode` ARM-Parameter
+- Neuer String-Parameter `mailMode` mit `allowedValues: ['direct_send', 'smtp_auth', 'acs_smtp']` und `defaultValue: 'smtp_auth'` (Backward-Compat)
+
+#### 2. `main.json` – Deployment Script Env Var
+- `MAIL_MODE` als Umgebungsvariable zum Deployment Script hinzugefügt
+- Deployment Script bash: loggt den aktiven Mail-Modus; Warnung wenn `mailMode=acs_smtp` aber `smtpHost != smtp.azurecomm.net`
+
+#### 3. `main.json` – ACA Secrets via mailMode
+- Ersetzt: `if(parameters('smtpUseAuth'), variables('vwSecretsSmtp'), json('[]'))`
+- Durch: `if(not(equals(parameters('mailMode'), 'direct_send')), variables('vwSecretsSmtp'), json('[]'))`
+
+#### 4. `main.json` – ACA ENV via mailMode
+- `vwEnvSmtpAuthCore`: `smtpUseAuth` → `mailMode != direct_send`
+- `vwEnvSmtpAuthMechanism`: `not(smtpUseAuth)` → `equals(mailMode, 'direct_send')`
+- `SMTP_PORT`: `smtpUseAuth` → `mailMode == direct_send ? '25' : port`
+- `SMTP_SECURITY`: `smtpUseAuth` → `mailMode == direct_send ? 'starttls' : security`
+
+#### 5. `main.json` – SMTP_HOST vereinfacht
+- Entfernt: `reference(deploymentScript).outputs.smtp_host` für `direct_send`
+- Ersetzt durch: `if(empty(smtpHost), 'smtp.office365.com', smtpHost)` für alle Modi
+- Begründung: Container App hat bereits explizite `dependsOn`-Abhängigkeit auf den Deployment Script. Der `smtpHost`-Parameter ist für alle Modi immer vorbelegt (PS-Script setzt ihn vor dem Deploy).
+
+#### 6. `Invoke-CustomerDeployment.ps1` – `New-CustomerAzureParameters`
+- `mailMode` wird jetzt als ARM-Parameter an `azure.parameters.json` geschrieben
+- `SHARED LOGIC`-Kommentar aktualisiert
+
+#### 7. Wrapper Updates
+- `main.deploytoazure.json`: `mailMode`-Parameter hinzugefügt
+- `current/main.deploytoazure.json`: `mailMode`-Parameter und Forward hinzugefügt
+
+### Relevante Nebenwirkungen / Risiken
+
+- **Bestehende azure.parameters.json ohne `mailMode`**: Der ARM-Default `smtp_auth` greift. Vollständig backward-compat.
+- **SMTP_HOST vereinfacht**: Kein Deployment Script Output mehr für `direct_send`. Das ist korrekt, da der PS-Script immer einen expliziten `smtpHost`-Wert setzt. Minimales Risiko: Wenn jemand manuell mit leerem `smtpHost` deployed, greift `smtp.office365.com` als Fallback.
+- **`smtpUseAuth`-Parameter bleibt weiterhin**: Er ist noch in allen Schichten vorhanden für absolute Backward-Compat (z.B. alte Deploy-to-Azure-Buttons ohne `mailMode`). Er steuert jetzt keine ARM-Ausdrücke mehr direkt, aber der PS-Script schreibt ihn weiterhin zu ARM-Params.
+
+### Test / Validierung
+
+7 neue Contract-Tests (alle grün):
+- `test_main_json_has_mail_mode_parameter`
+- `test_main_json_deployment_script_receives_mail_mode`
+- `test_main_json_deployment_script_logs_mail_mode`
+- `test_main_json_smtp_host_not_using_deployment_script_reference_for_direct_send`
+- `test_main_json_smtp_port_and_security_use_mail_mode`
+- `test_wrapper_exposes_mail_mode`
+- `test_generate_only_azure_params_include_mail_mode` (pwsh)
+
+3 aktualisierte Tests (von smtpUseAuth auf mailMode):
+- `test_main_json_smtp_secrets_conditional_on_smtp_use_auth`
+- `test_main_json_smtp_auth_env_vars_conditional_on_smtp_use_auth`
+- `test_main_json_smtp_auth_mechanism_conditional_on_smtp_use_auth`
+
+Gesamt: 97/97 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+### Vollständige Source-of-Truth-Kette (nach Schritten 6 + 7)
+
+```
+Wizard (Read-ChoiceWithDefault)
+  → deployment.config.json (smtp.mailMode)
+  → azure.parameters.json (parameters.mailMode.value)
+  → ARM-Deploy (parameters('mailMode'))
+  → Deployment Script Bash (MAIL_MODE env var)
+  → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
+```
+
+---
+
+## Schritt 8 – mailMode-Forwarding im Root-Wrapper und Migration der gespeicherten Kundenkonfigurationen
+
+### Problem / Ursache
+
+Nach Schritt 7 war `mailMode` zwar in `main.json` (ARM-Template), `current/main.deploytoazure.json` und den Powershell-Pfaden korrekt verankert – aber zwei konkrete Lücken blieben:
+
+1. **`main.deploytoazure.json` (Root-Wrapper)**: Der Parameter `mailMode` war als Wrapper-Parameter definiert, wurde aber beim Forward in das nested Deployment `main.json` nicht übergeben. Ergebnis: Über den Deploy-to-Azure-Button oder direkte Wrapper-Deployments wurde `mailMode` nicht propagiert – der ARM-Default `smtp_auth` griff stattdessen immer, unabhängig von der tatsächlich gewählten Einstellung.
+
+2. **Gespeicherte Kundenkonfigurationen**: Alle bestehenden `deployment.config.json`-Dateien unter `customers/*/` und `current/deployment.config.json` enthielten kein `smtp.mailMode`-Feld. Das Repository lieferte damit gemischte Artefakte aus: die Skript-/Wizard-Schicht nutzte das neue 3-State-Modell, die gespeicherten Konfigurationen aber noch das alte implizite Modell (nur `useAuth`-Flag).
+
+### Betroffene Dateien
+
+- `main.deploytoazure.json` – Root-Wrapper: Forward-Tabelle erweitert
+- `customers/vault-50er-jahre-museum-de/deployment.config.json` – `smtp.mailMode = direct_send` hinzugefügt
+- `customers/vault-petri-network-de/deployment.config.json` – `smtp.mailMode = direct_send` hinzugefügt
+- `customers/vault-thermosun-de/deployment.config.json` – `smtp.mailMode = smtp_auth` hinzugefügt
+- `current/deployment.config.json` – `smtp.mailMode = smtp_auth` hinzugefügt
+- `tests/test_repo_contract.py` – 3 neue Tests hinzugefügt
+
+### Umgesetzter Fix
+
+#### 1. Root Wrapper: mailMode forwarding
+In `main.deploytoazure.json` wurde im Abschnitt `resources[0].properties.parameters` der Eintrag ergänzt:
+```json
+"mailMode": { "value": "[parameters('mailMode')]" }
+```
+Eingefügt direkt nach dem Forward für `smtpUseAuth`.
+
+#### 2. Kundenkonfigurationen: smtp.mailMode migriert
+Für jede gespeicherte Konfiguration wurde `smtp.mailMode` als explizites Feld eingefügt, abgeleitet aus dem bisherigen `smtp.useAuth`:
+- `useAuth: false` → `mailMode: "direct_send"`
+- `useAuth: true` und kein ACS → `mailMode: "smtp_auth"`
+
+Migrationslogik:
+| Datei | Basis | mailMode |
+|---|---|---|
+| `vault-50er-jahre-museum-de` | `useAuth: false` | `direct_send` |
+| `vault-petri-network-de` | `useAuth: false` | `direct_send` |
+| `vault-thermosun-de` | `useAuth: true` | `smtp_auth` |
+| `current/deployment.config.json` | `useAuth: true` | `smtp_auth` |
+
+#### 3. Neue Contract-Tests
+Drei neue Tests in `test_repo_contract.py`:
+- `test_root_wrapper_forwards_all_params`: Root-Wrapper muss alle definierten Parameter forwarden (allgemeiner Check)
+- `test_root_wrapper_forwards_mail_mode`: Spezifisch für `mailMode` im Root-Wrapper
+- `test_stored_customer_configs_have_mail_mode`: Jede gespeicherte `deployment.config.json` muss `smtp.mailMode` mit gültigem Wert enthalten
+- `test_stored_customer_configs_mail_mode_consistent_with_use_auth`: `mailMode` muss mit `useAuth` konsistent sein
+
+### Risiken / Nebenwirkungen
+
+- **Root-Wrapper-Fix**: Minimales Risiko. Der Default in `main.json` ist `smtp_auth`, daher war das Verhalten bisher das gleiche wie wenn `mailMode` nicht übergeben wurde. Der Fix macht nur explizit, was vorher implizit passierte.
+- **Kundenkonfigurationen**: Keine Runtime-Änderung für bestehende Deployments. `smtp.mailMode` ist ein reines Konfigurationsfeld – der bisherige `Get-MailModeFromConfig`-Fallback las den Wert aus `useAuth`. Der neue Wert im Feld überschreibt den Fallback, ist aber identisch mit dem Fallback-Ergebnis.
+- **Backward-Compatibility-Logik**: `Get-MailModeFromConfig` mit dem `useAuth`-Fallback bleibt erhalten – sie wird jetzt nur noch für ältere Konfigurationen außerhalb des Repos benötigt, die noch kein `mailMode`-Feld haben.
+
+### Test / Validierung
+
+100/101 Tests grün (1 pre-existierender Fehler `test_rg_default_in_stored_configs` unverändert).
+
+Neue Tests:
+- `test_root_wrapper_forwards_all_params` ✓
+- `test_root_wrapper_forwards_mail_mode` ✓
+- `test_stored_customer_configs_have_mail_mode` ✓
+- `test_stored_customer_configs_mail_mode_consistent_with_use_auth` ✓
+
+### Vollständig abgeschlossene Source-of-Truth-Kette
+
+Nach Schritten 6, 7 und 8 ist der vollständige Stack konsistent:
+
+```
+Wizard (Read-ChoiceWithDefault: direct_send | smtp_auth | acs_smtp)
+  → deployment.config.json (smtp.mailMode) ← jetzt in allen gespeicherten Configs vorhanden
+  → azure.parameters.json (parameters.mailMode.value)
+  → ARM-Deploy via main.deploytoazure.json (mailMode forwarded) ← jetzt in Root-Wrapper
+  → ARM-Deploy via current/main.deploytoazure.json (mailMode forwarded) ← war bereits korrekt
+  → main.json (parameters('mailMode'))
+  → Deployment Script Bash (MAIL_MODE env var)
+  → ACA Container App (ENV/Secrets per mailMode-Ausdruck)
+```
