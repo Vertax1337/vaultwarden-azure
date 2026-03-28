@@ -1,5 +1,20 @@
 # Change Log
 
+## Fix: Back-Guard im Hauptloop für Hashtable-Flow-Rückgaben
+
+### Geänderte Stelle
+- `scripts/Invoke-CustomerDeployment.ps1` im interaktiven Hauptloop direkt nach dem `switch ($menuResult.ActionId)`.
+
+### Warum die bisherige Prüfung falsch war
+- Bisher wurde ausschließlich mit `$flowResult.PSObject.Properties['Back']` geprüft.
+- Bei Rückgaben wie `@{ Back = $true }` ist `Back` ein Hashtable-Key (IDictionary) und kein normales Objekt-Property.
+- Dadurch wurde der Back-Fall nach `Start-DeleteConfigFlow` nicht zuverlässig erkannt; der Code lief weiter in den Deploy-Pfad und konnte mit `Kunden-Nr. ist erforderlich.` enden.
+
+### Neuer Guard und Kompatibilität
+- Der Guard prüft jetzt zuerst IDictionary-/Hashtable-Rückgaben über `Contains('Back')` und `$flowResult['Back']`.
+- Für bestehende objektbasierte Flow-Rückgaben bleibt die bisherige Property-Prüfung als Fallback erhalten.
+- Damit funktionieren sowohl `@{ Back = $true }` als auch Flow-Rückgaben mit `Back`-Property robust und der Menü-`continue` greift sauber.
+
 ## Refactor: Extract interactive action flows into VaultwardenDeployment.Flows.ps1
 
 ### Problem / Ursache

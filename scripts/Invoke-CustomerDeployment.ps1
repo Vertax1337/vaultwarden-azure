@@ -490,7 +490,14 @@ do {
             }
         }
 
-        if ($flowResult -and $flowResult.PSObject.Properties['Back'] -and $flowResult.Back -eq $true) { continue }
+        $isBackNavigation = $false
+        if ($flowResult -is [System.Collections.IDictionary]) {
+            $isBackNavigation = $flowResult.Contains('Back') -and [bool]$flowResult['Back']
+        }
+        elseif ($flowResult -and $flowResult.PSObject.Properties['Back']) {
+            $isBackNavigation = [bool]$flowResult.Back
+        }
+        if ($isBackNavigation) { continue }
     }
 
     # Run the deployment cycle in a child scope so that `return` inside the
