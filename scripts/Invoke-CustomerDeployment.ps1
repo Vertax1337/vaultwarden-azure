@@ -490,7 +490,7 @@ do {
             }
         }
 
-        if ($flowResult -and $flowResult.Back -eq $true) { continue }
+        if ($flowResult -and $flowResult.PSObject.Properties['Back'] -and $flowResult.Back -eq $true) { continue }
     }
 
     # Run the deployment cycle in a child scope so that `return` inside the
@@ -591,7 +591,7 @@ if ($null -eq $preservedCustomDomains) { $preservedCustomDomains = @() }
 $preservedCustomDomains = @($preservedCustomDomains)
 if ($preservedCustomDomains.Count -gt 0) {
     Write-Step ("  {0} vorhandene Custom Domain(s) gefunden und im Config gespeichert." -f $preservedCustomDomains.Count)
-    if (-not $config.ContainsKey('preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }
+    if (-not ($config.Keys -contains 'preservedInfraState')) { $config.preservedInfraState = [ordered]@{} }
     $config.preservedInfraState.customDomains = @($preservedCustomDomains | ForEach-Object {
         [ordered]@{
             name          = [string]$_.name
@@ -604,7 +604,7 @@ if ($preservedCustomDomains.Count -gt 0) {
     # Live lookup returned nothing.  Fall back to the last captured state from the config
     # (covers transient az errors or lookup failures that silently return empty).
     $_storedDomains = $null
-    if ($config.ContainsKey('preservedInfraState') -and $config.preservedInfraState -and
+    if (($config.Keys -contains 'preservedInfraState') -and $config.preservedInfraState -and
             $config.preservedInfraState.customDomains) {
         $_storedDomains = @($config.preservedInfraState.customDomains)
     }
