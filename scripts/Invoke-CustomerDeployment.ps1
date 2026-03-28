@@ -459,38 +459,75 @@ do {
         $Update = $false
         $GenerateOnly = $false
         $CustomerNumber = $null
+        $flowResult = $null
 
         switch ($menuResult.ActionId) {
             'DeployExisting' {
                 $flowResult = Start-DeployExistingFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
-                $config = $flowResult.Config
+                if ($flowResult -is [System.Collections.IDictionary]) {
+                    if ($flowResult.Contains('Config')) { $config = $flowResult['Config'] }
+                }
+                elseif ($flowResult -and $flowResult.PSObject.Properties['Config']) {
+                    $config = $flowResult.Config
+                }
             }
             'EditConfig' {
                 $flowResult = Start-EditConfigFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
-                $GenerateOnly = [bool]$flowResult.GenerateOnly
-                $config = $flowResult.Config
+                if ($flowResult -is [System.Collections.IDictionary]) {
+                    if ($flowResult.Contains('GenerateOnly')) { $GenerateOnly = [bool]$flowResult['GenerateOnly'] }
+                    if ($flowResult.Contains('Config')) { $config = $flowResult['Config'] }
+                }
+                elseif ($flowResult) {
+                    if ($flowResult.PSObject.Properties['GenerateOnly']) { $GenerateOnly = [bool]$flowResult.GenerateOnly }
+                    if ($flowResult.PSObject.Properties['Config']) { $config = $flowResult.Config }
+                }
             }
             'DeleteConfig' {
                 $flowResult = Start-DeleteConfigFlow -CustomersRoot $CustomersRoot
             }
             'CreateOnly' {
                 $flowResult = Start-CreateOnlyFlow
-                $GenerateOnly = [bool]$flowResult.GenerateOnly
-                $config = $flowResult.Config
+                if ($flowResult -is [System.Collections.IDictionary]) {
+                    if ($flowResult.Contains('GenerateOnly')) { $GenerateOnly = [bool]$flowResult['GenerateOnly'] }
+                    if ($flowResult.Contains('Config')) { $config = $flowResult['Config'] }
+                }
+                elseif ($flowResult) {
+                    if ($flowResult.PSObject.Properties['GenerateOnly']) { $GenerateOnly = [bool]$flowResult.GenerateOnly }
+                    if ($flowResult.PSObject.Properties['Config']) { $config = $flowResult.Config }
+                }
             }
             'Repair' {
                 $flowResult = Start-RepairFlow -CustomersRoot $CustomersRoot
-                $Repair = $flowResult.Repair
-                $CustomerNumber = $flowResult.CustomerNumber
+                if ($flowResult -is [System.Collections.IDictionary]) {
+                    if ($flowResult.Contains('Repair')) { $Repair = [bool]$flowResult['Repair'] }
+                    if ($flowResult.Contains('CustomerNumber')) { $CustomerNumber = $flowResult['CustomerNumber'] }
+                }
+                elseif ($flowResult) {
+                    if ($flowResult.PSObject.Properties['Repair']) { $Repair = [bool]$flowResult.Repair }
+                    if ($flowResult.PSObject.Properties['CustomerNumber']) { $CustomerNumber = $flowResult.CustomerNumber }
+                }
             }
             'Update' {
                 $flowResult = Start-UpdateFlow -CustomersRoot $CustomersRoot
-                $Update = $flowResult.Update
-                $CustomerNumber = $flowResult.CustomerNumber
+                if ($flowResult -is [System.Collections.IDictionary]) {
+                    if ($flowResult.Contains('Update')) { $Update = [bool]$flowResult['Update'] }
+                    if ($flowResult.Contains('CustomerNumber')) { $CustomerNumber = $flowResult['CustomerNumber'] }
+                }
+                elseif ($flowResult) {
+                    if ($flowResult.PSObject.Properties['Update']) { $Update = [bool]$flowResult.Update }
+                    if ($flowResult.PSObject.Properties['CustomerNumber']) { $CustomerNumber = $flowResult.CustomerNumber }
+                }
             }
         }
 
-        if ($flowResult -and $flowResult.PSObject.Properties['Back'] -and $flowResult.Back -eq $true) { continue }
+        $isBackNavigation = $false
+        if ($flowResult -is [System.Collections.IDictionary]) {
+            $isBackNavigation = $flowResult.Contains('Back') -and [bool]$flowResult['Back']
+        }
+        elseif ($flowResult -and $flowResult.PSObject.Properties['Back']) {
+            $isBackNavigation = [bool]$flowResult.Back
+        }
+        if ($isBackNavigation) { continue }
     }
 
     # Run the deployment cycle in a child scope so that `return` inside the
