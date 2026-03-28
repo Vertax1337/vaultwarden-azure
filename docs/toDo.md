@@ -86,6 +86,7 @@ Die `deploymentScripts`-Ressource ist keine Laufzeitkomponente der Anwendung und
 
 ## Offene Punkte
 - [ ] SMTP-Secret-Abfrage im Deploy-Flow klarer beschriften
+- [ ] MultiLine Selection implementieren
 - [ ] Deployment-Scripts nach erfolgreichem Deployment automatisch bereinigen
 - [ ] Vor der Deployment-Zusammenfassung die Konsole leeren, damit der finale Deployment-Block sauber startet
 - [ ] Zwischen Deployment-Zusammenfassung und Live-Logs einen separaten Abschnitt "Deployment-Ausführung" mit Trennlinien und Leerzeile ausgeben
