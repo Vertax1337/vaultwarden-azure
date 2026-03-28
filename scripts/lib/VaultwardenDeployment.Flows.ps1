@@ -111,35 +111,169 @@ function Show-MultiSelectMenuSmooth {
     }
 }
 
+function Read-WizardTextWithDefault {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [string]$Default = '',
+        [switch]$Required
+    )
+
+    while ($true) {
+        $prompt = if ([string]::IsNullOrWhiteSpace($Default)) { $Label } else { '{0} [{1}]' -f $Label, $Default }
+        if ([System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
+            $value = Read-Host $prompt
+        }
+        else {
+            Write-Host ('{0}: ' -f $prompt) -NoNewline
+            $buffer = New-Object System.Collections.Generic.List[char]
+            while ($true) {
+                $keyInfo = [System.Console]::ReadKey($true)
+                switch ($keyInfo.Key) {
+                    'Escape' {
+                        Write-Host ''
+                        return $null
+                    }
+                    'Enter' {
+                        Write-Host ''
+                        break
+                    }
+                    'Backspace' {
+                        if ($buffer.Count -gt 0) {
+                            $buffer.RemoveAt($buffer.Count - 1)
+                            [System.Console]::Write("`b `b")
+                        }
+                        continue
+                    }
+                    default {
+                        if (-not [char]::IsControl($keyInfo.KeyChar)) {
+                            $buffer.Add($keyInfo.KeyChar)
+                            [System.Console]::Write($keyInfo.KeyChar)
+                        }
+                        continue
+                    }
+                }
+                break
+            }
+            $value = -join $buffer.ToArray()
+        }
+
+        if ([string]::IsNullOrWhiteSpace($value)) { $value = $Default }
+        if ($Required -and [string]::IsNullOrWhiteSpace($value)) {
+            Write-Warning ('{0} darf nicht leer sein.' -f $Label)
+            continue
+        }
+        return $value
+    }
+}
+
+function Read-WizardBooleanWithDefault {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [bool]$Default = $true
+    )
+
+    $defaultToken = if ($Default) { 'Y/n' } else { 'y/N' }
+    while ($true) {
+        $raw = Read-WizardTextWithDefault -Label ('{0} [{1}]' -f $Label, $defaultToken)
+        if ($null -eq $raw) { return $null }
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $Default }
+        switch -Regex ($raw.Trim()) {
+            '^(y|yes|j|ja|1|true)$' { return $true }
+            '^(n|no|nein|0|false)$' { return $false }
+            default { Write-Warning 'Bitte ja/nein eingeben.' }
+        }
+    }
+}
+
+function Read-WizardChoiceWithDefault {
+    param(
+        [Parameter(Mandatory)][string]$Label,
+        [Parameter(Mandatory)][hashtable]$Choices,
+        [Parameter(Mandatory)][string]$DefaultKey
+    )
+
+    $orderedChoiceKeys = @()
+    $menuItems = @()
+    $defaultMenuKey = '1'
+    $index = 1
+
+    foreach ($entry in $Choices.GetEnumerator()) {
+        $menuKey = [string]$index
+        $index++
+        $orderedChoiceKeys += [string]$entry.Key
+        $menuItems += New-ConsoleMenuItem -Key $menuKey -Text ("{0} ({1})" -f $entry.Value, $entry.Key) -ItemType 'action' -ActionId $menuKey
+        if ([string]$entry.Key -eq $DefaultKey) {
+            $defaultMenuKey = $menuKey
+        }
+    }
+
+    $menuItems += New-ConsoleMenuItem -Key '0' -Text 'Zurück' -ItemType 'back'
+    $menu = New-ConsoleMenu -Id 'wizardChoice' -Title $Label -DefaultKey $defaultMenuKey -Items $menuItems
+    $selectedItem = Show-ConsoleMenu -Menu $menu -ClearScreenOnOpen
+
+    if ($selectedItem.ItemType -eq 'back') {
+        return $null
+    }
+
+    $choicePosition = [int]$selectedItem.Key - 1
+    if ($choicePosition -lt 0 -or $choicePosition -ge $orderedChoiceKeys.Count) {
+        throw 'Ungültige Auswahl im SingleChoice-Menü.'
+    }
+
+    return [string]$orderedChoiceKeys[$choicePosition]
+}
+
 function Select-CustomerCodeInteractive {
-    param([Parameter(Mandatory)][string]$CustomersRoot)
+    param(
+        [Parameter(Mandatory)][string]$CustomersRoot,
+        [switch]$IncludeNewConfig,
+        [string]$Title = 'Vorhandene Kundenkonfigurationen'
+    )
+
     $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
     if ($customers.Count -eq 0) {
+        if ($IncludeNewConfig) {
+            return [pscustomobject]@{ SelectionType = 'new' }
+        }
         throw 'Keine vorhandenen Kundenkonfigurationen gefunden.'
     }
-    Write-Host ''
-    Write-Host 'Vorhandene Kundenkonfigurationen:'
-    for ($i = 0; $i -lt $customers.Count; $i++) {
-        $cfgPath = Join-Path (Join-Path $CustomersRoot $customers[$i]) 'deployment.config.json'
-        $display = $customers[$i]
+
+    $items = @()
+    $codeByKey = @{}
+    $keyIndex = 1
+    foreach ($customer in $customers) {
+        $key = [string]$keyIndex
+        $keyIndex++
+        $cfgPath = Join-Path (Join-Path $CustomersRoot $customer) 'deployment.config.json'
+        $display = $customer
         if (Test-Path -LiteralPath $cfgPath) {
             try {
                 $cfg = Read-JsonFile -Path $cfgPath
-                $display = 'Kunden-Nr.: {0}  |  Domäne: {1}  |  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $customers[$i]
+                $display = 'Kunden-Nr.: {0}  |  Domäne: {1}  |  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $customer
             } catch { }
         }
-        Write-Host ('  [{0}] {1}' -f ($i + 1), $display)
+        $items += New-ConsoleMenuItem -Key $key -Text $display -ItemType 'action' -ActionId ('pick:' + $key)
+        $codeByKey[$key] = $customer
     }
-    Write-Host '  [0] Zurück'
-    while ($true) {
-        $raw = Read-Host 'Auswahl (Nummer oder Ordnername)'
-        if ($raw -eq '0') { return $null }
-        if ($raw -match '^\d+$') {
-            $idx = [int]$raw - 1
-            if ($idx -ge 0 -and $idx -lt $customers.Count) { return $customers[$idx] }
-        }
-        if ($customers -contains $raw) { return $raw }
-        Write-Warning 'Ungültige Auswahl.'
+
+    if ($IncludeNewConfig) {
+        $items += New-ConsoleMenuItem -Key 'N' -Text '+Neue Konfiguration' -ItemType 'action' -ActionId 'new'
+    }
+
+    $items += New-ConsoleMenuItem -Key '0' -Text 'Zurück' -ItemType 'back'
+    $menu = New-ConsoleMenu -Id 'customerSelection' -Title $Title -DefaultKey '1' -Items $items
+    $selectedItem = Show-ConsoleMenu -Menu $menu -ClearScreenOnOpen
+
+    if ($selectedItem.ItemType -eq 'back') {
+        return [pscustomobject]@{ SelectionType = 'back' }
+    }
+    if ($selectedItem.ActionId -eq 'new') {
+        return [pscustomobject]@{ SelectionType = 'new' }
+    }
+
+    return [pscustomobject]@{
+        SelectionType = 'existing'
+        CustomerCode  = $codeByKey[[string]$selectedItem.Key]
     }
 }
 
@@ -161,7 +295,8 @@ function New-CustomerConfigInteractive {
     Write-Section 'Vaultwarden Customer Deployment Setup'
 
     # --- 1. Kunden-Nr. ---
-    $customerNumber = Read-TextWithDefault -Label 'Kunden-Nr.' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.customerNumber } else { '' })) -Required
+    $customerNumber = Read-WizardTextWithDefault -Label 'Kunden-Nr.' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.customerNumber } else { '' })) -Required
+    if ($null -eq $customerNumber) { return $null }
 
     # --- 2. Clear screen, then show multi-choice feature menu ---
     [System.Console]::Clear()
@@ -197,10 +332,14 @@ function New-CustomerConfigInteractive {
 
     # --- 3. Domain, (zone), location, environment, resource group ---
     $defaultDomain = if ($ExistingConfig) { $ExistingConfig.domain.hostname } else { 'vault.example.com' }
-    $vaultwardenDomain = (Read-TextWithDefault -Label 'Vaultwarden-Domäne' -Default $defaultDomain -Required).Trim().ToLowerInvariant()
+    $vaultwardenDomainInput = Read-WizardTextWithDefault -Label 'Vaultwarden-Domäne' -Default $defaultDomain -Required
+    if ($null -eq $vaultwardenDomainInput) { return $null }
+    $vaultwardenDomain = $vaultwardenDomainInput.Trim().ToLowerInvariant()
 
     if ($useCloudflare) {
-        $zoneName = (Read-TextWithDefault -Label 'Cloudflare Zone' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.domain.zoneName } else { Get-DefaultZoneFromHostname -Hostname $vaultwardenDomain })) -Required).Trim().ToLowerInvariant()
+        $zoneNameInput = Read-WizardTextWithDefault -Label 'Cloudflare Zone' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.domain.zoneName } else { Get-DefaultZoneFromHostname -Hostname $vaultwardenDomain })) -Required
+        if ($null -eq $zoneNameInput) { return $null }
+        $zoneName = $zoneNameInput.Trim().ToLowerInvariant()
     } else {
         $zoneName = (Get-DefaultZoneFromHostname -Hostname $vaultwardenDomain).ToLowerInvariant()
     }
@@ -210,21 +349,32 @@ function New-CustomerConfigInteractive {
     }
     $customerCode = Convert-DomainToSlug -Domain $vaultwardenDomain
 
-    $location    = Read-TextWithDefault -Label 'Azure Region' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.location } else { 'germanywestcentral' })) -Required
-    $environment = Read-TextWithDefault -Label 'Environment (prod/test/dev)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.environment } else { 'prod' })) -Required
+    $location    = Read-WizardTextWithDefault -Label 'Azure Region' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.location } else { 'germanywestcentral' })) -Required
+    if ($null -eq $location) { return $null }
+    $environment = Read-WizardTextWithDefault -Label 'Environment (prod/test/dev)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.azure.environment } else { 'prod' })) -Required
+    if ($null -eq $environment) { return $null }
     $resourceGroupDefault = if ($ExistingConfig) { $ExistingConfig.azure.resourceGroupName } else { Get-DefaultResourceGroupName -Environment $environment -Location $location -VaultwardenDomain $vaultwardenDomain }
-    $resourceGroupName = Read-TextWithDefault -Label 'Resource Group' -Default ([string]$resourceGroupDefault) -Required
+    $resourceGroupName = Read-WizardTextWithDefault -Label 'Resource Group' -Default ([string]$resourceGroupDefault) -Required
+    if ($null -eq $resourceGroupName) { return $null }
 
     # --- 4. Storage & PostgreSQL parameters ---
-    $storageAccountSku           = Read-TextWithDefault -Label 'Storage Account SKU'              -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'storageAccountSku'           -Default 'Standard_LRS'))  -Required
-    $postgresSkuName             = Read-TextWithDefault -Label 'PostgreSQL SKU'                   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresSkuName'             -Default 'Standard_B1ms')) -Required
-    $postgresStorageGB           = [int](Read-TextWithDefault -Label 'PostgreSQL Storage GB'      -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresStorageGB'           -Default '32'))            -Required)
-    $postgresBackupRetentionDays = [int](Read-TextWithDefault -Label 'PostgreSQL Backup Retention Days' -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresBackupRetentionDays' -Default '14'))     -Required)
+    $storageAccountSku           = Read-WizardTextWithDefault -Label 'Storage Account SKU'              -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'storageAccountSku'           -Default 'Standard_LRS'))  -Required
+    if ($null -eq $storageAccountSku) { return $null }
+    $postgresSkuName             = Read-WizardTextWithDefault -Label 'PostgreSQL SKU'                   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresSkuName'             -Default 'Standard_B1ms')) -Required
+    if ($null -eq $postgresSkuName) { return $null }
+    $postgresStorageGBRaw        = Read-WizardTextWithDefault -Label 'PostgreSQL Storage GB'      -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresStorageGB'           -Default '32'))            -Required
+    if ($null -eq $postgresStorageGBRaw) { return $null }
+    $postgresStorageGB = [int]$postgresStorageGBRaw
+    $postgresBackupRetentionDaysRaw = Read-WizardTextWithDefault -Label 'PostgreSQL Backup Retention Days' -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'postgresBackupRetentionDays' -Default '14'))     -Required
+    if ($null -eq $postgresBackupRetentionDaysRaw) { return $null }
+    $postgresBackupRetentionDays = [int]$postgresBackupRetentionDaysRaw
 
     # --- 5. Mail-Konfiguration (opens directly after PostgreSQL Backup Retention Days) ---
     Write-Section 'Mail-Konfiguration'
 
-    $mailRootDomain = (Read-TextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required).Trim().ToLowerInvariant()
+    $mailRootDomainInput = Read-WizardTextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required
+    if ($null -eq $mailRootDomainInput) { return $null }
+    $mailRootDomain = $mailRootDomainInput.Trim().ToLowerInvariant()
 
     # Mail-Modus wählen (3 exklusive Zielzustände) – ordered to match spec: acs_smtp, direct_send, smtp_auth
     $mailModeChoices = [ordered]@{
@@ -233,10 +383,13 @@ function New-CustomerConfigInteractive {
         'smtp_auth'   = 'SMTP Auth (klassisches SMTP Relay mit User/Passwort)'
     }
     $existingMailMode = if ($ExistingConfig) { Get-MailModeFromConfig -Config $ExistingConfig } else { 'smtp_auth' }
-    $mailModeValue = Read-ChoiceWithDefault -Label 'Mail-Modus' -Choices $mailModeChoices -DefaultKey $existingMailMode
+    $mailModeValue = Read-WizardChoiceWithDefault -Label 'Mail-Modus' -Choices $mailModeChoices -DefaultKey $existingMailMode
+    if ($null -eq $mailModeValue) { return $null }
 
-    $smtpFrom          = Read-TextWithDefault -Label 'SMTP From'      -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from }     else { 'noreply@' + $mailRootDomain }))
-    $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
+    $smtpFrom          = Read-WizardTextWithDefault -Label 'SMTP From'      -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from }     else { 'noreply@' + $mailRootDomain }))
+    if ($null -eq $smtpFrom) { return $null }
+    $smtpFromNameValue = Read-WizardTextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
+    if ($null -eq $smtpFromNameValue) { return $null }
 
     # SMTP host prompting depends on mail mode:
     #   smtp_auth:    prompts with default smtp.office365.com (or existing host if editing)
@@ -250,7 +403,8 @@ function New-CustomerConfigInteractive {
     if ($mailModeValue -eq 'direct_send') {
         # Direct Send: MX lookup is not supported at deployment time (Azure DeploymentScript lacks dig/nslookup).
         # The MX endpoint (MX-Endpunkt) must be provided explicitly here and will be written directly to the parameter file.
-        $smtpHostValue = Read-TextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z. B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
+        $smtpHostValue = Read-WizardTextWithDefault -Label 'SMTP Host (MX-Endpunkt für Direct Send, z. B. mx01.example-com.mail.protection.outlook.com)' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.host } else { '' })) -Required
+        if ($null -eq $smtpHostValue) { return $null }
     }
     elseif ($mailModeValue -eq 'smtp_auth') {
         # SMTP Auth: prompt for SMTP host with default smtp.office365.com.
@@ -258,10 +412,14 @@ function New-CustomerConfigInteractive {
         # The operator can override it to use any SMTP relay.
         $existingSmtpHost = if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { [string]$ExistingConfig.smtp.host } else { '' }
         $smtpHostDefault  = if (-not [string]::IsNullOrWhiteSpace($existingSmtpHost)) { $existingSmtpHost } else { 'smtp.office365.com' }
-        $smtpHostValue     = Read-TextWithDefault -Label 'SMTP Host (smtp_auth-Relay, z.B. smtp.office365.com)' -Default $smtpHostDefault -Required
-        $smtpPortValue     = Read-TextWithDefault -Label 'SMTP Port'     -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.port }     else { '587' }))       -Required
-        $smtpSecurityValue = Read-TextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
-        $smtpUsernameValue = Read-TextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.username } else { $smtpFrom }))   -Required
+        $smtpHostValue     = Read-WizardTextWithDefault -Label 'SMTP Host (smtp_auth-Relay, z.B. smtp.office365.com)' -Default $smtpHostDefault -Required
+        if ($null -eq $smtpHostValue) { return $null }
+        $smtpPortValue     = Read-WizardTextWithDefault -Label 'SMTP Port'     -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.port }     else { '587' }))       -Required
+        if ($null -eq $smtpPortValue) { return $null }
+        $smtpSecurityValue = Read-WizardTextWithDefault -Label 'SMTP Security' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.security } else { 'starttls' })) -Required
+        if ($null -eq $smtpSecurityValue) { return $null }
+        $smtpUsernameValue = Read-WizardTextWithDefault -Label 'SMTP Username' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'smtp_auth') { $ExistingConfig.smtp.username } else { $smtpFrom }))   -Required
+        if ($null -eq $smtpUsernameValue) { return $null }
     }
     else {
         # acs_smtp: smtp.azurecomm.net is auto-set; acsDeployFoundation=true is implied.
@@ -269,7 +427,8 @@ function New-CustomerConfigInteractive {
         $smtpHostValue     = 'smtp.azurecomm.net'
         $smtpPortValue     = '587'
         $smtpSecurityValue = 'starttls'
-        $smtpUsernameValue = Read-TextWithDefault -Label 'ACS SMTP Username (Azure Communication Services Verbindungszeichenfolge)' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'acs_smtp') { $ExistingConfig.smtp.username } else { '' })) -Required
+        $smtpUsernameValue = Read-WizardTextWithDefault -Label 'ACS SMTP Username (Azure Communication Services Verbindungszeichenfolge)' -Default ([string]$(if ($ExistingConfig -and (Get-MailModeFromConfig -Config $ExistingConfig) -eq 'acs_smtp') { $ExistingConfig.smtp.username } else { '' })) -Required
+        if ($null -eq $smtpUsernameValue) { return $null }
     }
 
     # --- 6. CloudFlare detail questions (only if CloudFlare selected) ---
@@ -277,8 +436,10 @@ function New-CustomerConfigInteractive {
     $enableWafValue       = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableWaf }       else { $true }
     $enableRateLimitValue = if ($ExistingConfig) { [bool]$ExistingConfig.edge.enableRateLimit }  else { $true }
     if ($useCloudflare) {
-        $enableWafValue       = Read-BooleanWithDefault -Label 'Cloudflare WAF-Regel für /admin aktivieren?'             -Default $enableWafValue
-        $enableRateLimitValue = Read-BooleanWithDefault -Label 'Cloudflare Rate Limit für Login-Endpunkte aktivieren?' -Default $enableRateLimitValue
+        $enableWafValue       = Read-WizardBooleanWithDefault -Label 'Cloudflare WAF-Regel für /admin aktivieren?'             -Default $enableWafValue
+        if ($null -eq $enableWafValue) { return $null }
+        $enableRateLimitValue = Read-WizardBooleanWithDefault -Label 'Cloudflare Rate Limit für Login-Endpunkte aktivieren?' -Default $enableRateLimitValue
+        if ($null -eq $enableRateLimitValue) { return $null }
     }
 
     # ACS Foundation: auto-enable when acs_smtp mail mode is chosen, regardless of multi-choice selection.
@@ -304,10 +465,14 @@ function New-CustomerConfigInteractive {
 
     # --- 7. SSO detail questions (only if SSO selected) ---
     if ($ssoEnabled) {
-        $advancedArm.ssoOnly      = Read-BooleanWithDefault -Label 'SSO Only aktivieren?'  -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoOnly'      -Default $false))
-        $advancedArm.ssoAuthority = Read-TextWithDefault    -Label 'SSO Authority'          -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoAuthority' -Default ''))                                           -Required
-        $advancedArm.ssoClientId  = Read-TextWithDefault    -Label 'SSO Client ID'          -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoClientId'  -Default ''))                                           -Required
-        $advancedArm.ssoScopes    = Read-TextWithDefault    -Label 'SSO Scopes'             -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoScopes'    -Default 'openid profile email offline_access User.Read')) -Required
+        $advancedArm.ssoOnly      = Read-WizardBooleanWithDefault -Label 'SSO Only aktivieren?'  -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoOnly'      -Default $false))
+        if ($null -eq $advancedArm.ssoOnly) { return $null }
+        $advancedArm.ssoAuthority = Read-WizardTextWithDefault    -Label 'SSO Authority'          -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoAuthority' -Default ''))                                           -Required
+        if ($null -eq $advancedArm.ssoAuthority) { return $null }
+        $advancedArm.ssoClientId  = Read-WizardTextWithDefault    -Label 'SSO Client ID'          -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoClientId'  -Default ''))                                           -Required
+        if ($null -eq $advancedArm.ssoClientId) { return $null }
+        $advancedArm.ssoScopes    = Read-WizardTextWithDefault    -Label 'SSO Scopes'             -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'ssoScopes'    -Default 'openid profile email offline_access User.Read')) -Required
+        if ($null -eq $advancedArm.ssoScopes) { return $null }
     }
     else {
         $advancedArm.ssoOnly      = $false
@@ -318,8 +483,10 @@ function New-CustomerConfigInteractive {
 
     # --- Push detail questions (only if Push selected) ---
     if ($pushEnabled) {
-        $advancedArm.pushInstallationId = Read-TextWithDefault    -Label 'Push Installation ID'   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'pushInstallationId' -Default ''))    -Required
-        $advancedArm.pushUseEuServers   = Read-BooleanWithDefault -Label 'EU Push Server verwenden?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'pushUseEuServers'   -Default $false))
+        $advancedArm.pushInstallationId = Read-WizardTextWithDefault    -Label 'Push Installation ID'   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'pushInstallationId' -Default ''))    -Required
+        if ($null -eq $advancedArm.pushInstallationId) { return $null }
+        $advancedArm.pushUseEuServers   = Read-WizardBooleanWithDefault -Label 'EU Push Server verwenden?' -Default ([bool](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'pushUseEuServers'   -Default $false))
+        if ($null -eq $advancedArm.pushUseEuServers) { return $null }
     }
     else {
         $advancedArm.pushInstallationId = ''
@@ -328,8 +495,10 @@ function New-CustomerConfigInteractive {
 
     # --- ACS Foundation detail questions (only if ACS Foundation selected or implied by acs_smtp) ---
     if ($acsDeployFoundation) {
-        $advancedArm.acsDataLocation = Read-TextWithDefault -Label 'ACS Data Location' -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'acsDataLocation' -Default 'Germany')) -Required
-        $advancedArm.acsDomainName   = Read-TextWithDefault -Label 'ACS Domain Name'   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'acsDomainName'   -Default ''))
+        $advancedArm.acsDataLocation = Read-WizardTextWithDefault -Label 'ACS Data Location' -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'acsDataLocation' -Default 'Germany')) -Required
+        if ($null -eq $advancedArm.acsDataLocation) { return $null }
+        $advancedArm.acsDomainName   = Read-WizardTextWithDefault -Label 'ACS Domain Name'   -Default ([string](Get-AdvancedParameterValue -Advanced $advancedArm -Name 'acsDomainName'   -Default ''))
+        if ($null -eq $advancedArm.acsDomainName) { return $null }
     }
     else {
         $advancedArm.acsDomainName   = ''
@@ -407,8 +576,14 @@ function Start-DeployExistingFlow {
         [Parameter(Mandatory)][string]$RepoRoot
     )
     [System.Console]::Clear()
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot -IncludeNewConfig -Title 'Vorhandene Kundenkonfigurationen deployen'
+    if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
+    if (($selection.SelectionType) -eq 'new') {
+        $config = New-CustomerConfigInteractive
+        if ($null -eq $config) { return @{ Back = $true } }
+        return @{ Config = $config }
+    }
+    $customerCode = $selection.CustomerCode
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $config = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     return @{ Config = $config }
@@ -421,11 +596,13 @@ function Start-EditConfigFlow {
         [Parameter(Mandatory)][string]$RepoRoot
     )
     [System.Console]::Clear()
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot -Title 'Vorhandene Kundenkonfigurationen bearbeiten'
+    if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
+    $customerCode = $selection.CustomerCode
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $loaded = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     $config = New-CustomerConfigInteractive -ExistingConfig $loaded
+    if ($null -eq $config) { return @{ Back = $true } }
     return @{ Config = $config; GenerateOnly = $true }
 }
 
@@ -450,8 +627,10 @@ function Select-CustomerCodesInteractive {
         $labels += $label
         $labelToCode[$label] = $code
     }
-    $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labels
-    if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return $null }
+    $labelsWithBack = @($labels + @('Zurück'))
+    $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labelsWithBack
+    if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return @() }
+    if (@($selectedLabels) -contains 'Zurück') { return @() }
     $result = @()
     foreach ($lbl in @($selectedLabels)) { $result += $labelToCode[$lbl] }
     return $result
@@ -467,10 +646,15 @@ function Start-DeleteConfigFlow {
     if ($null -eq $selectedCodes -or @($selectedCodes).Count -eq 0) { return @{ Back = $true } }
     $selectedCodes = @($selectedCodes)
     Write-Host ''
-    Write-Host ('Konfigurationen löschen ({0}):' -f $selectedCodes.Count)
+    Write-Host ('Ausgewählte Konfigurationen ({0}):' -f $selectedCodes.Count)
     foreach ($code in $selectedCodes) { Write-Host "  - $code" }
-    $confirm = Read-Host 'Wirklich löschen? (ja/nein)'
-    if ($confirm -ne 'ja') {
+
+    $confirmMenu = New-ConsoleMenu -Id 'deleteConfirm' -Title 'Wirklich löschen?' -DefaultKey '1' -Items @(
+        New-ConsoleMenuItem -Key '1' -Text 'Ja, löschen' -ItemType 'action' -ActionId 'confirm'
+        New-ConsoleMenuItem -Key '2' -Text 'Nein, zurück' -ItemType 'back'
+    )
+    $confirmChoice = Show-ConsoleMenu -Menu $confirmMenu -ClearScreenOnOpen
+    if ($confirmChoice.ItemType -eq 'back') {
         Write-Host 'Abgebrochen.'
         return @{ Back = $true }
     }
@@ -486,6 +670,7 @@ function Start-CreateOnlyFlow {
     [CmdletBinding()]
     param()
     $config = New-CustomerConfigInteractive
+    if ($null -eq $config) { return @{ Back = $true } }
     return @{ Config = $config; GenerateOnly = $true }
 }
 
@@ -494,8 +679,9 @@ function Start-RepairFlow {
     param(
         [Parameter(Mandatory)][string]$CustomersRoot
     )
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
+    $customerCode = $selection.CustomerCode
     return @{ CustomerNumber = $customerCode; Repair = $true }
 }
 
@@ -504,8 +690,8 @@ function Start-UpdateFlow {
     param(
         [Parameter(Mandatory)][string]$CustomersRoot
     )
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
+    $customerCode = $selection.CustomerCode
     return @{ CustomerNumber = $customerCode; Update = $true }
 }
-
