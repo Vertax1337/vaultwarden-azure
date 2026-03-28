@@ -23,8 +23,10 @@ function Select-CustomerCodeInteractive {
         }
         Write-Host ('  [{0}] {1}' -f ($i + 1), $display)
     }
+    Write-Host '  [0] Zurück'
     while ($true) {
         $raw = Read-Host 'Auswahl (Nummer oder Ordnername)'
+        if ($raw -eq '0') { return $null }
         if ($raw -match '^\d+$') {
             $idx = [int]$raw - 1
             if ($idx -ge 0 -and $idx -lt $customers.Count) { return $customers[$idx] }
@@ -214,36 +216,61 @@ function New-CustomerConfigInteractive {
     return New-CustomerConfigObject -CustomerNumber $customerNumber -VaultwardenDomain $vaultwardenDomain -ZoneName $zoneName -ResourceGroupName $resourceGroupName -Environment $environment -Location $location -Mode $mode -MailRootDomain $mailRootDomain -MailMode $mailModeValue -SmtpFrom $smtpFrom -SmtpFromName $smtpFromNameValue -SmtpHost $smtpHostValue -SmtpPort $smtpPortValue -SmtpSecurity $smtpSecurityValue -SmtpUsername $smtpUsernameValue -EnableWaf:$enableWafValue -EnableRateLimit:$enableRateLimitValue -AdvancedArmParameters $advancedArm -Secrets $secrets
 }
 
-function Start-NewDeploymentFlow {
-    [CmdletBinding()]
-    param()
-    $config = New-CustomerConfigInteractive
-    return @{ Config = $config }
-}
-
 function Start-DeployExistingFlow {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
+    [System.Console]::Clear()
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $config = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     return @{ Config = $config }
 }
 
-function Start-EditAndDeployFlow {
+function Start-EditConfigFlow {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
+    [System.Console]::Clear()
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $loaded = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     $config = New-CustomerConfigInteractive -ExistingConfig $loaded
-    return @{ Config = $config }
+    return @{ Config = $config; GenerateOnly = $true }
+}
+
+function Start-DeleteConfigFlow {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$CustomersRoot
+    )
+    [System.Console]::Clear()
+    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $customerRoot = Join-Path $CustomersRoot $customerCode
+    Write-Host ''
+    Write-Host "Konfiguration löschen: $customerCode"
+    $confirm = Read-Host 'Wirklich löschen? (ja/nein)'
+    if ($confirm -ne 'ja') {
+        Write-Host 'Abgebrochen.'
+        return @{ Back = $true }
+    }
+    Remove-Item -LiteralPath $customerRoot -Recurse -Force
+    Write-Host "[OK] Konfiguration '$customerCode' wurde gelöscht."
+    return @{ Back = $true }
+}
+
+function Start-CreateOnlyFlow {
+    [CmdletBinding()]
+    param()
+    $config = New-CustomerConfigInteractive
+    return @{ Config = $config; GenerateOnly = $true }
 }
 
 function Start-RepairFlow {
@@ -252,6 +279,7 @@ function Start-RepairFlow {
         [Parameter(Mandatory)][string]$CustomersRoot
     )
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     return @{ CustomerNumber = $customerCode; Repair = $true }
 }
 
@@ -261,12 +289,7 @@ function Start-UpdateFlow {
         [Parameter(Mandatory)][string]$CustomersRoot
     )
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     return @{ CustomerNumber = $customerCode; Update = $true }
 }
 
-function Start-GenerateOnlyFlow {
-    [CmdletBinding()]
-    param()
-    $config = New-CustomerConfigInteractive
-    return @{ Config = $config; GenerateOnly = $true }
-}
