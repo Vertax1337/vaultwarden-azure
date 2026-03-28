@@ -68,6 +68,7 @@ function Show-MultiSelectMenuSmooth {
         $width = [System.Console]::WindowWidth
         if ($width -lt 1) { $width = 80 }
         $out = if ($Text.Length -gt ($width - 1)) { $Text.Substring(0, $width - 1) } else { $Text.PadRight($width - 1) }
+        try { if ([System.Console]::BufferHeight -lt ($Row + 2)) { [System.Console]::BufferHeight = $Row + 2 } } catch { }
         [System.Console]::SetCursorPosition(0, $Row)
         [System.Console]::Write($out)
     }
@@ -158,6 +159,7 @@ function Show-SingleChoiceMenuSmooth {
         if ($width -lt 1) { $width = 80 }
         $maxLen = $width - 1
         $out = if ($Text.Length -gt $maxLen) { $Text.Substring(0, $maxLen) } else { $Text.PadRight($maxLen) }
+        try { if ([System.Console]::BufferHeight -lt ($Row + 2)) { [System.Console]::BufferHeight = $Row + 2 } } catch { }
         [System.Console]::SetCursorPosition(0, $Row)
         [System.Console]::Write($out)
     }
