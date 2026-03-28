@@ -374,38 +374,38 @@ Describe 'Select-CustomerCodeInteractive – Flow Contracts' {
 }
 
 # ===========================================================================
-# Start-DeleteConfigFlow – Flow Contracts
+# Start-DeleteConfigFlow – Flow Contracts (Zielzustand: SingleChoice-Bestätigung)
 # ===========================================================================
 Describe 'Start-DeleteConfigFlow – Flow Contracts' {
-    It 'returns Back=true when selection is null' {
+    It 'returns Back=true when selection is null (Esc in multi-select)' {
         Mock Select-CustomerCodesInteractive { $null }
         (Start-DeleteConfigFlow -CustomersRoot '/tmp').Back | Should -BeTrue
     }
 
-    It 'returns Back=true when selection is empty' {
+    It 'returns Back=true when selection is empty array' {
         Mock Select-CustomerCodesInteractive { @() }
         (Start-DeleteConfigFlow -CustomersRoot '/tmp').Back | Should -BeTrue
     }
 
-    It 'returns Back=true when confirmation is not "ja"' {
+    It 'returns Back=true when confirmation SingleChoice menu returns ''Nein, zurück''' {
         Mock Select-CustomerCodesInteractive { @('vault-test-de') }
-        Mock Read-Host { 'nein' }
+        Mock Show-SingleChoiceMenuSmooth { 'Nein, zurück' }
         (Start-DeleteConfigFlow -CustomersRoot '/tmp').Back | Should -BeTrue
     }
 
-    It 'returns Back=true when confirmation is empty' {
+    It 'returns Back=true when confirmation SingleChoice menu returns null (Esc)' {
         Mock Select-CustomerCodesInteractive { @('vault-test-de') }
-        Mock Read-Host { '' }
+        Mock Show-SingleChoiceMenuSmooth { $null }
         (Start-DeleteConfigFlow -CustomersRoot '/tmp').Back | Should -BeTrue
     }
 
-    It 'deletes customer directory and returns Back=true when confirmation is "ja"' {
+    It 'deletes customer directory and returns Back=true when confirmation returns ''Ja, löschen''' {
         $tmpRoot   = Join-Path ([System.IO.Path]::GetTempPath()) ('wiz-del-' + [System.Guid]::NewGuid().ToString('N'))
         $targetDir = Join-Path $tmpRoot 'vault-test-de'
         New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
         try {
             Mock Select-CustomerCodesInteractive { @('vault-test-de') }
-            Mock Read-Host { 'ja' }
+            Mock Show-SingleChoiceMenuSmooth { 'Ja, löschen' }
             $result = Start-DeleteConfigFlow -CustomersRoot $tmpRoot
             $result.Back         | Should -BeTrue
             Test-Path $targetDir | Should -BeFalse
@@ -513,5 +513,296 @@ Describe 'Start-UpdateFlow – Back Contract' {
     It 'returns Back=true when customer selection returns back' {
         Mock Select-CustomerCodeInteractive { [pscustomobject]@{ SelectionType = 'back' } }
         (Start-UpdateFlow -CustomersRoot '/tmp').Back | Should -BeTrue
+    }
+}
+
+# ===========================================================================
+# Select-CustomerCodesInteractive – Zurück Sentinel (Zielzustand)
+# ===========================================================================
+Describe 'Select-CustomerCodesInteractive – Zurück Sentinel' {
+    It 'appends a visible Zurück sentinel item to the selection list' {
+        Mock Get-AvailableCustomerCodes { @('vault-kunde-de') }
+        Mock Read-JsonFile { @{} }
+        $script:scciItems = @()
+        Mock Show-MultiSelectMenuSmooth {
+            param($Title, $Items, $PreSelected)
+            $script:scciItems = $Items
+            return @()
+        }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Out-Null
+        $script:scciItems | Should -Contain $Script:_DeleteBackSentinel
+    }
+
+    It 'Zurück sentinel is the last entry in the list' {
+        Mock Get-AvailableCustomerCodes { @('vault-a-de', 'vault-b-de') }
+        Mock Read-JsonFile { @{} }
+        $script:scciItems2 = @()
+        Mock Show-MultiSelectMenuSmooth {
+            param($Title, $Items, $PreSelected)
+            $script:scciItems2 = $Items
+            return @()
+        }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Out-Null
+        $script:scciItems2[-1] | Should -Be $Script:_DeleteBackSentinel
+    }
+
+    It 'returns null when Zurück sentinel is selected (navigation cancel)' {
+        Mock Get-AvailableCustomerCodes { @('vault-kunde-de') }
+        Mock Read-JsonFile { @{} }
+        Mock Show-MultiSelectMenuSmooth { return @($Script:_DeleteBackSentinel) }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Should -BeNullOrEmpty
+    }
+
+    It 'returns null when Zurück sentinel is selected alongside a real customer' {
+        Mock Get-AvailableCustomerCodes { @('vault-kunde-de') }
+        Mock Read-JsonFile { @{} }
+        Mock Show-MultiSelectMenuSmooth { return @('vault-kunde-de', $Script:_DeleteBackSentinel) }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Should -BeNullOrEmpty
+    }
+
+    It 'returns customer code when only real items are selected' {
+        Mock Get-AvailableCustomerCodes { @('vault-kunde-de') }
+        Mock Read-JsonFile { @{} }
+        Mock Show-MultiSelectMenuSmooth { return @('vault-kunde-de') }
+        $result = Select-CustomerCodesInteractive -CustomersRoot '/tmp'
+        $result | Should -Contain 'vault-kunde-de'
+    }
+}
+
+# ===========================================================================
+# Select-CustomerCodesInteractive – Column Format (Zielzustand)
+# ===========================================================================
+Describe 'Select-CustomerCodesInteractive – Column Format' {
+    It 'formats label with column-padded customerNumber, domain, and code when config exists' {
+        Mock Get-AvailableCustomerCodes { @('vault-kunde-de') }
+        Mock Test-Path { $true }
+        Mock Read-JsonFile {
+            @{ customerNumber = '4711'; domain = @{ hostname = 'vault.kunde.de' } }
+        }
+        $script:fmtItems = @()
+        Mock Show-MultiSelectMenuSmooth {
+            param($Title, $Items, $PreSelected)
+            $script:fmtItems = $Items
+            return @()
+        }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Out-Null
+        $customerLabel = $script:fmtItems | Where-Object { $_ -ne $Script:_DeleteBackSentinel } | Select-Object -First 1
+        $customerLabel | Should -Match '4711\s+'
+        $customerLabel | Should -Match 'vault\.kunde\.de'
+        $customerLabel | Should -Match 'vault-kunde-de'
+    }
+
+    It 'uses raw customer code as label when config file is missing' {
+        Mock Get-AvailableCustomerCodes { @('vault-noconfig-de') }
+        Mock Test-Path { $false }
+        $script:fmtItems2 = @()
+        Mock Show-MultiSelectMenuSmooth {
+            param($Title, $Items, $PreSelected)
+            $script:fmtItems2 = $Items
+            return @()
+        }
+        Select-CustomerCodesInteractive -CustomersRoot '/tmp' | Out-Null
+        $customerLabel = $script:fmtItems2 | Where-Object { $_ -ne $Script:_DeleteBackSentinel } | Select-Object -First 1
+        $customerLabel | Should -Be 'vault-noconfig-de'
+    }
+}
+
+# ===========================================================================
+# Read-WizardChoiceWithDefault – Mail-Mode Items & Index (Zielzustand)
+# ===========================================================================
+Describe 'Read-WizardChoiceWithDefault – Mail-Mode Items and Index' {
+    It 'passes all 3 mail-mode choices as display items to Show-SingleChoiceMenuSmooth' {
+        $script:smcItems = @()
+        Mock Show-SingleChoiceMenuSmooth {
+            param($Title, $Items, $InitialIndex)
+            $script:smcItems = $Items
+            return $null
+        }
+        $choices = [ordered]@{
+            acs_smtp    = 'ACS SMTP (Azure Communication Services SMTP Relay)'
+            direct_send = 'Direct Send (kein Auth, MX-Endpunkt direkt kontaktieren)'
+            smtp_auth   = 'SMTP Auth (klassisches SMTP Relay mit User/Passwort)'
+        }
+        Read-WizardChoiceWithDefault -Label 'Mail-Modus' -Choices $choices -DefaultKey 'smtp_auth'
+        $script:smcItems.Count | Should -Be 3
+        ($script:smcItems -join ',') | Should -Match 'acs_smtp'
+        ($script:smcItems -join ',') | Should -Match 'direct_send'
+        ($script:smcItems -join ',') | Should -Match 'smtp_auth'
+    }
+
+    It 'passes smtp_auth as InitialIndex=2 when choices are acs/direct/smtp and DefaultKey=smtp_auth' {
+        $script:smcIdx = -1
+        Mock Show-SingleChoiceMenuSmooth {
+            param($Title, $Items, $InitialIndex)
+            $script:smcIdx = $InitialIndex
+            return $null
+        }
+        $choices = [ordered]@{
+            acs_smtp    = 'ACS SMTP'
+            direct_send = 'Direct Send'
+            smtp_auth   = 'SMTP Auth'
+        }
+        Read-WizardChoiceWithDefault -Label 'Mail-Modus' -Choices $choices -DefaultKey 'smtp_auth'
+        $script:smcIdx | Should -Be 2
+    }
+
+    It 'passes acs_smtp as InitialIndex=0 when DefaultKey=acs_smtp' {
+        $script:smcIdx2 = -1
+        Mock Show-SingleChoiceMenuSmooth {
+            param($Title, $Items, $InitialIndex)
+            $script:smcIdx2 = $InitialIndex
+            return $null
+        }
+        $choices = [ordered]@{
+            acs_smtp    = 'ACS SMTP'
+            direct_send = 'Direct Send'
+            smtp_auth   = 'SMTP Auth'
+        }
+        Read-WizardChoiceWithDefault -Label 'Mail-Modus' -Choices $choices -DefaultKey 'acs_smtp'
+        $script:smcIdx2 | Should -Be 0
+    }
+}
+
+# ===========================================================================
+# Show-SingleChoiceMenuSmooth – Interactive Source Contracts (Zielzustand)
+# Verifies the target-state UX contract by static analysis of the source.
+# ===========================================================================
+Describe 'Show-SingleChoiceMenuSmooth – Interactive Source Contracts' {
+    BeforeAll {
+        $script:flowsSrc = Get-Content $script:FlowsPath -Raw
+        # Extract Show-SingleChoiceMenuSmooth function body
+        $sc_start = $script:flowsSrc.IndexOf('function Show-SingleChoiceMenuSmooth')
+        $sc_next  = $script:flowsSrc.IndexOf('function Read-WizardTextWithDefault', $sc_start)
+        $script:scBody = $script:flowsSrc.Substring($sc_start, $sc_next - $sc_start)
+    }
+
+    It 'help line contains arrow navigation hint' {
+        $script:scBody | Should -Match 'Pfeile = bewegen'
+    }
+
+    It 'help line contains Enter selection hint' {
+        $script:scBody | Should -Match 'Enter = waehlen'
+    }
+
+    It 'help line contains direct number selection hint (Zahl = direkt waehlen)' {
+        $script:scBody | Should -Match 'Zahl = direkt waehlen'
+    }
+
+    It 'help line contains Esc cancel hint' {
+        $script:scBody | Should -Match 'Esc = abbrechen'
+    }
+
+    It 'active item is rendered with [x] marker' {
+        $script:scBody | Should -Match '\[x\]'
+    }
+
+    It 'inactive items are rendered with [ ] marker' {
+        $script:scBody | Should -Match '\[ \]'
+    }
+
+    It 'direct number key press selects the corresponding item (1–9)' {
+        $script:scBody | Should -Match "KeyChar -ge '1'"
+        $script:scBody | Should -Match "KeyChar -le '9'"
+    }
+
+    It 'Escape returns $null (clean abort)' {
+        $escIdx = $script:scBody.IndexOf("'Escape'")
+        $escIdx | Should -BeGreaterThan 0
+        # Look 200 chars from the Escape case – enough to pass SetCursorPosition + return $null
+        $script:scBody.Substring($escIdx, 200) | Should -Match 'return \$null'
+    }
+
+    It 'Enter returns the selected item label' {
+        $enterIdx = $script:scBody.IndexOf("'Enter'")
+        $enterIdx | Should -BeGreaterThan 0
+        # Look 200 chars from the Enter case – enough to pass SetCursorPosition lines
+        $script:scBody.Substring($enterIdx, 200) | Should -Match 'return \$Items\['
+    }
+}
+
+# ===========================================================================
+# Show-MultiSelectMenuSmooth – Interactive Source Contracts (Zielzustand)
+# ===========================================================================
+Describe 'Show-MultiSelectMenuSmooth – Interactive Source Contracts' {
+    BeforeAll {
+        $script:flowsSrc2 = Get-Content $script:FlowsPath -Raw
+        $ms_start = $script:flowsSrc2.IndexOf('function Show-MultiSelectMenuSmooth')
+        $ms_next  = $script:flowsSrc2.IndexOf('function Show-SingleChoiceMenuSmooth', $ms_start)
+        $script:msBody = $script:flowsSrc2.Substring($ms_start, $ms_next - $ms_start)
+    }
+
+    It 'Escape returns $null (clean abort)' {
+        $script:msBody | Should -Match "'Escape'"
+        # The Escape case is the only path that returns $null in this function
+        $script:msBody | Should -Match 'return \$null'
+    }
+
+    It 'Spacebar toggles the current item selection' {
+        $script:msBody | Should -Match "'Spacebar'"
+        $spaceIdx = $script:msBody.IndexOf("'Spacebar'")
+        $script:msBody.Substring($spaceIdx, 80) | Should -Match '-not \$selected'
+    }
+
+    It 'Enter confirms and returns selected items array' {
+        $script:msBody | Should -Match "'Enter'"
+        # The Enter case is the only path that returns $result in this function
+        $script:msBody | Should -Match 'return \$result'
+    }
+
+    It 'BufferHeight is guarded in a try/catch to prevent crashes' {
+        $script:msBody | Should -Match 'BufferHeight'
+        $script:msBody | Should -Match 'catch \{ \}'
+    }
+}
+
+# ===========================================================================
+# Start-DeleteConfigFlow – Confirmation is SingleChoice (source contract)
+# ===========================================================================
+Describe 'Start-DeleteConfigFlow – Confirmation via SingleChoice (Zielzustand)' {
+    BeforeAll {
+        $script:flowsSrc3 = Get-Content $script:FlowsPath -Raw
+        $del_start = $script:flowsSrc3.IndexOf('function Start-DeleteConfigFlow')
+        $del_next  = $script:flowsSrc3.IndexOf('function Start-CreateOnlyFlow', $del_start)
+        $script:delBody = $script:flowsSrc3.Substring($del_start, $del_next - $del_start)
+    }
+
+    It 'uses Show-SingleChoiceMenuSmooth for confirmation (not Read-Host)' {
+        $script:delBody | Should -Match 'Show-SingleChoiceMenuSmooth'
+        $script:delBody | Should -Not -Match "Read-Host.*ja"
+    }
+
+    It 'confirmation menu offers ''Ja, löschen'' as a choice' {
+        $script:delBody | Should -Match 'Ja, löschen'
+    }
+
+    It 'confirmation menu offers ''Nein, zurück'' as a choice' {
+        $script:delBody | Should -Match 'Nein, zurück'
+    }
+
+    It 'null confirmation (Esc) is treated as cancellation' {
+        $script:delBody | Should -Match '\$null -eq \$confirmChoice'
+    }
+}
+
+# ===========================================================================
+# Select-CustomerCodesInteractive – Zurück Sentinel Source Contract
+# ===========================================================================
+Describe 'Select-CustomerCodesInteractive – Zurück Sentinel Source Contract' {
+    BeforeAll {
+        $script:flowsSrc4 = Get-Content $script:FlowsPath -Raw
+        $sc2_start = $script:flowsSrc4.IndexOf('function Select-CustomerCodesInteractive')
+        $sc2_next  = $script:flowsSrc4.IndexOf('function Start-DeleteConfigFlow', $sc2_start)
+        $script:scciBody = $script:flowsSrc4.Substring($sc2_start, $sc2_next - $sc2_start)
+    }
+
+    It 'appends the _DeleteBackSentinel to the items list' {
+        $script:scciBody | Should -Match '_DeleteBackSentinel'
+    }
+
+    It 'treats the sentinel selection as a cancellation (returns null)' {
+        $script:scciBody | Should -Match '-contains \$Script:_DeleteBackSentinel'
+        # The branch should lead to return $null
+        $sentIdx = $script:scciBody.IndexOf('-contains $Script:_DeleteBackSentinel')
+        $script:scciBody.Substring($sentIdx, 60) | Should -Match 'return \$null'
     }
 }

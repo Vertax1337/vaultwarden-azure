@@ -8,6 +8,10 @@
 # fallback in Show-MultiSelectMenuSmooth and Show-SingleChoiceMenuSmooth.
 $Script:_ForceNonInteractive = $false
 
+# Sentinel label shown at the bottom of the multi-select delete list so the
+# operator has a visible navigation option to cancel without Esc.
+$Script:_DeleteBackSentinel = '── Zurück ──'
+
 # Interactive multi-select menu using arrow keys, spacebar and Enter.
 # Supports pre-selected items via -PreSelected hashtable (item label → $true/$false).
 # Falls back to a text-based prompt when the console I/O is redirected.
@@ -286,7 +290,7 @@ function Read-WizardBooleanWithDefault {
 function Read-WizardChoiceWithDefault {
     param(
         [Parameter(Mandatory)][string]$Label,
-        [Parameter(Mandatory)][hashtable]$Choices,
+        [Parameter(Mandatory)][System.Collections.IDictionary]$Choices,
         [Parameter(Mandatory)][string]$DefaultKey
     )
 
@@ -712,8 +716,12 @@ function Select-CustomerCodesInteractive {
         $labels += $label
         $labelToCode[$label] = $code
     }
+    # Append a visible Zurück sentinel at the bottom so the operator can cancel
+    # without pressing Esc.
+    $labels += $Script:_DeleteBackSentinel
     $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labels
     if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return $null }
+    if (@($selectedLabels) -contains $Script:_DeleteBackSentinel) { return $null }
     $result = @()
     foreach ($lbl in @($selectedLabels)) { $result += $labelToCode[$lbl] }
     return $result
@@ -733,8 +741,12 @@ function Start-DeleteConfigFlow {
     foreach ($code in $selectedCodes) { Write-Host "  - $code" }
 
     Write-Host ''
-    $confirm = Read-Host 'Wirklich löschen? Bitte "ja" eingeben zum Bestätigen'
-    if ($confirm -ne 'ja') {
+    $confirmItems = @('Nein, zurück', 'Ja, löschen')
+    $confirmChoice = Show-SingleChoiceMenuSmooth `
+        -Title ('Wirklich löschen? Ausgewählt: {0} Konfiguration(en)' -f $selectedCodes.Count) `
+        -Items $confirmItems `
+        -InitialIndex 0
+    if ($null -eq $confirmChoice -or $confirmChoice -eq 'Nein, zurück') {
         Write-Host 'Abgebrochen.'
         return @{ Back = $true }
     }

@@ -2408,13 +2408,18 @@ class RepoContractTests(unittest.TestCase):
                       "Start-DeleteConfigFlow must return @{ Back = $true } for cancellation path")
 
     def test_delete_flow_confirms_before_delete(self):
-        """Start-DeleteConfigFlow must ask for explicit 'ja' confirmation before deleting."""
+        """Start-DeleteConfigFlow must use Show-SingleChoiceMenuSmooth for confirmation (target state: not Read-Host)."""
         flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
-        self.assertIn("'ja'", body,
-                      "Start-DeleteConfigFlow must require explicit 'ja' confirmation")
-        self.assertIn('Read-Host', body,
-                      'Start-DeleteConfigFlow must use Read-Host for confirmation')
+        self.assertIn('Show-SingleChoiceMenuSmooth', body,
+                      'Start-DeleteConfigFlow must use Show-SingleChoiceMenuSmooth for delete confirmation')
+        self.assertIn("'Ja, löschen'", body,
+                      "Start-DeleteConfigFlow confirmation menu must offer 'Ja, löschen'")
+        self.assertIn("'Nein, zurück'", body,
+                      "Start-DeleteConfigFlow confirmation menu must offer 'Nein, zurück'")
+        # Must NOT use the old interim Read-Host 'ja' pattern
+        self.assertNotIn("Read-Host", body,
+                         'Start-DeleteConfigFlow must not use Read-Host for confirmation (target state)')
 
     def test_delete_flow_deletes_all_selected_configs(self):
         """Start-DeleteConfigFlow must call Remove-Item inside a loop over all selected codes."""
@@ -2465,11 +2470,12 @@ class RepoContractTests(unittest.TestCase):
         try:
             customers_root = tmp / 'customers'
             (customers_root / 'vault-test-de').mkdir(parents=True)
-            # Run: dot-source libs, stub Show-MultiSelectMenuSmooth to return label, stub Read-Host to 'ja'
+            # Stub Show-MultiSelectMenuSmooth to select only the real customer code (not sentinel),
+            # and Show-SingleChoiceMenuSmooth (confirmation) to return 'Ja, löschen'.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
-                "function Read-Host { param($Prompt) return 'ja' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @('vault-test-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Ja, löschen' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
@@ -2492,10 +2498,13 @@ class RepoContractTests(unittest.TestCase):
             customers_root = tmp / 'customers'
             (customers_root / 'vault-alpha-de').mkdir(parents=True)
             (customers_root / 'vault-beta-de').mkdir(parents=True)
+            # Return only the two real customer codes (not the Zurück sentinel).
+            # Stub Show-SingleChoiceMenuSmooth (confirmation) to confirm deletion.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return $Items }; "
-                "function Read-Host { param($Prompt) return 'ja' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) "
+                "  return @('vault-alpha-de','vault-beta-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Ja, löschen' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
@@ -2511,7 +2520,7 @@ class RepoContractTests(unittest.TestCase):
 
     @requires_pwsh
     def test_delete_flow_abort_at_confirmation_returns_back(self):
-        """Start-DeleteConfigFlow must return Back=$true without deleting when user answers 'nein'."""
+        """Start-DeleteConfigFlow must return Back=$true without deleting when user chooses 'Nein, zurück'."""
         flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
         common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
         import tempfile, shutil
@@ -2519,10 +2528,12 @@ class RepoContractTests(unittest.TestCase):
         try:
             customers_root = tmp / 'customers'
             (customers_root / 'vault-keep-de').mkdir(parents=True)
+            # Stub Show-MultiSelectMenuSmooth to select the customer (not sentinel),
+            # then stub Show-SingleChoiceMenuSmooth (confirmation) to return 'Nein, zurück'.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
-                "function Read-Host { param($Prompt) return 'nein' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @('vault-keep-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Nein, zurück' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
