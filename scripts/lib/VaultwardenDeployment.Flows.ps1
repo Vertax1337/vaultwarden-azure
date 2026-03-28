@@ -23,8 +23,10 @@ function Select-CustomerCodeInteractive {
         }
         Write-Host ('  [{0}] {1}' -f ($i + 1), $display)
     }
+    Write-Host '  [0] Zurück'
     while ($true) {
         $raw = Read-Host 'Auswahl (Nummer oder Ordnername)'
+        if ($raw -eq '0') { return $null }
         if ($raw -match '^\d+$') {
             $idx = [int]$raw - 1
             if ($idx -ge 0 -and $idx -lt $customers.Count) { return $customers[$idx] }
@@ -227,7 +229,9 @@ function Start-DeployExistingFlow {
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
+    [System.Console]::Clear()
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $config = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     return @{ Config = $config }
@@ -239,7 +243,9 @@ function Start-EditAndDeployFlow {
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
+    [System.Console]::Clear()
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $loaded = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     $config = New-CustomerConfigInteractive -ExistingConfig $loaded
@@ -252,6 +258,7 @@ function Start-RepairFlow {
         [Parameter(Mandatory)][string]$CustomersRoot
     )
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     return @{ CustomerNumber = $customerCode; Repair = $true }
 }
 
@@ -261,6 +268,7 @@ function Start-UpdateFlow {
         [Parameter(Mandatory)][string]$CustomersRoot
     )
     $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
     return @{ CustomerNumber = $customerCode; Update = $true }
 }
 

@@ -222,7 +222,11 @@ function Get-RuntimeSecretParameters {
     if ($Config.smtp.useAuth) {
         if ($SmtpPassword) { $result.smtpPassword = $SmtpPassword }
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Für GenerateOnly im SMTP-Auth-Modus muss SmtpPassword übergeben werden.' }
-        else { $result.smtpPassword = Read-Host -AsSecureString 'SMTP Password' }
+        else {
+            Write-Host ('  {0,-15}: {1}:{2}  ({3})' -f 'Mail-Server', $Config.smtp.host, $Config.smtp.port, $Config.smtp.security)
+            Write-Host ('  {0,-15}: {1}' -f 'SMTP-Benutzer', $Config.smtp.username)
+            $result.smtpPassword = Read-Host -AsSecureString 'SMTP Password'
+        }
     }
 
     $advanced = $Config.azure.advancedArmParameters
@@ -485,6 +489,8 @@ do {
                 $config = $flowResult.Config
             }
         }
+
+        if ($flowResult -and $flowResult.Back -eq $true) { continue }
     }
 
     # Run the deployment cycle in a child scope so that `return` inside the
