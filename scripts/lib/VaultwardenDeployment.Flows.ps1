@@ -214,7 +214,8 @@ function Read-WizardTextWithDefault {
         else {
             Write-Host ('{0}: ' -f $prompt) -NoNewline
             $buffer = New-Object System.Collections.Generic.List[char]
-            while ($true) {
+            $done = $false
+            while (-not $done) {
                 $keyInfo = [System.Console]::ReadKey($true)
                 switch ($keyInfo.Key) {
                     'Escape' {
@@ -223,24 +224,21 @@ function Read-WizardTextWithDefault {
                     }
                     'Enter' {
                         Write-Host ''
-                        break
+                        $done = $true
                     }
                     'Backspace' {
                         if ($buffer.Count -gt 0) {
                             $buffer.RemoveAt($buffer.Count - 1)
                             [System.Console]::Write("`b `b")
                         }
-                        continue
                     }
                     default {
                         if (-not [char]::IsControl($keyInfo.KeyChar)) {
                             $buffer.Add($keyInfo.KeyChar)
                             [System.Console]::Write($keyInfo.KeyChar)
                         }
-                        continue
                     }
                 }
-                break
             }
             $value = -join $buffer.ToArray()
         }
