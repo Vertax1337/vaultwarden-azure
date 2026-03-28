@@ -103,6 +103,15 @@ function Show-DeploymentMainMenu {
 
         $clearOnOpen = $false
 
+        # Esc returns $null – treat as Back.
+        if ($null -eq $selectedItem) {
+            if ($MenuStack.Count -gt 1) {
+                $MenuStack.RemoveAt($MenuStack.Count - 1)
+            }
+            $clearOnOpen = $true
+            continue
+        }
+
         switch ($selectedItem.ItemType) {
             'action' {
                 # Save the last meaningful selection so it is pre-selected on re-entry.

@@ -111,6 +111,94 @@ function Show-MultiSelectMenuSmooth {
     }
 }
 
+# Interactive single-choice (radio-button) menu.
+# Shows exactly one item marked as active [x], all others as [ ].
+# Arrow keys navigate, Enter accepts the current selection, Esc cancels.
+# After Enter the screen is cleared.
+# Falls back to a number-prompt when console I/O is redirected.
+# Returns the selected item label, or $null when Escape is pressed.
+function Show-SingleChoiceMenuSmooth {
+    param(
+        [string]$Title = 'Bitte auswählen',
+        [Parameter(Mandatory)][string[]]$Items,
+        [int]$InitialIndex = 0
+    )
+
+    if (-not $Items -or $Items.Count -eq 0) {
+        throw 'Keine Eintraege vorhanden.'
+    }
+
+    # Clamp initial index to valid bounds [0, Count-1].
+    $index = [Math]::Max(0, [Math]::Min($InitialIndex, $Items.Count - 1))
+
+    if ([System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
+        Write-Host ''
+        Write-Host $Title
+        Write-Host ''
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $mark = if ($i -eq $index) { '[x]' } else { '[ ]' }
+            Write-Host ('  {0} {1}' -f $mark, $Items[$i])
+        }
+        $raw = Read-Host ('Auswahl [1-{0}], Standard {1}' -f $Items.Count, ($index + 1))
+        if ([string]::IsNullOrWhiteSpace($raw)) { return $Items[$index] }
+        if ($raw -match '^\d+$') {
+            $idx = [int]$raw - 1
+            if ($idx -ge 0 -and $idx -lt $Items.Count) { return $Items[$idx] }
+        }
+        return $Items[$index]
+    }
+
+    $startTop  = [System.Console]::CursorTop
+    $lineCount = 4 + $Items.Count
+    $oldCursorVisible = $true
+
+    function Write-SCPaddedLine {
+        param([int]$Row, [string]$Text)
+        $width = [System.Console]::WindowWidth
+        if ($width -lt 1) { $width = 80 }
+        $maxLen = $width - 1
+        $out = if ($Text.Length -gt $maxLen) { $Text.Substring(0, $maxLen) } else { $Text.PadRight($maxLen) }
+        [System.Console]::SetCursorPosition(0, $Row)
+        [System.Console]::Write($out)
+    }
+
+    function Render-SCMenu {
+        Write-SCPaddedLine -Row $startTop       -Text $Title
+        Write-SCPaddedLine -Row ($startTop + 1) -Text ''
+        Write-SCPaddedLine -Row ($startTop + 2) -Text 'Pfeile = bewegen, Enter = waehlen, Esc = abbrechen'
+        Write-SCPaddedLine -Row ($startTop + 3) -Text ''
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $cursor = if ($i -eq $index) { '>' } else { ' ' }
+            $mark   = if ($i -eq $index) { '[x]' } else { '[ ]' }
+            Write-SCPaddedLine -Row ($startTop + 4 + $i) -Text "$cursor $mark $($Items[$i])"
+        }
+    }
+
+    try {
+        try { $oldCursorVisible = [System.Console]::CursorVisible; [System.Console]::CursorVisible = $false } catch { }
+        Render-SCMenu
+        while ($true) {
+            $key = [System.Console]::ReadKey($true)
+            switch ($key.Key) {
+                'UpArrow'   { $index = if ($index -gt 0) { $index - 1 } else { $Items.Count - 1 }; Render-SCMenu; continue }
+                'DownArrow' { $index = if ($index -lt ($Items.Count - 1)) { $index + 1 } else { 0 }; Render-SCMenu; continue }
+                'Enter' {
+                    [System.Console]::SetCursorPosition(0, $startTop + $lineCount)
+                    [System.Console]::Clear()
+                    return $Items[$index]
+                }
+                'Escape' {
+                    [System.Console]::SetCursorPosition(0, $startTop + $lineCount)
+                    return $null
+                }
+            }
+        }
+    }
+    finally {
+        try { [System.Console]::CursorVisible = $oldCursorVisible } catch { }
+    }
+}
+
 function Read-WizardTextWithDefault {
     param(
         [Parameter(Mandatory)][string]$Label,
@@ -192,35 +280,22 @@ function Read-WizardChoiceWithDefault {
         [Parameter(Mandatory)][string]$DefaultKey
     )
 
-    $orderedChoiceKeys = @()
-    $menuItems = @()
-    $defaultMenuKey = '1'
-    $index = 1
+    $displayItems = @()
+    $keyByDisplay = @{}
+    $defaultIndex = 0
+    $i = 0
 
     foreach ($entry in $Choices.GetEnumerator()) {
-        $menuKey = [string]$index
-        $index++
-        $orderedChoiceKeys += [string]$entry.Key
-        $menuItems += New-ConsoleMenuItem -Key $menuKey -Text ("{0} ({1})" -f $entry.Value, $entry.Key) -ItemType 'action' -ActionId $menuKey
-        if ([string]$entry.Key -eq $DefaultKey) {
-            $defaultMenuKey = $menuKey
-        }
+        $disp = '{0} ({1})' -f $entry.Value, $entry.Key
+        $displayItems += $disp
+        $keyByDisplay[$disp] = [string]$entry.Key
+        if ([string]$entry.Key -eq $DefaultKey) { $defaultIndex = $i }
+        $i++
     }
 
-    $menuItems += New-ConsoleMenuItem -Key '0' -Text 'Zurück' -ItemType 'back'
-    $menu = New-ConsoleMenu -Id 'wizardChoice' -Title $Label -DefaultKey $defaultMenuKey -Items $menuItems
-    $selectedItem = Show-ConsoleMenu -Menu $menu -ClearScreenOnOpen
-
-    if ($selectedItem.ItemType -eq 'back') {
-        return $null
-    }
-
-    $choicePosition = [int]$selectedItem.Key - 1
-    if ($choicePosition -lt 0 -or $choicePosition -ge $orderedChoiceKeys.Count) {
-        throw 'Ungültige Auswahl im SingleChoice-Menü.'
-    }
-
-    return [string]$orderedChoiceKeys[$choicePosition]
+    $selected = Show-SingleChoiceMenuSmooth -Title $Label -Items $displayItems -InitialIndex $defaultIndex
+    if ($null -eq $selected) { return $null }
+    return $keyByDisplay[$selected]
 }
 
 function Select-CustomerCodeInteractive {
@@ -249,7 +324,7 @@ function Select-CustomerCodeInteractive {
         if (Test-Path -LiteralPath $cfgPath) {
             try {
                 $cfg = Read-JsonFile -Path $cfgPath
-                $display = 'Kunden-Nr.: {0}  |  Domäne: {1}  |  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $customer
+                $display = '{0,-8}  {1,-40}  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $customer
             } catch { }
         }
         $items += New-ConsoleMenuItem -Key $key -Text $display -ItemType 'action' -ActionId ('pick:' + $key)
@@ -264,7 +339,7 @@ function Select-CustomerCodeInteractive {
     $menu = New-ConsoleMenu -Id 'customerSelection' -Title $Title -DefaultKey '1' -Items $items
     $selectedItem = Show-ConsoleMenu -Menu $menu -ClearScreenOnOpen
 
-    if ($selectedItem.ItemType -eq 'back') {
+    if ($null -eq $selectedItem -or $selectedItem.ItemType -eq 'back') {
         return [pscustomobject]@{ SelectionType = 'back' }
     }
     if ($selectedItem.ActionId -eq 'new') {
@@ -621,16 +696,14 @@ function Select-CustomerCodesInteractive {
         if (Test-Path -LiteralPath $cfgPath) {
             try {
                 $cfg = Read-JsonFile -Path $cfgPath
-                $label = 'Kunden-Nr.: {0}  |  Domäne: {1}  |  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $code
+                $label = '{0,-8}  {1,-40}  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $code
             } catch { }
         }
         $labels += $label
         $labelToCode[$label] = $code
     }
-    $labelsWithBack = @($labels + @('Zurück'))
-    $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labelsWithBack
-    if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return @() }
-    if (@($selectedLabels) -contains 'Zurück') { return @() }
+    $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labels
+    if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return $null }
     $result = @()
     foreach ($lbl in @($selectedLabels)) { $result += $labelToCode[$lbl] }
     return $result
@@ -649,12 +722,9 @@ function Start-DeleteConfigFlow {
     Write-Host ('Ausgewählte Konfigurationen ({0}):' -f $selectedCodes.Count)
     foreach ($code in $selectedCodes) { Write-Host "  - $code" }
 
-    $confirmMenu = New-ConsoleMenu -Id 'deleteConfirm' -Title 'Wirklich löschen?' -DefaultKey '1' -Items @(
-        New-ConsoleMenuItem -Key '1' -Text 'Ja, löschen' -ItemType 'action' -ActionId 'confirm'
-        New-ConsoleMenuItem -Key '2' -Text 'Nein, zurück' -ItemType 'back'
-    )
-    $confirmChoice = Show-ConsoleMenu -Menu $confirmMenu -ClearScreenOnOpen
-    if ($confirmChoice.ItemType -eq 'back') {
+    Write-Host ''
+    $confirm = Read-Host 'Wirklich löschen? Bitte "ja" eingeben zum Bestätigen'
+    if ($confirm -ne 'ja') {
         Write-Host 'Abgebrochen.'
         return @{ Back = $true }
     }
