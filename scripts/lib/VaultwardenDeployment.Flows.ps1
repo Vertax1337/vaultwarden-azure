@@ -216,13 +216,6 @@ function New-CustomerConfigInteractive {
     return New-CustomerConfigObject -CustomerNumber $customerNumber -VaultwardenDomain $vaultwardenDomain -ZoneName $zoneName -ResourceGroupName $resourceGroupName -Environment $environment -Location $location -Mode $mode -MailRootDomain $mailRootDomain -MailMode $mailModeValue -SmtpFrom $smtpFrom -SmtpFromName $smtpFromNameValue -SmtpHost $smtpHostValue -SmtpPort $smtpPortValue -SmtpSecurity $smtpSecurityValue -SmtpUsername $smtpUsernameValue -EnableWaf:$enableWafValue -EnableRateLimit:$enableRateLimitValue -AdvancedArmParameters $advancedArm -Secrets $secrets
 }
 
-function Start-NewDeploymentFlow {
-    [CmdletBinding()]
-    param()
-    $config = New-CustomerConfigInteractive
-    return @{ Config = $config }
-}
-
 function Start-DeployExistingFlow {
     [CmdletBinding()]
     param(
@@ -237,7 +230,7 @@ function Start-DeployExistingFlow {
     return @{ Config = $config }
 }
 
-function Start-EditAndDeployFlow {
+function Start-EditConfigFlow {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$CustomersRoot,
@@ -249,7 +242,35 @@ function Start-EditAndDeployFlow {
     $pathsForLoad = Get-CustomerPaths -RepoRoot $RepoRoot -CustomersRoot $CustomersRoot -CustomerCode $customerCode
     $loaded = ConvertTo-HashtableDeep -InputObject (Read-JsonFile -Path $pathsForLoad.ConfigPath)
     $config = New-CustomerConfigInteractive -ExistingConfig $loaded
-    return @{ Config = $config }
+    return @{ Config = $config; GenerateOnly = $true }
+}
+
+function Start-DeleteConfigFlow {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$CustomersRoot
+    )
+    [System.Console]::Clear()
+    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $customerCode) { return @{ Back = $true } }
+    $customerRoot = Join-Path $CustomersRoot $customerCode
+    Write-Host ''
+    Write-Host "Konfiguration löschen: $customerCode"
+    $confirm = Read-Host 'Wirklich löschen? (ja/nein)'
+    if ($confirm -ne 'ja') {
+        Write-Host 'Abgebrochen.'
+        return @{ Back = $true }
+    }
+    Remove-Item -LiteralPath $customerRoot -Recurse -Force
+    Write-Host "[OK] Konfiguration '$customerCode' wurde gelöscht."
+    return @{ Back = $true }
+}
+
+function Start-CreateOnlyFlow {
+    [CmdletBinding()]
+    param()
+    $config = New-CustomerConfigInteractive
+    return @{ Config = $config; GenerateOnly = $true }
 }
 
 function Start-RepairFlow {
@@ -272,9 +293,3 @@ function Start-UpdateFlow {
     return @{ CustomerNumber = $customerCode; Update = $true }
 }
 
-function Start-GenerateOnlyFlow {
-    [CmdletBinding()]
-    param()
-    $config = New-CustomerConfigInteractive
-    return @{ Config = $config; GenerateOnly = $true }
-}

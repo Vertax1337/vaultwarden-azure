@@ -31,8 +31,8 @@ if (-not $script:_vendoredAlreadyLoaded) {
 # Accepts optional MenuState (hashtable) and MenuStack (List[string]) to preserve
 # selection memory between invocations, enabling a persistent interactive loop.
 # Returns a pscustomobject with:
-#   ActionId  – one of: NewDeployment | DeployExisting | EditAndDeploy |
-#                       Repair | Update | GenerateOnly | Exit
+#   ActionId  – one of: DeployExisting | EditConfig | DeleteConfig |
+#                       CreateOnly | Repair | Update | Exit
 #   MenuState – updated selection-memory hashtable (pass back on next call)
 #   MenuStack – updated navigation stack (pass back on next call)
 #
@@ -51,19 +51,20 @@ function Show-DeploymentMainMenu {
             -Title 'Vaultwarden Azure – Deployment-Wizard' `
             -DefaultKey '1' `
             -Items @(
-                New-ConsoleMenuItem -Key '1' -Text 'Neues Kundendeployment anlegen und deployen' -ItemType 'action' -ActionId 'NewDeployment'
-                New-ConsoleMenuItem -Key '2' -Text 'Vorhandene Konfigurationen' -ItemType 'submenu' -TargetMenuId 'existing'
-                New-ConsoleMenuItem -Key '3' -Text 'Wartung' -ItemType 'submenu' -TargetMenuId 'maintenance'
-                New-ConsoleMenuItem -Key '4' -Text 'Nur Kunden-/Parameterdateien erzeugen' -ItemType 'action' -ActionId 'GenerateOnly'
+                New-ConsoleMenuItem -Key '1' -Text 'Kundenkonfiguration deployen' -ItemType 'action' -ActionId 'DeployExisting'
+                New-ConsoleMenuItem -Key '2' -Text 'Kundenkonfigurationen bearbeiten' -ItemType 'submenu' -TargetMenuId 'edit'
+                New-ConsoleMenuItem -Key '3' -Text 'Kundenkonfiguration anlegen' -ItemType 'action' -ActionId 'CreateOnly'
+                New-ConsoleMenuItem -Key '4' -Text 'Wartung' -ItemType 'submenu' -TargetMenuId 'maintenance'
                 New-ConsoleMenuItem -Key '0' -Text 'Beenden' -ItemType 'exit'
             )
-        'existing' = New-ConsoleMenu `
-            -Id 'existing' `
-            -Title 'Vaultwarden Azure – Vorhandene Konfigurationen' `
+        'edit' = New-ConsoleMenu `
+            -Id 'edit' `
+            -Title 'Vaultwarden Azure – Kundenkonfigurationen bearbeiten' `
             -DefaultKey '1' `
             -Items @(
                 New-ConsoleMenuItem -Key '1' -Text 'Vorhandene Konfiguration deployen' -ItemType 'action' -ActionId 'DeployExisting'
-                New-ConsoleMenuItem -Key '2' -Text 'Vorhandene Konfiguration bearbeiten und deployen' -ItemType 'action' -ActionId 'EditAndDeploy'
+                New-ConsoleMenuItem -Key '2' -Text 'Vorhandene Konfiguration bearbeiten' -ItemType 'action' -ActionId 'EditConfig'
+                New-ConsoleMenuItem -Key '3' -Text 'Vorhandene Konfiguration löschen' -ItemType 'action' -ActionId 'DeleteConfig'
                 New-ConsoleMenuItem -Key '0' -Text 'Zurück' -ItemType 'back'
             )
         'maintenance' = New-ConsoleMenu `

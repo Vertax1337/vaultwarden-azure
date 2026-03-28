@@ -461,16 +461,21 @@ do {
         $CustomerNumber = $null
 
         switch ($menuResult.ActionId) {
-            'NewDeployment' {
-                $flowResult = Start-NewDeploymentFlow
-                $config = $flowResult.Config
-            }
             'DeployExisting' {
                 $flowResult = Start-DeployExistingFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
                 $config = $flowResult.Config
             }
-            'EditAndDeploy' {
-                $flowResult = Start-EditAndDeployFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+            'EditConfig' {
+                $flowResult = Start-EditConfigFlow -CustomersRoot $CustomersRoot -RepoRoot $repoRoot
+                $GenerateOnly = [bool]$flowResult.GenerateOnly
+                $config = $flowResult.Config
+            }
+            'DeleteConfig' {
+                $flowResult = Start-DeleteConfigFlow -CustomersRoot $CustomersRoot
+            }
+            'CreateOnly' {
+                $flowResult = Start-CreateOnlyFlow
+                $GenerateOnly = [bool]$flowResult.GenerateOnly
                 $config = $flowResult.Config
             }
             'Repair' {
@@ -482,11 +487,6 @@ do {
                 $flowResult = Start-UpdateFlow -CustomersRoot $CustomersRoot
                 $Update = $flowResult.Update
                 $CustomerNumber = $flowResult.CustomerNumber
-            }
-            'GenerateOnly' {
-                $flowResult = Start-GenerateOnlyFlow
-                $GenerateOnly = $flowResult.GenerateOnly
-                $config = $flowResult.Config
             }
         }
 
