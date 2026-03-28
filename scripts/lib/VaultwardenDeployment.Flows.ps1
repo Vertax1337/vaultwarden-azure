@@ -192,20 +192,35 @@ function Read-WizardChoiceWithDefault {
         [Parameter(Mandatory)][string]$DefaultKey
     )
 
-    while ($true) {
-        Write-Host ''
-        Write-Host $Label
-        foreach ($key in ($Choices.Keys | Sort-Object)) {
-            $marker = if ($key -eq $DefaultKey) { '*' } else { ' ' }
-            Write-Host ('  [{0}] {1}{2}' -f $key, $marker, $Choices[$key])
+    $orderedChoiceKeys = @()
+    $menuItems = @()
+    $defaultMenuKey = '1'
+    $index = 1
+
+    foreach ($entry in $Choices.GetEnumerator()) {
+        $menuKey = [string]$index
+        $index++
+        $orderedChoiceKeys += [string]$entry.Key
+        $menuItems += New-ConsoleMenuItem -Key $menuKey -Text ("{0} ({1})" -f $entry.Value, $entry.Key) -ItemType 'action' -ActionId $menuKey
+        if ([string]$entry.Key -eq $DefaultKey) {
+            $defaultMenuKey = $menuKey
         }
-        $selected = Read-WizardTextWithDefault -Label ('Auswahl [{0}]' -f $DefaultKey)
-        if ($null -eq $selected) { return $null }
-        if ([string]::IsNullOrWhiteSpace($selected)) { $selected = $DefaultKey }
-        $selected = $selected.Trim()
-        if ($Choices.ContainsKey($selected)) { return $selected }
-        Write-Warning 'Ungültige Auswahl.'
     }
+
+    $menuItems += New-ConsoleMenuItem -Key '0' -Text 'Zurück' -ItemType 'back'
+    $menu = New-ConsoleMenu -Id 'wizardChoice' -Title $Label -DefaultKey $defaultMenuKey -Items $menuItems
+    $selectedItem = Show-ConsoleMenu -Menu $menu -ClearScreenOnOpen
+
+    if ($selectedItem.ItemType -eq 'back') {
+        return $null
+    }
+
+    $choicePosition = [int]$selectedItem.Key - 1
+    if ($choicePosition -lt 0 -or $choicePosition -ge $orderedChoiceKeys.Count) {
+        throw 'Ungültige Auswahl im SingleChoice-Menü.'
+    }
+
+    return [string]$orderedChoiceKeys[$choicePosition]
 }
 
 function Select-CustomerCodeInteractive {
