@@ -2408,13 +2408,18 @@ class RepoContractTests(unittest.TestCase):
                       "Start-DeleteConfigFlow must return @{ Back = $true } for cancellation path")
 
     def test_delete_flow_confirms_before_delete(self):
-        """Start-DeleteConfigFlow must ask for explicit 'ja' confirmation before deleting."""
+        """Start-DeleteConfigFlow must use Show-SingleChoiceMenuSmooth for confirmation (target state: not Read-Host)."""
         flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
         body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
-        self.assertIn("'ja'", body,
-                      "Start-DeleteConfigFlow must require explicit 'ja' confirmation")
-        self.assertIn('Read-Host', body,
-                      'Start-DeleteConfigFlow must use Read-Host for confirmation')
+        self.assertIn('Show-SingleChoiceMenuSmooth', body,
+                      'Start-DeleteConfigFlow must use Show-SingleChoiceMenuSmooth for delete confirmation')
+        self.assertIn("'Ja, löschen'", body,
+                      "Start-DeleteConfigFlow confirmation menu must offer 'Ja, löschen'")
+        self.assertIn("'Nein, zurück'", body,
+                      "Start-DeleteConfigFlow confirmation menu must offer 'Nein, zurück'")
+        # Must NOT use the old interim Read-Host 'ja' pattern
+        self.assertNotIn("Read-Host", body,
+                         'Start-DeleteConfigFlow must not use Read-Host for confirmation (target state)')
 
     def test_delete_flow_deletes_all_selected_configs(self):
         """Start-DeleteConfigFlow must call Remove-Item inside a loop over all selected codes."""
@@ -2465,11 +2470,12 @@ class RepoContractTests(unittest.TestCase):
         try:
             customers_root = tmp / 'customers'
             (customers_root / 'vault-test-de').mkdir(parents=True)
-            # Run: dot-source libs, stub Show-MultiSelectMenuSmooth to return label, stub Read-Host to 'ja'
+            # Stub Show-MultiSelectMenuSmooth to select only the real customer code (not sentinel),
+            # and Show-SingleChoiceMenuSmooth (confirmation) to return 'Ja, löschen'.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
-                "function Read-Host { param($Prompt) return 'ja' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @('vault-test-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Ja, löschen' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
@@ -2492,10 +2498,13 @@ class RepoContractTests(unittest.TestCase):
             customers_root = tmp / 'customers'
             (customers_root / 'vault-alpha-de').mkdir(parents=True)
             (customers_root / 'vault-beta-de').mkdir(parents=True)
+            # Return only the two real customer codes (not the Zurück sentinel).
+            # Stub Show-SingleChoiceMenuSmooth (confirmation) to confirm deletion.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return $Items }; "
-                "function Read-Host { param($Prompt) return 'ja' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) "
+                "  return @('vault-alpha-de','vault-beta-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Ja, löschen' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
@@ -2511,7 +2520,7 @@ class RepoContractTests(unittest.TestCase):
 
     @requires_pwsh
     def test_delete_flow_abort_at_confirmation_returns_back(self):
-        """Start-DeleteConfigFlow must return Back=$true without deleting when user answers 'nein'."""
+        """Start-DeleteConfigFlow must return Back=$true without deleting when user chooses 'Nein, zurück'."""
         flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
         common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
         import tempfile, shutil
@@ -2519,10 +2528,12 @@ class RepoContractTests(unittest.TestCase):
         try:
             customers_root = tmp / 'customers'
             (customers_root / 'vault-keep-de').mkdir(parents=True)
+            # Stub Show-MultiSelectMenuSmooth to select the customer (not sentinel),
+            # then stub Show-SingleChoiceMenuSmooth (confirmation) to return 'Nein, zurück'.
             cmd = (
                 f". '{common_lib}'; . '{flows_lib}'; "
-                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
-                "function Read-Host { param($Prompt) return 'nein' }; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @('vault-keep-de') }; "
+                "function Show-SingleChoiceMenuSmooth { param($Title,$Items,$InitialIndex) return 'Nein, zurück' }; "
                 f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
                 "$r.Back"
             )
@@ -2583,5 +2594,144 @@ class RepoContractTests(unittest.TestCase):
             shutil.rmtree(tmp, ignore_errors=True)
 
 
+class WizardMenuTests(unittest.TestCase):
+    """Automated tests for wizard / menu logic.
+
+    Two layers:
+      1. Subprocess tests that exercise the redirected I/O fallback path
+         of Show-SingleChoiceMenuSmooth / Show-MultiSelectMenuSmooth by
+         piping stdin (which makes [System.Console]::IsInputRedirected=$true
+         and triggers the text-based fallback automatically).
+      2. A Pester runner test that runs tests/Wizard.Tests.ps1 if Pester 5
+         is available in the environment.
+    """
+
+    FLOWS_LIB = str(REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1')
+
+    @staticmethod
+    def _run_with_stdin(command: str, stdin_input: str, timeout: int = 30) -> subprocess.CompletedProcess:
+        """Run a PowerShell command with piped stdin (forces IsInputRedirected=$true)."""
+        if not _PWSH_AVAILABLE:
+            raise unittest.SkipTest('pwsh (PowerShell) not available')
+        return subprocess.run(
+            [str(PWSH), '-NoProfile', '-Command', command],
+            input=stdin_input,
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=timeout,
+        )
+
+    @staticmethod
+    def _pester_available() -> bool:
+        """Return True when Pester 5+ is installed in the pwsh environment."""
+        if not _PWSH_AVAILABLE:
+            return False
+        check = subprocess.run(
+            [str(PWSH), '-NoProfile', '-Command',
+             "if (Get-Module Pester -ListAvailable | Where-Object { $_.Version -ge '5.0' }) { exit 0 } else { exit 1 }"],
+            capture_output=True,
+            timeout=20,
+        )
+        return check.returncode == 0
+
+    # ------------------------------------------------------------------
+    # Subprocess fallback-path tests
+    # ------------------------------------------------------------------
+
+    @requires_pwsh
+    def test_single_choice_menu_fallback_returns_default_on_empty_input(self):
+        """Show-SingleChoiceMenuSmooth (fallback): empty input returns the default item."""
+        cmd = (
+            f". '{self.FLOWS_LIB}'; "
+            "$r = Show-SingleChoiceMenuSmooth -Items @('Alpha','Beta','Gamma') -InitialIndex 1; "
+            "if ($r -eq 'Beta') { exit 0 } else { Write-Error \"Got: $r\"; exit 1 }"
+        )
+        result = self._run_with_stdin(cmd, stdin_input='\n')
+        self.assertEqual(result.returncode, 0,
+                         f'Expected Beta as default. stderr: {result.stderr.strip()}')
+
+    @requires_pwsh
+    def test_single_choice_menu_fallback_selects_by_number(self):
+        """Show-SingleChoiceMenuSmooth (fallback): numeric input selects that item."""
+        cmd = (
+            f". '{self.FLOWS_LIB}'; "
+            "$r = Show-SingleChoiceMenuSmooth -Items @('Alpha','Beta','Gamma') -InitialIndex 0; "
+            "if ($r -eq 'Gamma') { exit 0 } else { Write-Error \"Got: $r\"; exit 1 }"
+        )
+        result = self._run_with_stdin(cmd, stdin_input='3\n')
+        self.assertEqual(result.returncode, 0,
+                         f'Expected Gamma for input 3. stderr: {result.stderr.strip()}')
+
+    @requires_pwsh
+    def test_single_choice_menu_fallback_out_of_range_uses_default(self):
+        """Show-SingleChoiceMenuSmooth (fallback): out-of-range number uses the default."""
+        cmd = (
+            f". '{self.FLOWS_LIB}'; "
+            "$r = Show-SingleChoiceMenuSmooth -Items @('Alpha','Beta') -InitialIndex 0; "
+            "if ($r -eq 'Alpha') { exit 0 } else { Write-Error \"Got: $r\"; exit 1 }"
+        )
+        result = self._run_with_stdin(cmd, stdin_input='99\n')
+        self.assertEqual(result.returncode, 0,
+                         f'Expected Alpha (default) for out-of-range 99. stderr: {result.stderr.strip()}')
+
+    @requires_pwsh
+    def test_multi_select_menu_fallback_returns_preselected_on_empty_input(self):
+        """Show-MultiSelectMenuSmooth (fallback): empty input returns the pre-selected items."""
+        cmd = (
+            f". '{self.FLOWS_LIB}'; "
+            "$r = Show-MultiSelectMenuSmooth -Items @('Alpha','Beta','Gamma') "
+            "  -PreSelected @{ Beta = $true }; "
+            "$ok = (@($r) -contains 'Beta') -and (@($r) -notcontains 'Alpha') -and (@($r) -notcontains 'Gamma'); "
+            "if ($ok) { exit 0 } else { Write-Error \"Got: $($r -join ',')\"; exit 1 }"
+        )
+        result = self._run_with_stdin(cmd, stdin_input='\n')
+        self.assertEqual(result.returncode, 0,
+                         f'Expected [Beta] as pre-selected. stderr: {result.stderr.strip()}')
+
+    @requires_pwsh
+    def test_multi_select_menu_fallback_toggle_by_number(self):
+        """Show-MultiSelectMenuSmooth (fallback): typing a number toggles that item."""
+        # input: "1\n\n"  →  toggle Alpha on, then empty → confirm
+        cmd = (
+            f". '{self.FLOWS_LIB}'; "
+            "$r = Show-MultiSelectMenuSmooth -Items @('Alpha','Beta') -PreSelected @{}; "
+            "if (@($r) -contains 'Alpha') { exit 0 } else { Write-Error \"Got: $($r -join ',')\"; exit 1 }"
+        )
+        result = self._run_with_stdin(cmd, stdin_input='1\n\n')
+        self.assertEqual(result.returncode, 0,
+                         f'Expected Alpha after toggling item 1. stderr: {result.stderr.strip()}')
+
+    # ------------------------------------------------------------------
+    # Pester runner test
+    # ------------------------------------------------------------------
+
+    @requires_pwsh
+    def test_pester_wizard_tests_all_pass(self):
+        """All tests in tests/Wizard.Tests.ps1 must pass when Pester 5 is available."""
+        if not self._pester_available():
+            self.skipTest('Pester 5 not available in this environment')
+
+        wizard_tests = str(REPO_ROOT / 'tests' / 'Wizard.Tests.ps1').replace("'", "''")
+        cmd = (
+            f"$r = Invoke-Pester -Path '{wizard_tests}' -PassThru -Output Detailed; "
+            "exit $r.FailedCount"
+        )
+        result = subprocess.run(
+            [str(PWSH), '-NoProfile', '-Command', cmd],
+            capture_output=True,
+            text=True,
+            encoding='utf-8',
+            timeout=120,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            f'Pester tests failed ({result.returncode} failure(s)).\n'
+            f'stdout:\n{result.stdout[-3000:]}\n'
+            f'stderr:\n{result.stderr[-1000:]}'
+        )
+
+
 if __name__ == '__main__':
     unittest.main()
+

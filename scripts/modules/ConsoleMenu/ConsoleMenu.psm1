@@ -293,7 +293,7 @@ function Show-ConsoleMenu {
 
         Write-ConsoleMenuLine -Row $titleRow -Text $Menu.Title
         Write-ConsoleMenuLine -Row ($titleRow + 1) -Text ''
-        Write-ConsoleMenuLine -Row $helpRow -Text 'Pfeile = bewegen, Enter = waehlen, Zahl = direkt waehlen, Esc = Default/Back'
+        Write-ConsoleMenuLine -Row $helpRow -Text 'Pfeile = bewegen, Enter = waehlen, Zahl = direkt waehlen, Esc = abbrechen'
         Write-ConsoleMenuLine -Row ($helpRow + 1) -Text ''
 
         for ($i = 0; $i -lt $Menu.Items.Count; $i++) {
@@ -325,7 +325,7 @@ function Show-ConsoleMenu {
                 }
 
                 'Escape' {
-                    return $Menu.Items[(Get-ConsoleMenuDefaultIndex -Items $Menu.Items -DefaultKey $Menu.DefaultKey)]
+                    return $null
                 }
 
                 default {
@@ -394,6 +394,15 @@ function Start-ConsoleMenuApplication {
             -InitialSelectedKey $initialSelectedKey
 
         $clearOnOpen = $false
+
+        # Esc returns $null – treat as Back.
+        if ($null -eq $selectedItem) {
+            if ($menuStack.Count -gt 1) {
+                $menuStack.RemoveAt($menuStack.Count - 1)
+            }
+            $clearOnOpen = $true
+            continue
+        }
 
         switch ($selectedItem.ItemType) {
             'submenu' {
