@@ -83,3 +83,10 @@ Die `deploymentScripts`-Ressource ist keine Laufzeitkomponente der Anwendung und
 - [ ] `retentionInterval` ist sinnvoll kurz gesetzt (z. B. `PT1H`).
 - [ ] Das Verhalten bei Success und Failure wurde getestet.
 - [ ] Das Ergebnis wurde kurz dokumentiert.
+
+## Offene Punkte
+- [ ] SMTP-Secret-Abfrage im Deploy-Flow klarer beschriften
+- [ ] Deployment-Scripts nach erfolgreichem Deployment automatisch bereinigen
+- [ ] Vor der Deployment-Zusammenfassung die Konsole leeren, damit der finale Deployment-Block sauber startet
+- [ ] Zwischen Deployment-Zusammenfassung und Live-Logs einen separaten Abschnitt "Deployment-Ausführung" mit Trennlinien und Leerzeile ausgeben
+- [ ] `current/` nicht mehr automatisch als letzte Konfiguration spiegeln, sondern nur noch per explizitem Menüpunkt im Hauptmenü erzeugen/aktualisieren
