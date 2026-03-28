@@ -4,6 +4,10 @@
 # All functions depend on helpers from VaultwardenDeployment.Common.ps1.
 # Intended to be dot-sourced only from Invoke-CustomerDeployment.ps1.
 
+# Testability hook: set to $true in unit tests to force the non-interactive
+# fallback in Show-MultiSelectMenuSmooth and Show-SingleChoiceMenuSmooth.
+$Script:_ForceNonInteractive = $false
+
 # Interactive multi-select menu using arrow keys, spacebar and Enter.
 # Supports pre-selected items via -PreSelected hashtable (item label → $true/$false).
 # Falls back to a text-based prompt when the console I/O is redirected.
@@ -19,8 +23,7 @@ function Show-MultiSelectMenuSmooth {
         throw 'Keine Eintraege vorhanden.'
     }
 
-    if ([System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
-        # Non-interactive fallback: show items and let user type numbers to toggle
+    if ($Script:_ForceNonInteractive -or [System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
         Write-Host ''
         Write-Host $Title
         $selected = New-Object 'bool[]' $Items.Count
@@ -132,7 +135,7 @@ function Show-SingleChoiceMenuSmooth {
     # Clamp initial index to valid bounds [0, Count-1].
     $index = [Math]::Max(0, [Math]::Min($InitialIndex, $Items.Count - 1))
 
-    if ([System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
+    if ($Script:_ForceNonInteractive -or [System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
         Write-Host ''
         Write-Host $Title
         Write-Host ''
@@ -381,7 +384,7 @@ function New-CustomerConfigInteractive {
     if ($null -eq $customerNumber) { return $null }
 
     # --- 2. Clear screen, then show multi-choice feature menu ---
-    [System.Console]::Clear()
+    try { [System.Console]::Clear() } catch { }
 
     $advancedArm = if ($ExistingConfig) { ConvertTo-HashtableDeep -InputObject $ExistingConfig.azure.advancedArmParameters } else { New-EmptyAdvancedArmParameters }
 
@@ -657,7 +660,7 @@ function Start-DeployExistingFlow {
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
-    [System.Console]::Clear()
+    try { [System.Console]::Clear() } catch { }
     $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot -IncludeNewConfig -Title 'Vorhandene Kundenkonfigurationen deployen'
     if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
     if (($selection.SelectionType) -eq 'new') {
@@ -677,7 +680,7 @@ function Start-EditConfigFlow {
         [Parameter(Mandatory)][string]$CustomersRoot,
         [Parameter(Mandatory)][string]$RepoRoot
     )
-    [System.Console]::Clear()
+    try { [System.Console]::Clear() } catch { }
     $selection = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot -Title 'Vorhandene Kundenkonfigurationen bearbeiten'
     if (($selection.SelectionType) -eq 'back') { return @{ Back = $true } }
     $customerCode = $selection.CustomerCode
