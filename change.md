@@ -1,5 +1,25 @@
 # Change Log
 
+## Fix: Wizard-Hauptloop liest optionale Flow-Felder StrictMode-sicher
+
+### Geänderte Stellen im Hauptloop
+- `scripts/Invoke-CustomerDeployment.ps1` im `switch ($menuResult.ActionId)` des interaktiven Wizard-Hauptloops.
+- Zusätzlich wurde `$flowResult` pro Iteration vor dem `switch` explizit auf `$null` gesetzt.
+
+### Welche optionalen Felder jetzt defensiv gelesen werden
+- `GenerateOnly`
+- `Config`
+- `Repair`
+- `Update`
+- `CustomerNumber`
+
+### Warum das unter StrictMode stabiler ist
+- Diese Felder werden nicht mehr blind als Property gelesen.
+- Stattdessen wird je nach Rückgabeformat geprüft:
+  - IDictionary/Hashtable: `Contains('<Feld>')` + Indexzugriff `['<Feld>']`
+  - Objekt-Rückgaben: `PSObject.Properties['<Feld>']` vor Property-Lesezugriff
+- Dadurch lösen Back-/Abbruch-Rückgaben ohne diese Felder keine StrictMode-Exception mehr aus (z. B. fehlendes `GenerateOnly`), und der Menü-Loop bleibt stabil.
+
 ## Fix: Back-Guard im Hauptloop für Hashtable-Flow-Rückgaben
 
 ### Geänderte Stelle
