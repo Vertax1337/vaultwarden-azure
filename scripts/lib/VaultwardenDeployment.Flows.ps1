@@ -429,24 +429,56 @@ function Start-EditConfigFlow {
     return @{ Config = $config; GenerateOnly = $true }
 }
 
+function Select-CustomerCodesInteractive {
+    param([Parameter(Mandatory)][string]$CustomersRoot)
+    $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
+    if ($customers.Count -eq 0) {
+        Write-Host 'Keine vorhandenen Kundenkonfigurationen gefunden.'
+        return $null
+    }
+    $labels = @()
+    $labelToCode = @{}
+    foreach ($code in $customers) {
+        $cfgPath = Join-Path (Join-Path $CustomersRoot $code) 'deployment.config.json'
+        $label = $code
+        if (Test-Path -LiteralPath $cfgPath) {
+            try {
+                $cfg = Read-JsonFile -Path $cfgPath
+                $label = 'Kunden-Nr.: {0}  |  Domäne: {1}  |  {2}' -f $cfg.customerNumber, $cfg.domain.hostname, $code
+            } catch { }
+        }
+        $labels += $label
+        $labelToCode[$label] = $code
+    }
+    $selectedLabels = Show-MultiSelectMenuSmooth -Title 'Konfigurationen zum Löschen auswählen' -Items $labels
+    if ($null -eq $selectedLabels -or @($selectedLabels).Count -eq 0) { return $null }
+    $result = @()
+    foreach ($lbl in @($selectedLabels)) { $result += $labelToCode[$lbl] }
+    return $result
+}
+
 function Start-DeleteConfigFlow {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)][string]$CustomersRoot
     )
-    [System.Console]::Clear()
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
-    $customerRoot = Join-Path $CustomersRoot $customerCode
+    try { [System.Console]::Clear() } catch { }
+    $selectedCodes = Select-CustomerCodesInteractive -CustomersRoot $CustomersRoot
+    if ($null -eq $selectedCodes -or @($selectedCodes).Count -eq 0) { return @{ Back = $true } }
+    $selectedCodes = @($selectedCodes)
     Write-Host ''
-    Write-Host "Konfiguration löschen: $customerCode"
+    Write-Host ('Konfigurationen löschen ({0}):' -f $selectedCodes.Count)
+    foreach ($code in $selectedCodes) { Write-Host "  - $code" }
     $confirm = Read-Host 'Wirklich löschen? (ja/nein)'
     if ($confirm -ne 'ja') {
         Write-Host 'Abgebrochen.'
         return @{ Back = $true }
     }
-    Remove-Item -LiteralPath $customerRoot -Recurse -Force
-    Write-Host "[OK] Konfiguration '$customerCode' wurde gelöscht."
+    foreach ($code in $selectedCodes) {
+        $customerRoot = Join-Path $CustomersRoot $code
+        Remove-Item -LiteralPath $customerRoot -Recurse -Force
+        Write-Host ("[OK] Konfiguration '{0}' wurde gelöscht." -f $code)
+    }
     return @{ Back = $true }
 }
 
