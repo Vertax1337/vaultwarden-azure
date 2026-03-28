@@ -149,7 +149,7 @@ function Show-SingleChoiceMenuSmooth {
         return $Items[$index]
     }
 
-    $startTop  = [System.Console]::CursorTop
+    $startTop  = 0
     $lineCount = 4 + $Items.Count
     $oldCursorVisible = $true
 
@@ -167,7 +167,7 @@ function Show-SingleChoiceMenuSmooth {
     function Render-SCMenu {
         Write-SCPaddedLine -Row $startTop       -Text $Title
         Write-SCPaddedLine -Row ($startTop + 1) -Text ''
-        Write-SCPaddedLine -Row ($startTop + 2) -Text 'Pfeile = bewegen, Enter = waehlen, Esc = abbrechen'
+        Write-SCPaddedLine -Row ($startTop + 2) -Text 'Pfeile = bewegen, Enter = waehlen, Zahl = direkt waehlen, Esc = abbrechen'
         Write-SCPaddedLine -Row ($startTop + 3) -Text ''
         for ($i = 0; $i -lt $Items.Count; $i++) {
             $cursor = if ($i -eq $index) { '>' } else { ' ' }
@@ -178,6 +178,7 @@ function Show-SingleChoiceMenuSmooth {
 
     try {
         try { $oldCursorVisible = [System.Console]::CursorVisible; [System.Console]::CursorVisible = $false } catch { }
+        [System.Console]::Clear()
         Render-SCMenu
         while ($true) {
             $key = [System.Console]::ReadKey($true)
@@ -192,6 +193,12 @@ function Show-SingleChoiceMenuSmooth {
                 'Escape' {
                     [System.Console]::SetCursorPosition(0, $startTop + $lineCount)
                     return $null
+                }
+                default {
+                    if ($key.KeyChar -ge '1' -and $key.KeyChar -le '9') {
+                        $digit = [int][string]$key.KeyChar - 1
+                        if ($digit -lt $Items.Count) { $index = $digit; Render-SCMenu }
+                    }
                 }
             }
         }
