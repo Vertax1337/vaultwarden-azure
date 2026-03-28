@@ -2132,6 +2132,62 @@ class RepoContractTests(unittest.TestCase):
                              f'{func_name} must NOT be defined in Invoke-CustomerDeployment.ps1 '
                              f'(it belongs in VaultwardenDeployment.Flows.ps1)')
 
+    def test_delete_flow_uses_multiselect_picker(self):
+        """Delete flow must use dedicated multi-select picker and support Back on empty/abort."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+
+        self.assertIn('function Select-CustomerCodesInteractive', flows_text,
+                      'Delete flow requires a dedicated multi-select picker function')
+        self.assertIn('Select-CustomerCodesInteractive -CustomersRoot $CustomersRoot', flows_text,
+                      'Start-DeleteConfigFlow must use Select-CustomerCodesInteractive')
+        self.assertIn('if ($customerCodes.Count -eq 0) { return @{ Back = $true } }', flows_text,
+                      'Delete flow must return Back on empty selection / Esc abort')
+
+    def test_delete_flow_only_deletes_after_explicit_confirmation(self):
+        """Delete flow must not delete anything when confirmation is not an explicit 'ja'."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+
+        self.assertIn("if ($confirm -ne 'ja') {", flows_text,
+                      "Delete flow must gate deletion behind explicit 'ja' confirmation")
+        self.assertIn("Write-Host 'Abgebrochen.'", flows_text,
+                      'Delete flow should report cancellation clearly')
+        self.assertIn('foreach ($customerCode in $customerCodes)', flows_text,
+                      'Delete flow must iterate over all selected entries for multi-delete')
+        self.assertIn('Remove-Item -LiteralPath $customerRoot -Recurse -Force', flows_text,
+                      'Delete flow must remove selected customer roots')
+
+    def test_multiselect_navigation_supports_escape_and_enter(self):
+        """Multi-select picker must support Escape (abort) and Enter (confirm selection)."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+
+        self.assertIn("'Spacebar'", flows_text,
+                      'Multi-select picker must support Spacebar toggling')
+        self.assertIn("'Enter'", flows_text,
+                      'Multi-select picker must support Enter confirmation')
+        self.assertIn("'Escape'", flows_text,
+                      'Multi-select picker must support Escape abort')
+        self.assertIn('return @()', flows_text,
+                      'Escape path must return empty selection (Back)')
+
+    def test_customer_config_display_rows_use_structured_fields_and_column_format(self):
+        """Customer rows for delete picker must be formatted from structured fields with fixed widths."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+
+        self.assertIn('function Get-CustomerConfigDisplayRows', flows_text,
+                      'Display rows should be built via a dedicated structured helper')
+        self.assertIn('CustomerNumber', flows_text,
+                      'Display helper must include customer number as a structured field')
+        self.assertIn('Domain', flows_text,
+                      'Display helper must include domain as a structured field')
+        self.assertIn('CustomerCode', flows_text,
+                      'Display helper must include customer code as a structured field')
+        self.assertIn('$customerNumberWidth = [Math]::Max', flows_text,
+                      'Display helper must compute fixed width for customer number column')
+        self.assertIn('$domainWidth = [Math]::Max', flows_text,
+                      'Display helper must compute fixed width for domain column')
+        self.assertIn('DisplayText', flows_text,
+                      'Display helper must materialize a formatted display row')
+
     def test_shared_data_factories_live_in_common_ps1(self):
         """Get-AdvancedParameterValue and New-EmptyAdvancedArmParameters must live in Common.ps1.
 

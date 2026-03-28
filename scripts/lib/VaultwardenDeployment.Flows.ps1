@@ -36,6 +36,94 @@ function Select-CustomerCodeInteractive {
     }
 }
 
+function Get-CustomerConfigDisplayRows {
+    param([Parameter(Mandatory)][string]$CustomersRoot)
+    $customers = @(Get-AvailableCustomerCodes -CustomersRoot $CustomersRoot)
+    if ($customers.Count -eq 0) {
+        throw 'Keine vorhandenen Kundenkonfigurationen gefunden.'
+    }
+
+    $rows = @()
+    foreach ($customerCode in $customers) {
+        $cfgPath = Join-Path (Join-Path $CustomersRoot $customerCode) 'deployment.config.json'
+        $customerNumber = $customerCode
+        $domain = ''
+        if (Test-Path -LiteralPath $cfgPath) {
+            try {
+                $cfg = Read-JsonFile -Path $cfgPath
+                if (-not [string]::IsNullOrWhiteSpace([string]$cfg.customerNumber)) { $customerNumber = [string]$cfg.customerNumber }
+                if ($cfg.domain -and -not [string]::IsNullOrWhiteSpace([string]$cfg.domain.hostname)) { $domain = [string]$cfg.domain.hostname }
+            } catch { }
+        }
+        $rows += [pscustomobject]@{
+            CustomerCode   = [string]$customerCode
+            CustomerNumber = [string]$customerNumber
+            Domain         = [string]$domain
+        }
+    }
+
+    $customerNumberWidth = [Math]::Max(4, [int](($rows | ForEach-Object { $_.CustomerNumber.Length } | Measure-Object -Maximum).Maximum))
+    $domainWidth = [Math]::Max(6, [int](($rows | ForEach-Object { $_.Domain.Length } | Measure-Object -Maximum).Maximum))
+
+    foreach ($row in $rows) {
+        $row | Add-Member -NotePropertyName DisplayText -NotePropertyValue ('{0,-' + $customerNumberWidth + '} | {1,-' + $domainWidth + '} | {2}' -f $row.CustomerNumber, $row.Domain, $row.CustomerCode) -Force
+    }
+
+    return $rows
+}
+
+function Select-CustomerCodesInteractive {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$CustomersRoot)
+
+    $rows = @(Get-CustomerConfigDisplayRows -CustomersRoot $CustomersRoot)
+    if ($rows.Count -eq 0) { return @() }
+
+    $cursor = 0
+    $selected = @{}
+
+    while ($true) {
+        [System.Console]::Clear()
+        Write-Host ''
+        Write-Host 'Vorhandene Kundenkonfigurationen:'
+        Write-Host 'Pfeile = bewegen, Leertaste = an/abwaehlen, Enter = bestaetigen, Esc = zurueck'
+        Write-Host ''
+
+        for ($i = 0; $i -lt $rows.Count; $i++) {
+            $isCurrent = ($i -eq $cursor)
+            $isSelected = $selected.ContainsKey($rows[$i].CustomerCode)
+            $prefix = if ($isCurrent) { '>' } else { ' ' }
+            $mark = if ($isSelected) { '[x]' } else { '[ ]' }
+            Write-Host (' {0} {1} {2}' -f $prefix, $mark, $rows[$i].DisplayText)
+        }
+
+        $keyInfo = [System.Console]::ReadKey($true)
+        switch ($keyInfo.Key) {
+            'UpArrow' {
+                if ($cursor -gt 0) { $cursor-- } else { $cursor = $rows.Count - 1 }
+            }
+            'DownArrow' {
+                if ($cursor -lt ($rows.Count - 1)) { $cursor++ } else { $cursor = 0 }
+            }
+            'Spacebar' {
+                $currentCode = [string]$rows[$cursor].CustomerCode
+                if ($selected.ContainsKey($currentCode)) {
+                    $null = $selected.Remove($currentCode)
+                }
+                else {
+                    $selected[$currentCode] = $true
+                }
+            }
+            'Enter' {
+                return @($rows | Where-Object { $selected.ContainsKey($_.CustomerCode) } | ForEach-Object { $_.CustomerCode })
+            }
+            'Escape' {
+                return @()
+            }
+        }
+    }
+}
+
 function New-AdvancedArmParametersInteractive {
     param(
         [hashtable]$ExistingAdvanced,
@@ -251,18 +339,23 @@ function Start-DeleteConfigFlow {
         [Parameter(Mandatory)][string]$CustomersRoot
     )
     [System.Console]::Clear()
-    $customerCode = Select-CustomerCodeInteractive -CustomersRoot $CustomersRoot
-    if ($null -eq $customerCode) { return @{ Back = $true } }
-    $customerRoot = Join-Path $CustomersRoot $customerCode
+    $customerCodes = @(Select-CustomerCodesInteractive -CustomersRoot $CustomersRoot)
+    if ($customerCodes.Count -eq 0) { return @{ Back = $true } }
     Write-Host ''
-    Write-Host "Konfiguration löschen: $customerCode"
+    Write-Host ('Konfigurationen loeschen ({0}): {1}' -f $customerCodes.Count, ($customerCodes -join ', '))
     $confirm = Read-Host 'Wirklich löschen? (ja/nein)'
     if ($confirm -ne 'ja') {
         Write-Host 'Abgebrochen.'
         return @{ Back = $true }
     }
-    Remove-Item -LiteralPath $customerRoot -Recurse -Force
-    Write-Host "[OK] Konfiguration '$customerCode' wurde gelöscht."
+
+    foreach ($customerCode in $customerCodes) {
+        $customerRoot = Join-Path $CustomersRoot $customerCode
+        if (Test-Path -LiteralPath $customerRoot) {
+            Remove-Item -LiteralPath $customerRoot -Recurse -Force
+            Write-Host "[OK] Konfiguration '$customerCode' wurde gelöscht."
+        }
+    }
     return @{ Back = $true }
 }
 
@@ -292,4 +385,3 @@ function Start-UpdateFlow {
     if ($null -eq $customerCode) { return @{ Back = $true } }
     return @{ CustomerNumber = $customerCode; Update = $true }
 }
-
