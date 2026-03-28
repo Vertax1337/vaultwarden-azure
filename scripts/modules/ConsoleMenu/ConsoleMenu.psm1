@@ -445,6 +445,133 @@ function Start-ConsoleMenuApplication {
     }
 }
 
+function Draw-RadioOption {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$TopRow,
+        [Parameter(Mandatory)][object[]]$Options,
+        [Parameter(Mandatory)][int]$Index,
+        [Parameter(Mandatory)][int]$SelectedIndex
+    )
+
+    $mark = if ($Index -eq $SelectedIndex) { '[x]' } else { '[ ]' }
+    $line = '{0} {1} ({2})' -f $mark, $Options[$Index].Text, $Options[$Index].Key
+    Write-ConsoleMenuLine -Row ($TopRow + $Index) -Text $line
+}
+
+# Presents a single-choice radio-button style selector with [ ] / [x] visual markers.
+# Arrow keys move the selection. Enter confirms the marked option and clears the screen.
+# Esc returns the DefaultKey selection and clears the screen.
+# No numbered Back option is shown.
+# Options must be an array of objects with .Key and .Text properties.
+function Select-RadioOption {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][string]$Title,
+        [Parameter(Mandatory)][object[]]$Options,
+        [Parameter(Mandatory)][string]$DefaultKey
+    )
+
+    if (-not $Options -or $Options.Count -eq 0) {
+        throw 'Keine Optionen vorhanden.'
+    }
+
+    $selectedIndex = 0
+    for ($i = 0; $i -lt $Options.Count; $i++) {
+        if ([string]$Options[$i].Key -eq $DefaultKey) {
+            $selectedIndex = $i
+            break
+        }
+    }
+
+    if ([System.Console]::IsInputRedirected -or [System.Console]::IsOutputRedirected) {
+        while ($true) {
+            Write-Host ''
+            Write-Host $Title
+            Write-Host ''
+            for ($i = 0; $i -lt $Options.Count; $i++) {
+                $mark = if ($i -eq $selectedIndex) { '[x]' } else { '[ ]' }
+                Write-Host ('{0} {1} ({2})' -f $mark, $Options[$i].Text, $Options[$i].Key)
+            }
+            Write-Host ''
+            $inputValue = Read-Host ('Auswahl (1-{0}) [{1}]' -f $Options.Count, ($selectedIndex + 1))
+            if ([string]::IsNullOrWhiteSpace($inputValue)) {
+                return $Options[$selectedIndex].Key
+            }
+            $inputValue = $inputValue.Trim()
+            if ($inputValue -match '^\d+$') {
+                $num = [int]$inputValue
+                if ($num -ge 1 -and $num -le $Options.Count) {
+                    return $Options[$num - 1].Key
+                }
+            }
+            Write-Warning 'Ungueltige Auswahl.'
+        }
+    }
+
+    $titleRow = 0
+    $helpRow = 2
+    $menuTopRow = 4
+    $oldCursorVisible = $true
+
+    try {
+        try {
+            $oldCursorVisible = [System.Console]::CursorVisible
+            [System.Console]::CursorVisible = $false
+        }
+        catch {
+        }
+
+        Write-ConsoleMenuLine -Row $titleRow -Text $Title
+        Write-ConsoleMenuLine -Row ($titleRow + 1) -Text ''
+        Write-ConsoleMenuLine -Row $helpRow -Text 'Pfeile = bewegen, Enter = waehlen, Esc = Default/Back'
+        Write-ConsoleMenuLine -Row ($helpRow + 1) -Text ''
+
+        for ($i = 0; $i -lt $Options.Count; $i++) {
+            Draw-RadioOption -TopRow $menuTopRow -Options $Options -Index $i -SelectedIndex $selectedIndex
+        }
+
+        while ($true) {
+            $keyInfo = [System.Console]::ReadKey($true)
+
+            switch ($keyInfo.Key) {
+                'UpArrow' {
+                    $oldIndex = $selectedIndex
+                    $selectedIndex = if ($selectedIndex -gt 0) { $selectedIndex - 1 } else { $Options.Count - 1 }
+                    Draw-RadioOption -TopRow $menuTopRow -Options $Options -Index $oldIndex -SelectedIndex $selectedIndex
+                    Draw-RadioOption -TopRow $menuTopRow -Options $Options -Index $selectedIndex -SelectedIndex $selectedIndex
+                    continue
+                }
+
+                'DownArrow' {
+                    $oldIndex = $selectedIndex
+                    $selectedIndex = if ($selectedIndex -lt ($Options.Count - 1)) { $selectedIndex + 1 } else { 0 }
+                    Draw-RadioOption -TopRow $menuTopRow -Options $Options -Index $oldIndex -SelectedIndex $selectedIndex
+                    Draw-RadioOption -TopRow $menuTopRow -Options $Options -Index $selectedIndex -SelectedIndex $selectedIndex
+                    continue
+                }
+
+                'Enter' {
+                    [System.Console]::Clear()
+                    return $Options[$selectedIndex].Key
+                }
+
+                'Escape' {
+                    [System.Console]::Clear()
+                    return $DefaultKey
+                }
+            }
+        }
+    }
+    finally {
+        try {
+            [System.Console]::CursorVisible = $oldCursorVisible
+        }
+        catch {
+        }
+    }
+}
+
 Export-ModuleMember -Function `
     New-ConsoleMenuItem, `
     New-ConsoleMenu, `
@@ -455,4 +582,5 @@ Export-ModuleMember -Function `
     Get-ConsoleMenuDefaultIndex, `
     Get-ConsoleMenuNextIndex, `
     Get-ConsoleMenuById, `
-    Start-ConsoleMenuApplication
+    Start-ConsoleMenuApplication, `
+    Select-RadioOption

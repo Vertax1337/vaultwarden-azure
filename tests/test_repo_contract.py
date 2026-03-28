@@ -1534,9 +1534,11 @@ class RepoContractTests(unittest.TestCase):
                       "Wizard must have 'smtp_auth' as a mail mode choice")
         self.assertIn("'acs_smtp'", flows_text,
                       "Wizard must have 'acs_smtp' as a mail mode choice")
-        # Choices must appear near the 3-way mail mode selector (Read-ChoiceWithDefault for Mail-Modus)
+        # Choices must appear near the 3-way mail mode selector (Select-RadioOption for Mail-Modus)
         self.assertIn('Mail-Modus', flows_text,
                       "Wizard must prompt 'Mail-Modus' for the 3-way mode selection")
+        self.assertIn('Select-RadioOption', flows_text,
+                      "Mail-Modus must use Select-RadioOption for [] / [x] visual style")
 
     def test_acs_smtp_mode_auto_sets_host_and_acs_foundation(self):
         """New-CustomerConfigObject with MailMode=acs_smtp must auto-set smtp.azurecomm.net and acsDeployFoundation=true."""
@@ -2132,6 +2134,29 @@ class RepoContractTests(unittest.TestCase):
         # The 'action' case must update MenuState.
         self.assertIn("$MenuState[$currentMenuId] = [string]$selectedItem.Key", content,
                       "Show-DeploymentMainMenu must persist selection for action items")
+
+    def test_select_radio_option_exported_from_consolemenu(self):
+        """Select-RadioOption must be defined and exported from ConsoleMenu.psm1.
+
+        The mail mode selector uses Select-RadioOption for a [ ] / [x] visual style
+        instead of a numbered list.  The function must be present and exported so that
+        it is available when ConsoleMenu is imported via VaultwardenDeployment.Menu.ps1.
+        """
+        content = (REPO_ROOT / 'scripts/modules/ConsoleMenu/ConsoleMenu.psm1').read_text(encoding='utf-8')
+        self.assertIn('function Select-RadioOption', content,
+                      'Select-RadioOption must be defined in ConsoleMenu.psm1')
+        self.assertIn('Select-RadioOption', content.split('Export-ModuleMember')[1],
+                      'Select-RadioOption must be listed in Export-ModuleMember in ConsoleMenu.psm1')
+        # Must render [ ] for unselected and [x] for selected
+        self.assertIn("'[ ]'", content,
+                      "Select-RadioOption must use '[ ]' for unselected options")
+        self.assertIn("'[x]'", content,
+                      "Select-RadioOption must use '[x]' for the selected option")
+        # Must clear the screen after selection (Enter and Escape)
+        radio_body_start = content.index('function Select-RadioOption')
+        radio_body = content[radio_body_start:]
+        self.assertIn('[System.Console]::Clear()', radio_body,
+                      'Select-RadioOption must call [System.Console]::Clear() after selection')
 
     def test_wizard_functions_live_in_flows_ps1(self):
         """Interactive wizard helper functions must be defined in VaultwardenDeployment.Flows.ps1.

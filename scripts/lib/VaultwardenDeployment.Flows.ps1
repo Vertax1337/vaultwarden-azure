@@ -226,14 +226,14 @@ function New-CustomerConfigInteractive {
 
     $mailRootDomain = (Read-TextWithDefault -Label 'Mail Root Domain' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.mailRootDomain } else { $zoneName })) -Required).Trim().ToLowerInvariant()
 
-    # Mail-Modus wählen (3 exklusive Zielzustände) – ordered to match spec: acs_smtp, direct_send, smtp_auth
-    $mailModeChoices = [ordered]@{
-        'acs_smtp'    = 'ACS SMTP (Azure Communication Services SMTP Relay)'
-        'direct_send' = 'Direct Send (kein Auth, MX-Endpunkt direkt kontaktieren)'
-        'smtp_auth'   = 'SMTP Auth (klassisches SMTP Relay mit User/Passwort)'
-    }
+    # Mail-Modus wählen (3 exklusive Zielzustände) – markierte Einzelauswahl im [ ]/[x]-Stil
+    $mailModeOptions = @(
+        [pscustomobject]@{ Key = 'acs_smtp';    Text = 'ACS SMTP (Azure Communication Services SMTP Relay)' }
+        [pscustomobject]@{ Key = 'direct_send'; Text = 'Direct Send (kein Auth, MX-Endpunkt direkt kontaktieren)' }
+        [pscustomobject]@{ Key = 'smtp_auth';   Text = 'SMTP Auth (klassisches SMTP Relay mit User/Passwort)' }
+    )
     $existingMailMode = if ($ExistingConfig) { Get-MailModeFromConfig -Config $ExistingConfig } else { 'smtp_auth' }
-    $mailModeValue = Read-ChoiceWithDefault -Label 'Mail-Modus' -Choices $mailModeChoices -DefaultKey $existingMailMode
+    $mailModeValue = Select-RadioOption -Title 'Mail-Modus' -Options $mailModeOptions -DefaultKey $existingMailMode
 
     $smtpFrom          = Read-TextWithDefault -Label 'SMTP From'      -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.from }     else { 'noreply@' + $mailRootDomain }))
     $smtpFromNameValue = Read-TextWithDefault -Label 'SMTP From Name' -Default ([string]$(if ($ExistingConfig) { $ExistingConfig.smtp.fromName } else { 'Vaultwarden' }))
