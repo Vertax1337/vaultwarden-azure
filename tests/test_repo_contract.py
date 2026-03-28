@@ -90,6 +90,24 @@ class RepoContractTests(unittest.TestCase):
         # Restore current/ directory from in-memory backup (no git dependency)
         _restore_current_wrapper()
 
+    @staticmethod
+    def _get_ps_function_body(text: str, func_name: str) -> str:
+        """Extract the body (including braces) of a PowerShell function by brace-matching."""
+        idx = text.find(f'function {func_name}')
+        if idx < 0:
+            raise AssertionError(f'function {func_name} not found')
+        brace_start = text.find('{', idx)
+        depth, body_end = 0, brace_start
+        for abs_idx, ch in enumerate(text[brace_start:], start=brace_start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    body_end = abs_idx
+                    break
+        return text[brace_start:body_end + 1]
+
     def test_main_json_has_dual_mode_parameters(self):
         data = json.loads((REPO_ROOT / 'main.json').read_text(encoding='utf-8'))
         self.assertIn('edgeMode', data['parameters'])
@@ -2342,6 +2360,227 @@ class RepoContractTests(unittest.TestCase):
             self.assertEqual(bad_refs, [],
                              f'{script_name} must not contain nested $using: member-chain expressions; '
                              f'found: {bad_refs}')
+
+
+    # ---------------------------------------------------------------------------
+    # Delete-Flow multi-select contract tests
+    # ---------------------------------------------------------------------------
+
+    def test_select_customer_codes_interactive_defined_in_flows_ps1(self):
+        """Select-CustomerCodesInteractive must be defined in VaultwardenDeployment.Flows.ps1."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        self.assertIn('function Select-CustomerCodesInteractive', flows_text,
+                      'Select-CustomerCodesInteractive must be defined in VaultwardenDeployment.Flows.ps1')
+
+    def test_delete_flow_uses_select_customer_codes_interactive(self):
+        """Start-DeleteConfigFlow must call Select-CustomerCodesInteractive (multi-select), not Select-CustomerCodeInteractive."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
+        self.assertIn('Select-CustomerCodesInteractive', body,
+                      'Start-DeleteConfigFlow must call Select-CustomerCodesInteractive')
+        self.assertNotIn('Select-CustomerCodeInteractive', body,
+                         'Start-DeleteConfigFlow must not call the single-select Select-CustomerCodeInteractive')
+
+    def test_select_customer_codes_interactive_uses_multiselect_menu(self):
+        """Select-CustomerCodesInteractive must delegate to Show-MultiSelectMenuSmooth."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Select-CustomerCodesInteractive')
+        self.assertIn('Show-MultiSelectMenuSmooth', body,
+                      'Select-CustomerCodesInteractive must use Show-MultiSelectMenuSmooth')
+
+    def test_select_customer_codes_interactive_returns_null_on_no_selection(self):
+        """Select-CustomerCodesInteractive must return $null when menu returns $null or empty array."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Select-CustomerCodesInteractive')
+        # Must guard against $null result and empty array
+        self.assertIn('$null -eq $selectedLabels', body,
+                      'Select-CustomerCodesInteractive must null-check the menu return value')
+        self.assertIn('return $null', body,
+                      'Select-CustomerCodesInteractive must return $null when nothing is selected')
+
+    def test_delete_flow_returns_back_on_null_selection(self):
+        """Start-DeleteConfigFlow must return @{ Back=$true } when Select-CustomerCodesInteractive returns $null."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
+        self.assertIn('$null -eq $selectedCodes', body,
+                      'Start-DeleteConfigFlow must null-check $selectedCodes')
+        self.assertIn("return @{ Back = $true }", body,
+                      "Start-DeleteConfigFlow must return @{ Back = $true } for cancellation path")
+
+    def test_delete_flow_confirms_before_delete(self):
+        """Start-DeleteConfigFlow must ask for explicit 'ja' confirmation before deleting."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
+        self.assertIn("'ja'", body,
+                      "Start-DeleteConfigFlow must require explicit 'ja' confirmation")
+        self.assertIn('Read-Host', body,
+                      'Start-DeleteConfigFlow must use Read-Host for confirmation')
+
+    def test_delete_flow_deletes_all_selected_configs(self):
+        """Start-DeleteConfigFlow must call Remove-Item inside a loop over all selected codes."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
+        self.assertIn('Remove-Item', body,
+                      'Start-DeleteConfigFlow must call Remove-Item to delete configs')
+        self.assertIn('foreach', body,
+                      'Start-DeleteConfigFlow must iterate over selected codes with foreach')
+
+    def test_delete_flow_returns_back_after_success(self):
+        """Start-DeleteConfigFlow must return @{ Back=$true } after successful deletion."""
+        flows_text = (REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1').read_text(encoding='utf-8')
+        body = self._get_ps_function_body(flows_text, 'Start-DeleteConfigFlow')
+        back_count = body.count('Back = $true')
+        self.assertGreaterEqual(back_count, 3,
+                                'Start-DeleteConfigFlow must return Back=$true in at least 3 exit paths '
+                                '(no selection, abort confirmation, after delete)')
+
+    @requires_pwsh
+    def test_delete_flow_back_when_no_configs_exist(self):
+        """Start-DeleteConfigFlow must return Back=$true gracefully when no customer configs exist."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-test-'))
+        try:
+            customers_root = tmp / 'customers'
+            customers_root.mkdir()
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true when no customer configs exist')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @requires_pwsh
+    def test_delete_flow_deletes_single_and_returns_back(self):
+        """Start-DeleteConfigFlow must delete one config and return Back=$true on confirmation."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-test-'))
+        try:
+            customers_root = tmp / 'customers'
+            (customers_root / 'vault-test-de').mkdir(parents=True)
+            # Run: dot-source libs, stub Show-MultiSelectMenuSmooth to return label, stub Read-Host to 'ja'
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
+                "function Read-Host { param($Prompt) return 'ja' }; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true after deleting')
+            self.assertFalse((customers_root / 'vault-test-de').exists(),
+                             'Customer directory must be removed after deletion')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @requires_pwsh
+    def test_delete_flow_deletes_multiple_and_returns_back(self):
+        """Start-DeleteConfigFlow must delete multiple configs when all are selected."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-multi-'))
+        try:
+            customers_root = tmp / 'customers'
+            (customers_root / 'vault-alpha-de').mkdir(parents=True)
+            (customers_root / 'vault-beta-de').mkdir(parents=True)
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return $Items }; "
+                "function Read-Host { param($Prompt) return 'ja' }; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true after deleting multiple configs')
+            self.assertFalse((customers_root / 'vault-alpha-de').exists(),
+                             'vault-alpha-de must be deleted')
+            self.assertFalse((customers_root / 'vault-beta-de').exists(),
+                             'vault-beta-de must be deleted')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @requires_pwsh
+    def test_delete_flow_abort_at_confirmation_returns_back(self):
+        """Start-DeleteConfigFlow must return Back=$true without deleting when user answers 'nein'."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-abort-'))
+        try:
+            customers_root = tmp / 'customers'
+            (customers_root / 'vault-keep-de').mkdir(parents=True)
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @($Items[0]) }; "
+                "function Read-Host { param($Prompt) return 'nein' }; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true on abort')
+            self.assertTrue((customers_root / 'vault-keep-de').exists(),
+                            'Customer directory must NOT be deleted when user aborts')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @requires_pwsh
+    def test_delete_flow_empty_selection_returns_back(self):
+        """Start-DeleteConfigFlow must return Back=$true when user selects nothing (empty array)."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-empty-'))
+        try:
+            customers_root = tmp / 'customers'
+            (customers_root / 'vault-stay-de').mkdir(parents=True)
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return @() }; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true on empty selection')
+            self.assertTrue((customers_root / 'vault-stay-de').exists(),
+                            'Customer directory must NOT be deleted when selection is empty')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    @requires_pwsh
+    def test_delete_flow_escape_returns_back(self):
+        """Start-DeleteConfigFlow must return Back=$true when menu returns $null (Escape pressed)."""
+        flows_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Flows.ps1'
+        common_lib = REPO_ROOT / 'scripts' / 'lib' / 'VaultwardenDeployment.Common.ps1'
+        import tempfile, shutil
+        tmp = pathlib.Path(tempfile.mkdtemp(prefix='vw-del-esc-'))
+        try:
+            customers_root = tmp / 'customers'
+            (customers_root / 'vault-esc-de').mkdir(parents=True)
+            cmd = (
+                f". '{common_lib}'; . '{flows_lib}'; "
+                "function Show-MultiSelectMenuSmooth { param($Title,$Items,$PreSelected) return $null }; "
+                f"$r = Start-DeleteConfigFlow -CustomersRoot '{customers_root}'; "
+                "$r.Back"
+            )
+            result = run_ps(cmd)
+            self.assertEqual(result.stdout.strip().splitlines()[-1], 'True',
+                             'Start-DeleteConfigFlow must return Back=$true on Escape ($null from menu)')
+            self.assertTrue((customers_root / 'vault-esc-de').exists(),
+                            'Customer directory must NOT be deleted on Escape')
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == '__main__':
