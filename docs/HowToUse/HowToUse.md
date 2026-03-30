@@ -6,6 +6,7 @@
 ---
 
 ## 1. Überblick
+<img width="1536" height="1024" alt="image" src="https://github.com/user-attachments/assets/df2a0265-6089-48e4-8413-cf9373637606" />
 
 Mit Vaultwarden verwalten Sie Logins, Passwörter, Notizen und Dateien zentral in einem „Tresor“ (Vault).  
 BSSE stellt die Plattform bereit; die **Nutzung im Alltag** (Einträge anlegen, Ordner/Organisationen, Freigaben, MFA etc.) ist in diesem Dokument beschrieben.
