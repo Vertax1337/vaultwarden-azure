@@ -3,7 +3,7 @@ name: One-time uploaded repo sync and Bicep regeneration
 on:
   push:
     branches:
-      - master
+      - sync/uploaded-developed-repo
     paths:
       - '.github/workflows/arm-to-bicep-migration.yml'
 
@@ -24,7 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cat .repo-sync/chunks/*.b64 | tr -d '\n\r' | base64 -d > /tmp/uploaded-repo-delta.tgz
+          find .repo-sync/chunks -maxdepth 1 -type f -name '*.b64' -print0 | sort -zV | xargs -0 cat | tr -d '\n\r' | base64 -d > /tmp/uploaded-repo-delta.tgz
           echo '0206655962ea49e773e34c563a7cd785896cdcb0f3cc45f897efb27879b5074c  /tmp/uploaded-repo-delta.tgz' | sha256sum -c -
           tar -tzf /tmp/uploaded-repo-delta.tgz >/tmp/uploaded-repo-files.txt
           echo "Verified payload contains $(wc -l </tmp/uploaded-repo-files.txt) archive entries."
