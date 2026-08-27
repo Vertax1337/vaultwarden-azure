@@ -215,8 +215,7 @@ function Get-RuntimeSecretParameters {
         [switch]$GenerateOnly,
         [SecureString]$SmtpPassword,
         [SecureString]$SsoClientSecret,
-        [SecureString]$PushInstallationKey,
-        [string]$CloudflareApiToken
+        [SecureString]$PushInstallationKey
     )
 
     $result = @{}
@@ -240,24 +239,6 @@ function Get-RuntimeSecretParameters {
         if ($PushInstallationKey) { $result.pushInstallationKey = $PushInstallationKey }
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Push ist aktiviert, aber PushInstallationKey fehlt.' }
         else { $result.pushInstallationKey = Read-Host -AsSecureString 'Push Installation Key' }
-    }
-
-    if ($Config.edge.mode -eq 'cloudflare-managed') {
-        $resolvedCloudflareApiToken = $null
-        if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-            $resolvedCloudflareApiToken = $CloudflareApiToken
-        }
-        elseif ($env:CLOUDFLARE_API_TOKEN) {
-            $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-        }
-        elseif (-not $GenerateOnly -and -not $NonInteractive) {
-            $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-            $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-            $result.cloudflareApiKey = ConvertTo-SecureString -String $resolvedCloudflareApiToken -AsPlainText -Force
-        }
     }
     return $result
 }
@@ -328,9 +309,6 @@ function New-CustomerAzureParameters {
         }
         if ($SecureArmParameters.ContainsKey('pushInstallationKey')) {
             $params.parameters.pushInstallationKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.pushInstallationKey) }
-        }
-        if ($SecureArmParameters.ContainsKey('cloudflareApiKey')) {
-            $params.parameters.cloudflareApiKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.cloudflareApiKey) }
         }
     }
 
@@ -610,17 +588,7 @@ if ([string]::IsNullOrWhiteSpace($config.smtp.from)) {
 }
 $config.metadata.updatedAt = (Get-Date).ToString('o')
 $paths = Get-CustomerPaths -RepoRoot $repoRoot -CustomersRoot $CustomersRoot -CustomerCode $config.customerCode
-$secureArmParameters = Get-RuntimeSecretParameters -Config $config -NonInteractive:$NonInteractive -GenerateOnly:$GenerateOnly -SmtpPassword $SmtpPassword -SsoClientSecret $SsoClientSecret -PushInstallationKey $PushInstallationKey -CloudflareApiToken $CloudflareApiToken
-if (-not $config.azure.advancedArmParameters) { $config.azure.advancedArmParameters = [ordered]@{} }
-$requiresSecretBootstrapRefresh = $false
-if ($secureArmParameters -and $secureArmParameters.Count -gt 0) { $requiresSecretBootstrapRefresh = $true }
-if ($config.smtp.useAuth) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.ssoEnabled -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.pushEnabled -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.acsDeployFoundation -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($requiresSecretBootstrapRefresh) {
-    $config.azure.advancedArmParameters.deploymentScriptForceUpdateTag = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss-fff")
-}
+$secureArmParameters = Get-RuntimeSecretParameters -Config $config -NonInteractive:$NonInteractive -GenerateOnly:$GenerateOnly -SmtpPassword $SmtpPassword -SsoClientSecret $SsoClientSecret -PushInstallationKey $PushInstallationKey
 Save-CustomerFiles -Config $config -Paths $paths -RepoRoot $repoRoot -SecureArmParameters $secureArmParameters
 
 Write-Section 'Deployment-Zusammenfassung'
@@ -716,7 +684,7 @@ if ($config.edge.mode -eq 'basic') {
     return $result
 }
 
-$cfToken = if ($script:ResolvedCloudflareApiToken) { $script:ResolvedCloudflareApiToken } else { Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken }
+$cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
 # Access deploy outputs safely under Set-StrictMode -Version Latest.
 $_out = $null
 try { $_out = $result.properties.outputs } catch {}

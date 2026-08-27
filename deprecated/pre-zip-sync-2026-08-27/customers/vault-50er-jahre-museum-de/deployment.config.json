@@ -1,0 +1,82 @@
+{
+    "domain":  {
+                   "url":  "https://vault.50er-jahre-museum.de",
+                   "zoneName":  "50er-jahre-museum.de",
+                   "hostname":  "vault.50er-jahre-museum.de"
+               },
+    "secrets":  {
+                    "pushInstallationKeySource":  "none",
+                    "cloudflareApiTokenSource":  "not-required",
+                    "ssoClientSecretSource":  "none",
+                    "smtpPasswordSource":  "prompt"
+                },
+    "customerNumber":  "1309",
+    "azure":  {
+                  "enableIngressIpRestrictions":  false,
+                  "environment":  "prod",
+                  "advancedArmParameters":  {
+                                                "orgCreationUsers":  "",
+                                                "acsDomainName":  "",
+                                                "allowAzureServicesToPostgres":  true,
+                                                "pushInstallationId":  "",
+                                                "storageAccountSku":  "Standard_LRS",
+                                                "postgresSkuName":  "Standard_B1ms",
+                                                "pushUseEuServers":  false,
+                                                "ssoOnly":  false,
+                                                "adminPanelEnabled":  true,
+                                                "invitationOrgName":  "50er-jahre-museum.de",
+                                                "diagnosticsEnabled":  true,
+                                                "acsDataLocation":  "Germany",
+                                                "postgresBackupRetentionDays":  14,
+                                                "acsDeployFoundation":  false,
+                                                "ssoScopes":  "openid profile email offline_access User.Read",
+                                                "signupsDomainsWhitelist":  "50er-jahre-museum.de",
+                                                "ssoClientId":  "",
+                                                "ssoEnabled":  false,
+                                                "allowInsecureHttp":  true,
+                                                "ssoAuthority":  "",
+                                                "pushEnabled":  false,
+                                                "postgresStorageGB":  32
+                                            },
+                  "resourceGroupName":  "rg-musef-prod-neu",
+                  "location":  "northeurope",
+                  "ingressAllowedCidrs":  [
+
+                                          ],
+                  "edgeMode":  "none",
+                  "appName":  "vault"
+              },
+    "metadata":  {
+                     "updatedAt":  "2026-03-27T13:34:09.8800046+01:00",
+                     "version":  3,
+                     "createdAt":  "2026-03-27T11:09:22.3801517+01:00"
+                 },
+    "edge":  {
+                 "enableWaf":  true,
+                 "lockOriginToCloudflare":  false,
+                 "mode":  "basic",
+                 "enableRateLimit":  true
+             },
+    "preservedInfraState":  {
+                                "customDomains":  [
+                                                      {
+                                                          "name":  "vault.50er-jahre-museum.de",
+                                                          "certificateId":  "/subscriptions/26a416bd-13ec-4bc0-9cb2-c398a83f0482/resourceGroups/rg-musef-prod-neu/providers/Microsoft.App/managedEnvironments/vault-env/managedCertificates/vault.50er-jahre-museum.de-vault-en-260326233742"
+                                                      }
+                                                  ],
+                                "customDomainsLastCapturedAt":  "2026-03-27T13:34:28.8516482+01:00"
+                            },
+    "customerCode":  "vault-50er-jahre-museum-de",
+    "smtp":  {
+                 "passwordSource":  "prompt",
+                 "useAuth":  true,
+                 "fromName":  "Vaultwarden",
+                 "security":  "starttls",
+                 "mailRootDomain":  "50er-jahre-museum.de",
+                 "username":  "noreply@50er-jahre-museum.de",
+                 "host":  "smtp.office365.com",
+                 "from":  "noreply@50er-jahre-museum.de",
+                 "mailMode":  "smtp_auth",
+                 "port":  "587"
+             }
+}

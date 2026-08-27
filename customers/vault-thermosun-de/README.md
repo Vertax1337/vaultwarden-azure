@@ -1,10 +1,10 @@
-# vault-50er-jahre-museum-de
+# vault-thermosun-de
 
-- Kunden-Nr.: 1309
-- Vaultwarden-Domäne: vault.50er-jahre-museum.de
-- Resource Group: rg-50er-jahre-museum-vault-prod-neu
-- Location: northeurope
-- URL: https://vault.50er-jahre-museum.de
+- Kunden-Nr.: 13363
+- Vaultwarden-Domäne: vault.thermosun.de
+- Resource Group: rg-thermosun-vault01-prod-gwc
+- Location: germanywestcentral
+- URL: https://vault.thermosun.de
 - Edge-Modus: basic
 - WAF: True
 - Rate Limit: True
