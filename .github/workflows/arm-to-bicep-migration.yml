@@ -24,8 +24,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          find .repo-sync/chunks -maxdepth 1 -type f -name '*.b64' -print0 | sort -zV | xargs -0 cat | tr -d '\n\r' | base64 -d > /tmp/uploaded-repo-delta.tgz
-          echo '0206655962ea49e773e34c563a7cd785896cdcb0f3cc45f897efb27879b5074c  /tmp/uploaded-repo-delta.tgz' | sha256sum -c -
+          find .repo-sync/techparts -maxdepth 1 -type f -name '*.b64' -print0 | sort -zV | xargs -0 cat | tr -d '\n\r' | base64 -d > /tmp/uploaded-repo-delta.tgz
+          echo 'cdc957c2491ffb1dc1244965535362c778383cbd31f4327f731849750ddb40a7  /tmp/uploaded-repo-delta.tgz' | sha256sum -c -
           tar -tzf /tmp/uploaded-repo-delta.tgz >/tmp/uploaded-repo-files.txt
           echo "Verified payload contains $(wc -l </tmp/uploaded-repo-files.txt) archive entries."
 
@@ -35,7 +35,7 @@ jobs:
           set -euo pipefail
           backup='deprecated/pre-zip-sync-2026-08-27'
           mkdir -p "$backup"
-          for p in main.json main.bicep Readme.md change.md scripts/Invoke-CustomerDeployment.ps1 current customers/vault-50er-jahre-museum-de; do
+          for p in main.json main.bicep main.deploytoazure.json scripts/Invoke-CustomerDeployment.ps1 current customers/vault-50er-jahre-museum-de; do
             if [ -e "$p" ]; then
               cp -a --parents "$p" "$backup"/
             fi
