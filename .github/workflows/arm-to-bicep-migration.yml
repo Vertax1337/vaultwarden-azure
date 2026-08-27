@@ -1,0 +1,136 @@
+name: One-time ARM to Bicep migration
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/arm-to-bicep-migration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install/verify Bicep CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep install
+          az bicep version
+
+      - name: Preserve current ARM and legacy Bicep files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p deprecated
+          cp main.json deprecated/main.pre-bicep-migration.json
+          if [ -f main.bicep ]; then
+            cp main.bicep deprecated/main.pre-bicep-migration.bicep
+          fi
+
+      - name: Decompile current ARM template to Bicep
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f main.bicep
+          az bicep decompile --file main.json --outfile main.bicep --force
+
+      - name: Build generated Bicep
+        shell: bash
+        run: |
+          set -euo pipefail
+          az bicep build --file main.bicep --outfile /tmp/main.rebuilt.json
+
+      - name: Validate structural equivalence
+        shell: python
+        run: |
+          import json
+          import sys
+          from collections import Counter
+
+          with open('main.json', encoding='utf-8') as f:
+              original = json.load(f)
+          with open('/tmp/main.rebuilt.json', encoding='utf-8') as f:
+              rebuilt = json.load(f)
+
+          failures = []
+
+          if original.get('$schema') != rebuilt.get('$schema'):
+              failures.append('$schema differs')
+          if original.get('contentVersion') != rebuilt.get('contentVersion'):
+              failures.append('contentVersion differs')
+
+          def parameter_contract(template):
+              result = {}
+              for name, value in template.get('parameters', {}).items():
+                  result[name] = {
+                      k: value.get(k)
+                      for k in ('type', 'defaultValue', 'allowedValues', 'minValue', 'maxValue', 'minLength', 'maxLength')
+                      if k in value
+                  }
+              return result
+
+          if parameter_contract(original) != parameter_contract(rebuilt):
+              failures.append('parameter contract differs')
+
+          if set(original.get('variables', {}).keys()) != set(rebuilt.get('variables', {}).keys()):
+              failures.append('variable names differ')
+
+          def resource_inventory(template):
+              return Counter(
+                  (r.get('type'), r.get('apiVersion'), json.dumps(r.get('name'), sort_keys=True))
+                  for r in template.get('resources', [])
+              )
+
+          if resource_inventory(original) != resource_inventory(rebuilt):
+              failures.append('resource type/apiVersion/name inventory differs')
+
+          def output_contract(template):
+              return {
+                  name: value.get('type')
+                  for name, value in template.get('outputs', {}).items()
+              }
+
+          if output_contract(original) != output_contract(rebuilt):
+              failures.append('output contract differs')
+
+          print(f"Original parameters: {len(original.get('parameters', {}))}")
+          print(f"Rebuilt parameters:  {len(rebuilt.get('parameters', {}))}")
+          print(f"Original resources:  {len(original.get('resources', []))}")
+          print(f"Rebuilt resources:   {len(rebuilt.get('resources', []))}")
+          print(f"Original outputs:    {len(original.get('outputs', {}))}")
+          print(f"Rebuilt outputs:     {len(rebuilt.get('outputs', {}))}")
+
+          if failures:
+              print('Validation failed:', file=sys.stderr)
+              for failure in failures:
+                  print(f' - {failure}', file=sys.stderr)
+              sys.exit(1)
+
+          print('Bicep build succeeded and structural contract matches main.json.')
+
+      - name: Commit migrated Bicep and backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.bicep deprecated/main.pre-bicep-migration.json
+          if [ -f deprecated/main.pre-bicep-migration.bicep ]; then
+            git add deprecated/main.pre-bicep-migration.bicep
+          fi
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(iac): migrate ARM source to Bicep with backups"
+          git push
