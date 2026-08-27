@@ -28,60 +28,59 @@ jobs:
 
           ps = Path('scripts/Invoke-CustomerDeployment.ps1')
           text = ps.read_text(encoding='utf-8-sig')
-          text = text.replace(
-              "    $result = @{}\n    if ($Config.smtp.useAuth) {",
-              "    $result = @{}\n    $script:ResolvedCloudflareApiToken = $null\n    if ($Config.smtp.useAuth) {",
-              1,
+
+          # StrictMode-safe initialization per secret-resolution call.
+          text, n = re.subn(
+              r'(function Get-RuntimeSecretParameters \{.*?\n\s*\$result = @\{\}\s*\n)',
+              r'\1    $script:ResolvedCloudflareApiToken = $null\n',
+              text,
+              count=1,
+              flags=re.S,
           )
-          old_cf = """    if ($Config.edge.mode -eq 'cloudflare-managed') {
-              $resolvedCloudflareApiToken = $null
-              if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-                  $resolvedCloudflareApiToken = $CloudflareApiToken
-              }
-              elseif ($env:CLOUDFLARE_API_TOKEN) {
-                  $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-              }
-              elseif (-not $GenerateOnly -and -not $NonInteractive) {
-                  $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-              }
+          if n != 1:
+              raise SystemExit(f'Could not initialize ResolvedCloudflareApiToken: {n}')
 
-              if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-                  $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-                  $result.cloudflareApiKey = ConvertTo-SecureString -String $resolvedCloudflareApiToken -AsPlainText -Force
-              }
-          }
-          """
-          new_cf = """    if ($Config.edge.mode -eq 'cloudflare-managed') {
-              $resolvedCloudflareApiToken = $null
-              if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-                  $resolvedCloudflareApiToken = $CloudflareApiToken
-              }
-              elseif ($env:CLOUDFLARE_API_TOKEN) {
-                  $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-              }
-              elseif ($NonInteractive -and -not $GenerateOnly) {
-                  throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
-              }
-              elseif (-not $GenerateOnly) {
-                  $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-              }
+          # Replace only the Cloudflare block immediately before return $result.
+          cf_pattern = re.compile(
+              r"\n\s*if \(\$Config\.edge\.mode -eq 'cloudflare-managed'\) \{.*?\n\s*\}\s*\n\s*return \$result",
+              re.S,
+          )
+          cf_replacement = r'''
+              if ($Config.edge.mode -eq 'cloudflare-managed') {
+                  $resolvedCloudflareApiToken = $null
+                  if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
+                      $resolvedCloudflareApiToken = $CloudflareApiToken
+                  }
+                  elseif ($env:CLOUDFLARE_API_TOKEN) {
+                      $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
+                  }
+                  elseif ($NonInteractive -and -not $GenerateOnly) {
+                      throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
+                  }
+                  elseif (-not $GenerateOnly) {
+                      $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
+                  }
 
-              if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-                  # Deployment-only credential: never pass it to ARM or the app-readable Key Vault.
-                  $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
+                  if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
+                      # Deployment-only credential: never pass it to ARM or the app-readable Key Vault.
+                      $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
+                  }
               }
-          }
-          """
-          if old_cf not in text:
-              raise SystemExit('Expected Cloudflare runtime block not found')
-          text = text.replace(old_cf, new_cf, 1)
-          old_param = """        if ($SecureArmParameters.ContainsKey('cloudflareApiKey')) {
-              $params.parameters.cloudflareApiKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.cloudflareApiKey) }
-          }
-          """
-          if old_param not in text:
-              raise SystemExit('Expected cloudflare ARM parameter block not found')
-          text = text.replace(old_param, '', 1)
+              return $result'''
+          text, n = cf_pattern.subn(cf_replacement, text, count=1)
+          if n != 1:
+              raise SystemExit(f'Could not replace Cloudflare runtime block: {n}')
+
+          # Remove propagation of the deployment-only credential into ARM parameters.
+          text, n = re.subn(
+              r"\n\s*if \(\$SecureArmParameters\.ContainsKey\('cloudflareApiKey'\)\) \{\s*\n\s*\$params\.parameters\.cloudflareApiKey = @\{ value = \(ConvertFrom-SecureStringPlain -SecureString \$SecureArmParameters\.cloudflareApiKey\) \}\s*\n\s*\}",
+              '',
+              text,
+              count=1,
+          )
+          if n != 1:
+              raise SystemExit(f'Could not remove cloudflareApiKey ARM propagation: {n}')
+
           old_post = "$cfToken = if ($script:ResolvedCloudflareApiToken) { $script:ResolvedCloudflareApiToken } else { Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken }"
           new_post = """$_resolvedCfVar = Get-Variable -Name ResolvedCloudflareApiToken -Scope Script -ErrorAction SilentlyContinue
           if ($_resolvedCfVar -and -not [string]::IsNullOrWhiteSpace([string]$_resolvedCfVar.Value)) {
@@ -94,41 +93,34 @@ jobs:
               $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
           }"""
           if old_post not in text:
-              raise SystemExit('Expected Cloudflare postdeploy expression not found')
+              raise SystemExit('Cloudflare postdeploy expression not found')
           text = text.replace(old_post, new_post, 1)
           ps.write_text(text, encoding='utf-8')
 
           bp = Path('main.bicep')
           bt = bp.read_text(encoding='utf-8')
-          param_block = """@description('Cloudflare API token. Stored in Key Vault when provided and otherwise initialized with a placeholder for robust secret lifecycle handling.')
-          @secure()
-          param cloudflareApiKey string = ''
-
-          """
-          if param_block not in bt:
-              raise SystemExit('Expected Cloudflare Bicep parameter not found')
-          bt = bt.replace(param_block, '', 1)
+          bt, n = re.subn(
+              r"@description\('Cloudflare API token\.[^\n]*\n@secure\(\)\nparam cloudflareApiKey string = ''\n\n",
+              '', bt, count=1,
+          )
+          if n != 1:
+              raise SystemExit(f'Could not remove Cloudflare Bicep parameter: {n}')
           bt = bt.replace("var kvSecretCloudflareApiKeyName = 'vw-cloudflare-api-key'\n", '', 1)
-          env_block = """      {
-                name: 'CLOUDFLARE_API_KEY_SECRET'
-                value: kvSecretCloudflareApiKeyName
-              }
-              {
-                name: 'CLOUDFLARE_API_KEY_VALUE'
-                secureValue: cloudflareApiKey
-              }
-          """
-          if env_block not in bt:
-              raise SystemExit('Expected Cloudflare deploymentScript env block not found')
-          bt = bt.replace(env_block, '', 1)
+          bt, n = re.subn(
+              r"\s*\{\n\s*name: 'CLOUDFLARE_API_KEY_SECRET'\n\s*value: kvSecretCloudflareApiKeyName\n\s*\}\n\s*\{\n\s*name: 'CLOUDFLARE_API_KEY_VALUE'\n\s*secureValue: cloudflareApiKey\n\s*\}\n",
+              '\n', bt, count=1,
+          )
+          if n != 1:
+              raise SystemExit(f'Could not remove Cloudflare deploymentScript env block: {n}')
+
           start = bt.find('# --- Cloudflare API Key ---\\n')
-          end_marker = 'assert_secret_exists \\"$CLOUDFLARE_API_KEY_SECRET\\"\\n\\n'
           if start < 0:
               raise SystemExit('Cloudflare Key Vault script section start not found')
-          end = bt.find(end_marker, start)
-          if end < 0:
+          next_section = bt.find('# --- App DB password', start)
+          if next_section < 0:
               raise SystemExit('Cloudflare Key Vault script section end not found')
-          bt = bt[:start] + bt[end + len(end_marker):]
+          bt = bt[:start] + bt[next_section:]
+
           forbidden = ('cloudflareApiKey','CLOUDFLARE_API_KEY','kvSecretCloudflareApiKeyName','vw-cloudflare-api-key')
           left = [x for x in forbidden if x in bt]
           if left:
