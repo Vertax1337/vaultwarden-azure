@@ -46,15 +46,121 @@ jobs:
           az bicep decompile --file main.json --force
           rc=$?
           set -e
-          echo "Decompiler exit code: $rc"
+          echo "Decompiler exit code: $rc (known BCP034 dependency artifacts are repaired in the next step)"
           test -f main.bicep
-          echo '--- role assignment declarations ---'
-          grep -n -B 3 -A 14 "Microsoft.Authorization/roleAssignments" main.bicep || true
-          echo '--- role identifiers ---'
-          grep -n -E "roleKeyVaultSecretsOfficer|roleKeyVaultSecretsUser|roleReader" main.bicep || true
 
-      - name: Stop after role-assignment diagnostics
+      - name: Repair decompiler dependency artifacts
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path('main.bicep')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = {
+              """extensionResourceId(\n      keyVault.id,\n      'Microsoft.Authorization/roleAssignments',\n      guid(keyVault.id, appName_kv_writer_id.id, roleKeyVaultSecretsOfficer)\n    )""": "Microsoft_KeyVault_vaults_keyVaultName_Microsoft_ManagedIdentity_userAssignedIdentities_appName_kv_writer_id_roleKeyVaultSecretsOfficer",
+              """extensionResourceId(\n      postgresServer.id,\n      'Microsoft.Authorization/roleAssignments',\n      guid(postgresServer.id, appName_kv_writer_id.id, roleReader)\n    )""": "Microsoft_DBforPostgreSQL_flexibleServers_postgresServerName_Microsoft_ManagedIdentity_userAssignedIdentities_appName_kv_writer_id_roleReader",
+              """extensionResourceId(\n      keyVault.id,\n      'Microsoft.Authorization/roleAssignments',\n      guid(keyVault.id, appName_id.id, roleKeyVaultSecretsUser)\n    )""": "Microsoft_KeyVault_vaults_keyVaultName_Microsoft_ManagedIdentity_userAssignedIdentities_appName_id_roleKeyVaultSecretsUser",
+          }
+
+          for old, new in replacements.items():
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'Expected exactly one decompiler artifact for {new}, found {count}')
+              text = text.replace(old, new)
+
+          path.write_text(text, encoding='utf-8')
+          print('Repaired 3 decompiler-only dependsOn artifacts.')
+
+      - name: Build generated Bicep
         shell: bash
         run: |
-          echo "Diagnostic run complete. No generated files will be committed in this run."
-          exit 1
+          set -euo pipefail
+          az bicep build --file main.bicep --outfile /tmp/main.rebuilt.json
+
+      - name: Validate structural equivalence
+        shell: python
+        run: |
+          import json
+          import sys
+          from collections import Counter
+
+          with open('main.json', encoding='utf-8') as f:
+              original = json.load(f)
+          with open('/tmp/main.rebuilt.json', encoding='utf-8') as f:
+              rebuilt = json.load(f)
+
+          failures = []
+
+          if original.get('$schema') != rebuilt.get('$schema'):
+              failures.append('$schema differs')
+          if original.get('contentVersion') != rebuilt.get('contentVersion'):
+              failures.append('contentVersion differs')
+
+          def parameter_contract(template):
+              result = {}
+              for name, value in template.get('parameters', {}).items():
+                  result[name] = {
+                      k: value.get(k)
+                      for k in ('type', 'defaultValue', 'allowedValues', 'minValue', 'maxValue', 'minLength', 'maxLength')
+                      if k in value
+                  }
+              return result
+
+          if parameter_contract(original) != parameter_contract(rebuilt):
+              failures.append('parameter contract differs')
+
+          def resource_type_inventory(template):
+              return Counter(
+                  (r.get('type'), r.get('apiVersion'))
+                  for r in template.get('resources', [])
+              )
+
+          if resource_type_inventory(original) != resource_type_inventory(rebuilt):
+              failures.append('resource type/apiVersion inventory differs')
+
+          def output_contract(template):
+              return {
+                  name: value.get('type')
+                  for name, value in template.get('outputs', {}).items()
+              }
+
+          if output_contract(original) != output_contract(rebuilt):
+              failures.append('output contract differs')
+
+          original_hash = original.get('metadata', {}).get('_generator', {}).get('templateHash')
+          rebuilt_hash = rebuilt.get('metadata', {}).get('_generator', {}).get('templateHash')
+
+          print(f"Original parameters: {len(original.get('parameters', {}))}")
+          print(f"Rebuilt parameters:  {len(rebuilt.get('parameters', {}))}")
+          print(f"Original resources:  {len(original.get('resources', []))}")
+          print(f"Rebuilt resources:   {len(rebuilt.get('resources', []))}")
+          print(f"Original outputs:    {len(original.get('outputs', {}))}")
+          print(f"Rebuilt outputs:     {len(rebuilt.get('outputs', {}))}")
+          print(f"Original templateHash: {original_hash}")
+          print(f"Rebuilt templateHash:  {rebuilt_hash}")
+
+          if failures:
+              print('Validation failed:', file=sys.stderr)
+              for failure in failures:
+                  print(f' - {failure}', file=sys.stderr)
+              sys.exit(1)
+
+          print('Bicep build succeeded and deployment contract matches main.json.')
+
+      - name: Commit migrated Bicep and backups
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.bicep deprecated/main.pre-bicep-migration.json
+          if [ -f deprecated/main.pre-bicep-migration.bicep ]; then
+            git add deprecated/main.pre-bicep-migration.bicep
+          fi
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(iac): migrate ARM source to Bicep with backups"
+          git push
