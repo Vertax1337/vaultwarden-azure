@@ -42,7 +42,7 @@ jobs:
         run: |
           set -euo pipefail
           rm -f main.bicep
-          az bicep decompile --file main.json --outfile main.bicep --force
+          az bicep decompile --file main.json --force
 
       - name: Build generated Bicep
         shell: bash
