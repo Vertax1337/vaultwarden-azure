@@ -29,7 +29,6 @@ jobs:
           ps = Path('scripts/Invoke-CustomerDeployment.ps1')
           text = ps.read_text(encoding='utf-8-sig')
 
-          # StrictMode-safe initialization per secret-resolution call.
           text, n = re.subn(
               r'(function Get-RuntimeSecretParameters \{.*?\n\s*\$result = @\{\}\s*\n)',
               r'\1    $script:ResolvedCloudflareApiToken = $null\n',
@@ -40,7 +39,6 @@ jobs:
           if n != 1:
               raise SystemExit(f'Could not initialize ResolvedCloudflareApiToken: {n}')
 
-          # Replace only the Cloudflare block immediately before return $result.
           cf_pattern = re.compile(
               r"\n\s*if \(\$Config\.edge\.mode -eq 'cloudflare-managed'\) \{.*?\n\s*\}\s*\n\s*return \$result",
               re.S,
@@ -71,7 +69,6 @@ jobs:
           if n != 1:
               raise SystemExit(f'Could not replace Cloudflare runtime block: {n}')
 
-          # Remove propagation of the deployment-only credential into ARM parameters.
           text, n = re.subn(
               r"\n\s*if \(\$SecureArmParameters\.ContainsKey\('cloudflareApiKey'\)\) \{\s*\n\s*\$params\.parameters\.cloudflareApiKey = @\{ value = \(ConvertFrom-SecureStringPlain -SecureString \$SecureArmParameters\.cloudflareApiKey\) \}\s*\n\s*\}",
               '',
@@ -157,6 +154,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python -m pip install --quiet pytest
           python -m pytest -q tests/test_repo_contract.py
 
       - name: Commit fixes
