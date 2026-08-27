@@ -40,9 +40,18 @@ jobs:
       - name: Decompile current ARM template to Bicep
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           rm -f main.bicep
+          set +e
           az bicep decompile --file main.json --force
+          rc=$?
+          set -e
+          echo "Decompiler exit code: $rc"
+          test -f main.bicep
+          echo '--- generated main.bicep lines 780-825 ---'
+          nl -ba main.bicep | sed -n '780,825p'
+          echo '--- generated main.bicep lines 985-1020 ---'
+          nl -ba main.bicep | sed -n '985,1020p'
 
       - name: Build generated Bicep
         shell: bash
