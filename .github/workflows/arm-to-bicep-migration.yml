@@ -20,6 +20,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Reassemble and verify uploaded repository payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat .repo-sync/chunks/*.b64 | tr -d '\n\r' | base64 -d > /tmp/uploaded-repo-delta.tgz
+          echo '0206655962ea49e773e34c563a7cd785896cdcb0f3cc45f897efb27879b5074c  /tmp/uploaded-repo-delta.tgz' | sha256sum -c -
+          tar -tzf /tmp/uploaded-repo-delta.tgz >/tmp/uploaded-repo-files.txt
+          echo "Verified payload contains $(wc -l </tmp/uploaded-repo-files.txt) archive entries."
+
       - name: Preserve pre-sync repository state
         shell: bash
         run: |
@@ -36,7 +45,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tar -xzf .repo-sync/uploaded-repo-delta.tgz -C .
+          tar -xzf /tmp/uploaded-repo-delta.tgz -C .
           rm -f customers/.gitkeep
           rm -rf tests/__pycache__
           echo 'Uploaded repository delta applied.'
@@ -138,5 +147,9 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
+          if git diff --cached --quiet; then
+            echo 'No final changes staged.'
+            exit 1
+          fi
           git commit -m 'chore(repo): sync uploaded developed stand and regenerate Bicep'
           git push
