@@ -1,4 +1,4 @@
-﻿# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 [CmdletBinding()]
 param(
@@ -220,6 +220,7 @@ function Get-RuntimeSecretParameters {
     )
 
     $result = @{}
+    $script:ResolvedCloudflareApiToken = $null
     if ($Config.smtp.useAuth) {
         if ($SmtpPassword) { $result.smtpPassword = $SmtpPassword }
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Für GenerateOnly im SMTP-Auth-Modus muss SmtpPassword übergeben werden.' }
@@ -241,7 +242,6 @@ function Get-RuntimeSecretParameters {
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Push ist aktiviert, aber PushInstallationKey fehlt.' }
         else { $result.pushInstallationKey = Read-Host -AsSecureString 'Push Installation Key' }
     }
-
     if ($Config.edge.mode -eq 'cloudflare-managed') {
         $resolvedCloudflareApiToken = $null
         if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
@@ -250,13 +250,14 @@ function Get-RuntimeSecretParameters {
         elseif ($env:CLOUDFLARE_API_TOKEN) {
             $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
         }
-        elseif (-not $GenerateOnly -and -not $NonInteractive) {
+        elseif ($NonInteractive -and -not $GenerateOnly) {
+            throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
+        }
+        elseif (-not $GenerateOnly) {
             $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
         }
-
         if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
             $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-            $result.cloudflareApiKey = ConvertTo-SecureString -String $resolvedCloudflareApiToken -AsPlainText -Force
         }
     }
     return $result
@@ -328,9 +329,6 @@ function New-CustomerAzureParameters {
         }
         if ($SecureArmParameters.ContainsKey('pushInstallationKey')) {
             $params.parameters.pushInstallationKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.pushInstallationKey) }
-        }
-        if ($SecureArmParameters.ContainsKey('cloudflareApiKey')) {
-            $params.parameters.cloudflareApiKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.cloudflareApiKey) }
         }
     }
 
@@ -716,7 +714,16 @@ if ($config.edge.mode -eq 'basic') {
     return $result
 }
 
-$cfToken = if ($script:ResolvedCloudflareApiToken) { $script:ResolvedCloudflareApiToken } else { Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken }
+$_resolvedCfVar = Get-Variable -Name ResolvedCloudflareApiToken -Scope Script -ErrorAction SilentlyContinue
+if ($_resolvedCfVar -and -not [string]::IsNullOrWhiteSpace([string]$_resolvedCfVar.Value)) {
+    $cfToken = [string]$_resolvedCfVar.Value
+}
+elseif ($NonInteractive) {
+    throw 'Cloudflare-managed NonInteractive Deployment hat keinen Cloudflare API Token.'
+}
+else {
+    $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
+}
 # Access deploy outputs safely under Set-StrictMode -Version Latest.
 $_out = $null
 try { $_out = $result.properties.outputs } catch {}
