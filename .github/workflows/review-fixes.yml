@@ -146,7 +146,7 @@ jobs:
               if r.get('scope') == "[format('Microsoft.DBforPostgreSQL/flexibleServers/{0}', variables('postgresServerName'))]"
               and r.get('properties', {}).get('roleDefinitionId') == "[variables('roleReader')]"
           ]
-'''
+          '''
           new = '''        postgres_reader = [
               r for r in role_assignments
               if 'Microsoft.DBforPostgreSQL/flexibleServers' in str(r.get('scope', ''))
@@ -154,7 +154,7 @@ jobs:
               and r.get('properties', {}).get('roleDefinitionId') == "[variables('roleReader')]"
               and 'kv-writer-id' in str(r.get('properties', {}).get('principalId', ''))
           ]
-'''
+          '''
           if old not in tt:
               raise SystemExit('Expected PostgreSQL Reader contract test block not found')
           tp.write_text(tt.replace(old, new, 1), encoding='utf-8')
