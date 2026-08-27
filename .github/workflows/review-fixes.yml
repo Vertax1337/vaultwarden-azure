@@ -18,173 +18,156 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Patch Cloudflare token handling
-        shell: python
+      - name: Patch review findings
+        shell: bash
         run: |
+          set -euo pipefail
+          python <<'PY'
           from pathlib import Path
           import json, re
 
           ps = Path('scripts/Invoke-CustomerDeployment.ps1')
           text = ps.read_text(encoding='utf-8-sig')
-
-          # StrictMode-safe initialization for every deployment cycle.
           text = text.replace(
               "    $result = @{}\n    if ($Config.smtp.useAuth) {",
               "    $result = @{}\n    $script:ResolvedCloudflareApiToken = $null\n    if ($Config.smtp.useAuth) {",
               1,
           )
+          old_cf = """    if ($Config.edge.mode -eq 'cloudflare-managed') {
+              $resolvedCloudflareApiToken = $null
+              if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
+                  $resolvedCloudflareApiToken = $CloudflareApiToken
+              }
+              elseif ($env:CLOUDFLARE_API_TOKEN) {
+                  $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
+              }
+              elseif (-not $GenerateOnly -and -not $NonInteractive) {
+                  $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
+              }
 
-          old_cf = '''    if ($Config.edge.mode -eq 'cloudflare-managed') {
-        $resolvedCloudflareApiToken = $null
-        if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-            $resolvedCloudflareApiToken = $CloudflareApiToken
-        }
-        elseif ($env:CLOUDFLARE_API_TOKEN) {
-            $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-        }
-        elseif (-not $GenerateOnly -and -not $NonInteractive) {
-            $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-        }
+              if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
+                  $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
+                  $result.cloudflareApiKey = ConvertTo-SecureString -String $resolvedCloudflareApiToken -AsPlainText -Force
+              }
+          }
+          """
+          new_cf = """    if ($Config.edge.mode -eq 'cloudflare-managed') {
+              $resolvedCloudflareApiToken = $null
+              if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
+                  $resolvedCloudflareApiToken = $CloudflareApiToken
+              }
+              elseif ($env:CLOUDFLARE_API_TOKEN) {
+                  $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
+              }
+              elseif ($NonInteractive -and -not $GenerateOnly) {
+                  throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
+              }
+              elseif (-not $GenerateOnly) {
+                  $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
+              }
 
-        if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-            $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-            $result.cloudflareApiKey = ConvertTo-SecureString -String $resolvedCloudflareApiToken -AsPlainText -Force
-        }
-    }
-'''
-          new_cf = '''    if ($Config.edge.mode -eq 'cloudflare-managed') {
-        $resolvedCloudflareApiToken = $null
-        if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-            $resolvedCloudflareApiToken = $CloudflareApiToken
-        }
-        elseif ($env:CLOUDFLARE_API_TOKEN) {
-            $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-        }
-        elseif ($NonInteractive -and -not $GenerateOnly) {
-            throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
-        }
-        elseif (-not $GenerateOnly) {
-            $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-        }
-
-        if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-            # Deployment-only credential: deliberately keep it out of ARM parameters and the
-            # Vaultwarden-readable Key Vault. It is used only by the Cloudflare post-deploy steps.
-            $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-        }
-    }
-'''
+              if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
+                  # Deployment-only credential: never pass it to ARM or the app-readable Key Vault.
+                  $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
+              }
+          }
+          """
           if old_cf not in text:
-              raise SystemExit('Expected Cloudflare runtime-secret block not found')
+              raise SystemExit('Expected Cloudflare runtime block not found')
           text = text.replace(old_cf, new_cf, 1)
-
-          old_param = '''        if ($SecureArmParameters.ContainsKey('cloudflareApiKey')) {
-            $params.parameters.cloudflareApiKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.cloudflareApiKey) }
-        }
-'''
+          old_param = """        if ($SecureArmParameters.ContainsKey('cloudflareApiKey')) {
+              $params.parameters.cloudflareApiKey = @{ value = (ConvertFrom-SecureStringPlain -SecureString $SecureArmParameters.cloudflareApiKey) }
+          }
+          """
           if old_param not in text:
-              raise SystemExit('Expected cloudflareApiKey ARM parameter block not found')
+              raise SystemExit('Expected cloudflare ARM parameter block not found')
           text = text.replace(old_param, '', 1)
-
           old_post = "$cfToken = if ($script:ResolvedCloudflareApiToken) { $script:ResolvedCloudflareApiToken } else { Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken }"
-          new_post = '''$_resolvedCfVar = Get-Variable -Name ResolvedCloudflareApiToken -Scope Script -ErrorAction SilentlyContinue
-if ($_resolvedCfVar -and -not [string]::IsNullOrWhiteSpace([string]$_resolvedCfVar.Value)) {
-    $cfToken = [string]$_resolvedCfVar.Value
-}
-elseif ($NonInteractive) {
-    throw 'Cloudflare-managed NonInteractive Deployment hat keinen Cloudflare API Token. Deployment wird vor dem Postdeploy abgebrochen.'
-}
-else {
-    $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-}'''
+          new_post = """$_resolvedCfVar = Get-Variable -Name ResolvedCloudflareApiToken -Scope Script -ErrorAction SilentlyContinue
+          if ($_resolvedCfVar -and -not [string]::IsNullOrWhiteSpace([string]$_resolvedCfVar.Value)) {
+              $cfToken = [string]$_resolvedCfVar.Value
+          }
+          elseif ($NonInteractive) {
+              throw 'Cloudflare-managed NonInteractive Deployment hat keinen Cloudflare API Token.'
+          }
+          else {
+              $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
+          }"""
           if old_post not in text:
-              raise SystemExit('Expected post-deploy Cloudflare token expression not found')
+              raise SystemExit('Expected Cloudflare postdeploy expression not found')
           text = text.replace(old_post, new_post, 1)
           ps.write_text(text, encoding='utf-8')
 
-          bicep = Path('main.bicep')
-          bt = bicep.read_text(encoding='utf-8')
+          bp = Path('main.bicep')
+          bt = bp.read_text(encoding='utf-8')
           param_block = """@description('Cloudflare API token. Stored in Key Vault when provided and otherwise initialized with a placeholder for robust secret lifecycle handling.')
-@secure()
-param cloudflareApiKey string = ''
+          @secure()
+          param cloudflareApiKey string = ''
 
-"""
+          """
           if param_block not in bt:
-              raise SystemExit('Expected cloudflareApiKey Bicep parameter not found')
+              raise SystemExit('Expected Cloudflare Bicep parameter not found')
           bt = bt.replace(param_block, '', 1)
           bt = bt.replace("var kvSecretCloudflareApiKeyName = 'vw-cloudflare-api-key'\n", '', 1)
-
           env_block = """      {
-        name: 'CLOUDFLARE_API_KEY_SECRET'
-        value: kvSecretCloudflareApiKeyName
-      }
-      {
-        name: 'CLOUDFLARE_API_KEY_VALUE'
-        secureValue: cloudflareApiKey
-      }
-"""
+                name: 'CLOUDFLARE_API_KEY_SECRET'
+                value: kvSecretCloudflareApiKeyName
+              }
+              {
+                name: 'CLOUDFLARE_API_KEY_VALUE'
+                secureValue: cloudflareApiKey
+              }
+          """
           if env_block not in bt:
-              raise SystemExit('Expected Cloudflare deployment-script env block not found')
+              raise SystemExit('Expected Cloudflare deploymentScript env block not found')
           bt = bt.replace(env_block, '', 1)
+          start = bt.find('# --- Cloudflare API Key ---\\n')
+          end_marker = 'assert_secret_exists \\"$CLOUDFLARE_API_KEY_SECRET\\"\\n\\n'
+          if start < 0:
+              raise SystemExit('Cloudflare Key Vault script section start not found')
+          end = bt.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('Cloudflare Key Vault script section end not found')
+          bt = bt[:start] + bt[end + len(end_marker):]
+          forbidden = ('cloudflareApiKey','CLOUDFLARE_API_KEY','kvSecretCloudflareApiKeyName','vw-cloudflare-api-key')
+          left = [x for x in forbidden if x in bt]
+          if left:
+              raise SystemExit(f'Cloudflare ARM/KeyVault references remain: {left}')
+          bp.write_text(bt, encoding='utf-8')
 
-          # scriptContent is represented using literal escaped newlines. Remove the entire
-          # Cloudflare Key Vault persistence section while leaving HIBP/DB bootstrap intact.
-          pattern = re.compile(r"# --- Cloudflare API Key ---\\n.*?assert_secret_exists \\\"\$CLOUDFLARE_API_KEY_SECRET\\\"\\n\\n", re.S)
-          bt, count = pattern.subn('', bt, count=1)
-          if count != 1:
-              raise SystemExit(f'Expected one Cloudflare Key Vault script section, removed {count}')
-
-          forbidden = ['cloudflareApiKey', 'CLOUDFLARE_API_KEY', 'kvSecretCloudflareApiKeyName', 'vw-cloudflare-api-key']
-          leftovers = [x for x in forbidden if x in bt]
-          if leftovers:
-              raise SystemExit(f'Cloudflare ARM/KeyVault references remain in main.bicep: {leftovers}')
-          bicep.write_text(bt, encoding='utf-8')
-
-          # Deploy-to-Azure wrappers must not offer/pass a credential ARM no longer accepts.
           def strip_key(obj):
               if isinstance(obj, dict):
                   obj.pop('cloudflareApiKey', None)
-                  for value in obj.values():
-                      strip_key(value)
+                  for v in obj.values(): strip_key(v)
               elif isinstance(obj, list):
-                  for value in obj:
-                      strip_key(value)
-
-          for name in ['main.deploytoazure.json', 'current/main.deploytoazure.json']:
+                  for v in obj: strip_key(v)
+          for name in ('main.deploytoazure.json','current/main.deploytoazure.json'):
               p = Path(name)
-              if not p.exists():
-                  continue
-              data = json.loads(p.read_text(encoding='utf-8-sig'))
-              strip_key(data)
-              p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+              if p.exists():
+                  data = json.loads(p.read_text(encoding='utf-8-sig'))
+                  strip_key(data)
+                  p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+          PY
 
-      - name: Build Bicep to ARM
+      - name: Build and validate Bicep
         shell: bash
         run: |
           set -euo pipefail
           az bicep install
           az bicep build --file main.bicep --outfile main.json
+          ! grep -q 'cloudflareApiKey' main.bicep
+          ! grep -q 'CLOUDFLARE_API_KEY' main.bicep
+          ! grep -q 'vw-cloudflare-api-key' main.bicep
+          grep -q 'NonInteractive Deployment erfordert' scripts/Invoke-CustomerDeployment.ps1
+          grep -q 'Get-Variable -Name ResolvedCloudflareApiToken' scripts/Invoke-CustomerDeployment.ps1
 
-      - name: Validate review fixes
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $content = Get-Content -LiteralPath scripts/Invoke-CustomerDeployment.ps1 -Raw
-          if ($content -match 'result\.cloudflareApiKey') { throw 'Cloudflare token is still being added to ARM params.' }
-          if ($content -notmatch 'NonInteractive Deployment erfordert') { throw 'Early NonInteractive validation missing.' }
-          if ($content -notmatch 'Get-Variable -Name ResolvedCloudflareApiToken') { throw 'StrictMode-safe token lookup missing.' }
-          $bicep = Get-Content -LiteralPath main.bicep -Raw
-          foreach ($forbidden in @('cloudflareApiKey','CLOUDFLARE_API_KEY','vw-cloudflare-api-key')) {
-            if ($bicep.Contains($forbidden)) { throw "Forbidden Bicep token reference remains: $forbidden" }
-          }
-
-      - name: Run repository tests
+      - name: Run tests
         shell: bash
         run: |
           set -euo pipefail
           python -m pytest -q tests/test_repo_contract.py
 
-      - name: Commit fixes and remove temporary workflow
+      - name: Commit fixes
         shell: bash
         run: |
           set -euo pipefail
@@ -192,5 +175,5 @@ param cloudflareApiKey string = ''
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add -A
-          git commit -m 'fix(security): keep Cloudflare token out of app-readable Key Vault'
+          git commit -m 'fix(security): isolate Cloudflare deployment credential'
           git push
