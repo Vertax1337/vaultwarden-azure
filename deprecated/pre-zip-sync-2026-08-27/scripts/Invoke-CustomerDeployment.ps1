@@ -1,4 +1,4 @@
-# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
+﻿# SHARED LOGIC: Wird von mehreren Deploy-/Wizard-Pfaden verwendet.
 # Änderungen hier können Seiteneffekte in anderen Workflows verursachen.
 [CmdletBinding()]
 param(
@@ -215,12 +215,10 @@ function Get-RuntimeSecretParameters {
         [switch]$GenerateOnly,
         [SecureString]$SmtpPassword,
         [SecureString]$SsoClientSecret,
-        [SecureString]$PushInstallationKey,
-        [string]$CloudflareApiToken
+        [SecureString]$PushInstallationKey
     )
 
     $result = @{}
-    $script:ResolvedCloudflareApiToken = $null
     if ($Config.smtp.useAuth) {
         if ($SmtpPassword) { $result.smtpPassword = $SmtpPassword }
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Für GenerateOnly im SMTP-Auth-Modus muss SmtpPassword übergeben werden.' }
@@ -241,24 +239,6 @@ function Get-RuntimeSecretParameters {
         if ($PushInstallationKey) { $result.pushInstallationKey = $PushInstallationKey }
         elseif ($GenerateOnly -and $NonInteractive) { throw 'Push ist aktiviert, aber PushInstallationKey fehlt.' }
         else { $result.pushInstallationKey = Read-Host -AsSecureString 'Push Installation Key' }
-    }
-    if ($Config.edge.mode -eq 'cloudflare-managed') {
-        $resolvedCloudflareApiToken = $null
-        if (-not [string]::IsNullOrWhiteSpace($CloudflareApiToken)) {
-            $resolvedCloudflareApiToken = $CloudflareApiToken
-        }
-        elseif ($env:CLOUDFLARE_API_TOKEN) {
-            $resolvedCloudflareApiToken = $env:CLOUDFLARE_API_TOKEN
-        }
-        elseif ($NonInteractive -and -not $GenerateOnly) {
-            throw 'Cloudflare-managed NonInteractive Deployment erfordert -CloudflareApiToken oder CLOUDFLARE_API_TOKEN.'
-        }
-        elseif (-not $GenerateOnly) {
-            $resolvedCloudflareApiToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-        }
-        if (-not [string]::IsNullOrWhiteSpace($resolvedCloudflareApiToken)) {
-            $script:ResolvedCloudflareApiToken = $resolvedCloudflareApiToken
-        }
     }
     return $result
 }
@@ -608,17 +588,7 @@ if ([string]::IsNullOrWhiteSpace($config.smtp.from)) {
 }
 $config.metadata.updatedAt = (Get-Date).ToString('o')
 $paths = Get-CustomerPaths -RepoRoot $repoRoot -CustomersRoot $CustomersRoot -CustomerCode $config.customerCode
-$secureArmParameters = Get-RuntimeSecretParameters -Config $config -NonInteractive:$NonInteractive -GenerateOnly:$GenerateOnly -SmtpPassword $SmtpPassword -SsoClientSecret $SsoClientSecret -PushInstallationKey $PushInstallationKey -CloudflareApiToken $CloudflareApiToken
-if (-not $config.azure.advancedArmParameters) { $config.azure.advancedArmParameters = [ordered]@{} }
-$requiresSecretBootstrapRefresh = $false
-if ($secureArmParameters -and $secureArmParameters.Count -gt 0) { $requiresSecretBootstrapRefresh = $true }
-if ($config.smtp.useAuth) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.ssoEnabled -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.pushEnabled -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($config.azure.advancedArmParameters.acsDeployFoundation -eq $true) { $requiresSecretBootstrapRefresh = $true }
-if ($requiresSecretBootstrapRefresh) {
-    $config.azure.advancedArmParameters.deploymentScriptForceUpdateTag = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss-fff")
-}
+$secureArmParameters = Get-RuntimeSecretParameters -Config $config -NonInteractive:$NonInteractive -GenerateOnly:$GenerateOnly -SmtpPassword $SmtpPassword -SsoClientSecret $SsoClientSecret -PushInstallationKey $PushInstallationKey
 Save-CustomerFiles -Config $config -Paths $paths -RepoRoot $repoRoot -SecureArmParameters $secureArmParameters
 
 Write-Section 'Deployment-Zusammenfassung'
@@ -714,16 +684,7 @@ if ($config.edge.mode -eq 'basic') {
     return $result
 }
 
-$_resolvedCfVar = Get-Variable -Name ResolvedCloudflareApiToken -Scope Script -ErrorAction SilentlyContinue
-if ($_resolvedCfVar -and -not [string]::IsNullOrWhiteSpace([string]$_resolvedCfVar.Value)) {
-    $cfToken = [string]$_resolvedCfVar.Value
-}
-elseif ($NonInteractive) {
-    throw 'Cloudflare-managed NonInteractive Deployment hat keinen Cloudflare API Token.'
-}
-else {
-    $cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
-}
+$cfToken = Get-CloudflareTokenValue -CloudflareApiToken $CloudflareApiToken
 # Access deploy outputs safely under Set-StrictMode -Version Latest.
 $_out = $null
 try { $_out = $result.properties.outputs } catch {}

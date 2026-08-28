@@ -216,7 +216,7 @@
             }
         },
         "ssoAuthority": {
-            "defaultValue": "https://login.microsoftonline.com/41831ca5-b0e9-41ee-a78d-157ced6e65be/v2.0",
+            "defaultValue": "",
             "type": "string",
             "metadata": {
                 "description": "OIDC authority/issuer base URL. For Entra ID use https://login.microsoftonline.com/<TENANT_ID>/v2.0 and do not append /.well-known/openid-configuration."
@@ -230,14 +230,14 @@
             }
         },
         "ssoClientId": {
-            "defaultValue": "9c653b58-0d09-40d9-860d-a9a2819cfc9f",
+            "defaultValue": "",
             "type": "string",
             "metadata": {
                 "description": "OIDC Client ID / Application (client) ID."
             }
         },
         "signupsDomainsWhitelist": {
-            "defaultValue": "thermosun.de",
+            "defaultValue": "50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "Vaultwarden ENV: SIGNUPS_DOMAINS_WHITELIST. Comma-separated email domains allowed to self-register."
@@ -251,7 +251,7 @@
             }
         },
         "pushUseEuServers": {
-            "defaultValue": true,
+            "defaultValue": false,
             "type": "bool",
             "metadata": {
                 "description": "Use Bitwarden EU push relay / identity endpoints. Select this only when the Installation ID / Key were requested for the EU region."
@@ -272,42 +272,42 @@
             }
         },
         "invitationOrgName": {
-            "defaultValue": "thermosun.de",
+            "defaultValue": "50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "Vaultwarden ENV: INVITATION_ORG_NAME. Organization name shown in invitation mails."
             }
         },
         "pushEnabled": {
-            "defaultValue": true,
+            "defaultValue": false,
             "type": "bool",
             "metadata": {
                 "description": "Enable mobile push notifications (requires Bitwarden push relay credentials)."
             }
         },
         "smtpFrom": {
-            "defaultValue": "noreply@thermosun.de",
+            "defaultValue": "noreply@50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "SMTP FROM address (z. B. vaultwarden@domain.tld). Für Produktion explizit setzen."
             }
         },
         "location": {
-            "defaultValue": "germanywestcentral",
+            "defaultValue": "northeurope",
             "type": "string",
             "metadata": {
                 "description": "Azure region for all resources"
             }
         },
         "mailRootDomain": {
-            "defaultValue": "thermosun.de",
+            "defaultValue": "50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "Explizite Root-Domain für Mailrouting und Default-Absender (z. B. example.com). Verwende diesen Parameter für Direct Send ohne expliziten smtpHost, für ACS Foundation ohne explizites acsDomainName und für den automatischen Default-Absender, wenn smtpFrom leer bleibt. Keine Ableitung mehr aus domainUrl."
             }
         },
         "deploymentScriptForceUpdateTag": {
-            "defaultValue": "20260421-125522-699",
+            "defaultValue": "",
             "type": "string",
             "metadata": {
                 "description": "Optional forceUpdateTag for the bootstrap deploymentScript. Change this value to force a controlled rerun without changing app settings."
@@ -394,7 +394,7 @@
             }
         },
         "smtpUsername": {
-            "defaultValue": "",
+            "defaultValue": "noreply@50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "SMTP username (often same as smtpFrom)"
@@ -408,7 +408,7 @@
             }
         },
         "mailMode": {
-            "defaultValue": "direct_send",
+            "defaultValue": "smtp_auth",
             "allowedValues": [
                 "direct_send",
                 "smtp_auth",
@@ -453,7 +453,7 @@
             }
         },
         "smtpUseAuth": {
-            "defaultValue": false,
+            "defaultValue": true,
             "type": "bool",
             "metadata": {
                 "description": "Wenn true, nutzt Vaultwarden SMTP Submission mit Auth (empfohlener Produktiv-Default). Wenn false, wird Direct Send ohne Auth verwendet. Wichtig für Vaultwarden: In diesem Modus werden SMTP_USERNAME, SMTP_PASSWORD und SMTP_AUTH_MECHANISM nicht an die App durchgereicht; bereits im Vaultwarden-Adminbereich gespeicherte SMTP-Auth-Werte in /data/config.json müssen bei einem Moduswechsel ggf. separat bereinigt werden."
@@ -484,7 +484,7 @@
             }
         },
         "ssoEnabled": {
-            "defaultValue": true,
+            "defaultValue": false,
             "type": "bool",
             "metadata": {
                 "description": "Enable Vaultwarden SSO (OIDC) for Web Vault login (requires Vaultwarden >= 1.35)."
@@ -538,7 +538,7 @@
             }
         },
         "customHostname": {
-            "defaultValue": "vault.thermosun.de",
+            "defaultValue": "vault.50er-jahre-museum.de",
             "type": "string",
             "metadata": {
                 "description": "Optional customer-facing hostname (for example vault.example.com). Used by the production wrapper/documentation. The ARM deployment itself does not bind the hostname."
@@ -609,7 +609,7 @@
             }
         },
         "domainUrl": {
-            "defaultValue": "https://vault.thermosun.de",
+            "defaultValue": "https://vault.50er-jahre-museum.de",
             "minLength": 9,
             "type": "string",
             "metadata": {
@@ -628,7 +628,7 @@
             }
         },
         "smtpHost": {
-            "defaultValue": "thermosun-de.mail.protection.outlook.com",
+            "defaultValue": "smtp.office365.com",
             "type": "string",
             "metadata": {
                 "description": "Optionaler SMTP Host Override. Leer = SMTP Auth: smtp.office365.com; Direct Send: MX-Lookup ausschließlich auf mailRootDomain. Für den aktuellen Direct-Send-Pfad setzt das Template in der App SMTP_PORT=25 und SMTP_SECURITY=starttls und lässt SMTP_USERNAME / SMTP_PASSWORD / SMTP_AUTH_MECHANISM weg."

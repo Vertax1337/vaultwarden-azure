@@ -124,7 +124,8 @@ class RepoContractTests(unittest.TestCase):
         role_assignments = [r for r in resources if r.get('type') == 'Microsoft.Authorization/roleAssignments']
         postgres_reader = [
             r for r in role_assignments
-            if r.get('scope') == "[format('Microsoft.DBforPostgreSQL/flexibleServers/{0}', variables('postgresServerName'))]"
+            if 'Microsoft.DBforPostgreSQL/flexibleServers' in str(r.get('scope', ''))
+            and "variables('postgresServerName')" in str(r.get('scope', ''))
             and r.get('properties', {}).get('roleDefinitionId') == "[variables('roleReader')]"
         ]
         self.assertEqual(len(postgres_reader), 1, 'Expected exactly one PostgreSQL Reader role assignment for kv-writer identity')

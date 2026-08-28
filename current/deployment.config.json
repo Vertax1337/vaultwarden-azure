@@ -1,73 +1,74 @@
 {
-    "domain":  {
-                   "url":  "https://vault.50er-jahre-museum.de",
-                   "zoneName":  "50er-jahre-museum.de",
-                   "hostname":  "vault.50er-jahre-museum.de"
-               },
+    "smtp":  {
+                 "mailMode":  "direct_send",
+                 "useAuth":  false,
+                 "mailRootDomain":  "thermosun.de",
+                 "from":  "noreply@thermosun.de",
+                 "fromName":  "Vaultwarden",
+                 "host":  "thermosun-de.mail.protection.outlook.com",
+                 "port":  "",
+                 "security":  "starttls",
+                 "username":  "",
+                 "passwordSource":  "none"
+             },
+    "customerNumber":  "13363",
+    "customerCode":  "vault-thermosun-de",
     "secrets":  {
-                    "pushInstallationKeySource":  "none",
+                    "smtpPasswordSource":  "none",
                     "cloudflareApiTokenSource":  "not-required",
-                    "ssoClientSecretSource":  "none",
-                    "smtpPasswordSource":  "prompt"
+                    "ssoClientSecretSource":  "prompt",
+                    "pushInstallationKeySource":  "prompt"
                 },
-    "customerNumber":  "1309",
+    "domain":  {
+                   "hostname":  "vault.thermosun.de",
+                   "zoneName":  "thermosun.de",
+                   "url":  "https://vault.thermosun.de"
+               },
+    "edge":  {
+                 "mode":  "basic",
+                 "enableWaf":  true,
+                 "enableRateLimit":  true,
+                 "lockOriginToCloudflare":  false
+             },
     "azure":  {
-                  "enableIngressIpRestrictions":  false,
+                  "resourceGroupName":  "rg-thermosun-vault01-prod-gwc",
+                  "location":  "germanywestcentral",
                   "environment":  "prod",
-                  "advancedArmParameters":  {
-                                                "orgCreationUsers":  "",
-                                                "acsDomainName":  "",
-                                                "allowAzureServicesToPostgres":  true,
-                                                "pushInstallationId":  "",
-                                                "storageAccountSku":  "Standard_LRS",
-                                                "postgresSkuName":  "Standard_B1ms",
-                                                "pushUseEuServers":  false,
-                                                "ssoOnly":  false,
-                                                "adminPanelEnabled":  true,
-                                                "invitationOrgName":  "50er-jahre-museum.de",
-                                                "diagnosticsEnabled":  true,
-                                                "acsDataLocation":  "Germany",
-                                                "postgresBackupRetentionDays":  14,
-                                                "acsDeployFoundation":  false,
-                                                "ssoScopes":  "openid profile email offline_access User.Read",
-                                                "signupsDomainsWhitelist":  "50er-jahre-museum.de",
-                                                "ssoClientId":  "",
-                                                "ssoEnabled":  false,
-                                                "allowInsecureHttp":  true,
-                                                "ssoAuthority":  "",
-                                                "pushEnabled":  false,
-                                                "postgresStorageGB":  32
-                                            },
-                  "resourceGroupName":  "rg-musef-prod-neu",
-                  "location":  "northeurope",
+                  "appName":  "vault",
+                  "edgeMode":  "none",
+                  "enableIngressIpRestrictions":  false,
                   "ingressAllowedCidrs":  [
 
                                           ],
-                  "edgeMode":  "none",
-                  "appName":  "vault"
+                  "advancedArmParameters":  {
+                                                "orgCreationUsers":  "",
+                                                "pushUseEuServers":  true,
+                                                "acsDomainName":  "",
+                                                "allowAzureServicesToPostgres":  true,
+                                                "pushInstallationId":  "37eb5228-8f42-4d55-8170-b43300d03a3a",
+                                                "ssoAuthority":  "https://login.microsoftonline.com/41831ca5-b0e9-41ee-a78d-157ced6e65be/v2.0",
+                                                "diagnosticsEnabled":  true,
+                                                "storageAccountSku":  "Standard_LRS",
+                                                "postgresSkuName":  "Standard_B1ms",
+                                                "acsDataLocation":  "Germany",
+                                                "ssoOnly":  false,
+                                                "allowInsecureHttp":  true,
+                                                "deploymentScriptForceUpdateTag":  "20260421-125522-699",
+                                                "invitationOrgName":  "thermosun.de",
+                                                "ssoClientId":  "9c653b58-0d09-40d9-860d-a9a2819cfc9f",
+                                                "postgresBackupRetentionDays":  14,
+                                                "postgresStorageGB":  32,
+                                                "acsDeployFoundation":  false,
+                                                "ssoScopes":  "openid profile email offline_access User.Read",
+                                                "signupsDomainsWhitelist":  "thermosun.de",
+                                                "ssoEnabled":  true,
+                                                "pushEnabled":  true,
+                                                "adminPanelEnabled":  true
+                                            }
               },
     "metadata":  {
-                     "updatedAt":  "2026-03-27T13:34:09.8800046+01:00",
-                     "version":  3,
-                     "createdAt":  "2026-03-27T11:09:22.3801517+01:00"
-                 },
-    "edge":  {
-                 "enableWaf":  true,
-                 "lockOriginToCloudflare":  false,
-                 "mode":  "basic",
-                 "enableRateLimit":  true
-             },
-    "customerCode":  "vault-50er-jahre-museum-de",
-    "smtp":  {
-                 "passwordSource":  "prompt",
-                 "useAuth":  true,
-                 "fromName":  "Vaultwarden",
-                 "security":  "starttls",
-                 "mailRootDomain":  "50er-jahre-museum.de",
-                 "username":  "noreply@50er-jahre-museum.de",
-                 "host":  "smtp.office365.com",
-                 "from":  "noreply@50er-jahre-museum.de",
-                 "mailMode":  "smtp_auth",
-                 "port":  "587"
-             }
+                     "createdAt":  "2026-04-21T14:55:06.8341086+02:00",
+                     "updatedAt":  "2026-04-21T14:55:06.9821664+02:00",
+                     "version":  3
+                 }
 }
